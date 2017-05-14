@@ -21,7 +21,9 @@ public interface Message extends Encodable {
     boolean isBodyInFrame();
 
     enum Type implements Encodable {
-        RpcRequest(3), RpcResponse(4), RpcFailure(5);
+        ChunkFetchRequest(0), ChunkFetchSuccess(1), ChunkFetchFailure(2),
+        RpcRequest(3), RpcResponse(4), RpcFailure(5),
+        OneWayMessage(9);
 
         private final byte id;
 

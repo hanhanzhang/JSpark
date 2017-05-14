@@ -12,6 +12,7 @@ public abstract class AbstractMessage implements Message {
     private final ManagedBuffer body;
     private final boolean isBodyInFrame;
 
+
     protected AbstractMessage() {
         this(null, false);
     }

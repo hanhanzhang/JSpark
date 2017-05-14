@@ -15,7 +15,7 @@ public interface Encodable {
     int encodedLength();
 
     /**
-     * 报文编码
+     * 编码报文头部[即将报文头部信息写入ByteBuf]
      * */
     void encode(ByteBuf buf);
 }

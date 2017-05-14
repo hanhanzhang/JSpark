@@ -40,6 +40,8 @@ public class MessageDecoder extends MessageToMessageDecoder<ByteBuf> {
                 return RpcResponse.decode(in);
             case RpcFailure:
                 return RpcFailure.decode(in);
+            case OneWayMessage:
+                return OneWayMessage.decode(in);
             default:
                 throw new IllegalArgumentException("Unexpected message type: " + msgType);
         }

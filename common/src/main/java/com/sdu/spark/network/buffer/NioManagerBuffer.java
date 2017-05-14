@@ -1,6 +1,6 @@
 package com.sdu.spark.network.buffer;
 
-import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -8,31 +8,31 @@ import java.nio.ByteBuffer;
 /**
  * @author hanhan.zhang
  * */
-public class NettyManagedBuffer extends ManagedBuffer {
+public class NioManagerBuffer extends ManagedBuffer {
 
-    private final ByteBuf buf;
+    private ByteBuffer buf;
 
-    public NettyManagedBuffer(ByteBuf buf) {
+    public NioManagerBuffer(ByteBuffer buf) {
         this.buf = buf;
     }
 
     @Override
     public long size() {
-        return buf.readableBytes();
+        return buf.remaining();
     }
 
     @Override
     public Object convertToNetty() throws IOException {
-        return buf.duplicate().retain();
+        return Unpooled.wrappedBuffer(buf);
     }
 
     @Override
     public ByteBuffer nioByteBuffer() throws IOException {
-        return buf.nioBuffer();
+        return buf.duplicate();
     }
 
     @Override
     public void release() {
-        buf.release();
+
     }
 }

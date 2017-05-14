@@ -1,6 +1,5 @@
 package com.sdu.spark.network.protocol;
 
-import com.sdu.spark.network.buffer.ManagedBuffer;
 import io.netty.buffer.ByteBuf;
 
 /**

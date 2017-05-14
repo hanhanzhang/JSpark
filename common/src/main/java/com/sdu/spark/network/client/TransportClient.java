@@ -1,6 +1,5 @@
-package com.sdu.spark.rpc.netty;
+package com.sdu.spark.network.client;
 
-import com.sdu.spark.rpc.RpcResponseCallback;
 import io.netty.channel.Channel;
 
 import java.nio.ByteBuffer;
@@ -12,6 +11,12 @@ public class TransportClient {
 
     private Channel channel;
 
+    private TransportResponseHandler responseHandler;
+
+    public TransportClient(Channel channel, TransportResponseHandler responseHandler) {
+        this.channel = channel;
+        this.responseHandler = responseHandler;
+    }
 
     public void send(ByteBuffer message) {
 //        channel.writeAndFlush(message);
