@@ -67,6 +67,10 @@ public class TransportContext {
         return conf;
     }
 
+    public TransportChannelHandler initializePipeline(SocketChannel channel) {
+        return initializePipeline(channel, rpcHandler);
+    }
+
     /**
      * 初始化ChannelHandler
      * */

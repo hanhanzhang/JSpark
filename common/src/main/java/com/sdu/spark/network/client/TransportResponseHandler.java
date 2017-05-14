@@ -1,7 +1,6 @@
 package com.sdu.spark.network.client;
 
 import com.google.common.collect.Maps;
-import com.sdu.spark.network.protocol.RequestMessage;
 import com.sdu.spark.network.protocol.ResponseMessage;
 import com.sdu.spark.network.protocol.RpcFailure;
 import com.sdu.spark.network.protocol.RpcResponse;
@@ -46,6 +45,7 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
             RpcResponse resp = (RpcResponse) message;
             RpcResponseCallback listener = outstandingRpcCalls.get(resp.requestId);
             if (listener != null) {
+                outstandingRpcCalls.remove(resp.requestId);
                 try {
                     listener.onSuccess(message.body().nioByteBuffer());
                 } finally {
@@ -81,5 +81,9 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
     @Override
     public void channelInActive() {
 
+    }
+
+    public void removeRpcRequest(long requestId) {
+        outstandingRpcCalls.remove(requestId);
     }
 }

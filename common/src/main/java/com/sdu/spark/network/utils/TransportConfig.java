@@ -17,6 +17,10 @@ public class TransportConfig {
      * */
     public static final String SPARK_NETWORK_IO_SERVER_THREADS_KEY = "io.serverThreads";
     /**
+     * 客户端IO线程数
+     * */
+    public static final String SPARK_NETWORK_IO_CLIENT_THREADS_KEY = "io.clientThreads";
+    /**
      * 最大连接请求数
      * */
     public static final String SPARK_NETWORK_IO_BACKLOG_KEY = "io.backLog";
@@ -28,6 +32,10 @@ public class TransportConfig {
      * 最大发送Buffer
      * */
     public static final String SPARK_NETWORK_IO_SEND_BUFFER_KEY = "io.sendBuffer";
+    /**
+     * Server对应客户端连接数
+     * */
+    public static final String SPARK_NETWORK_IO_NUM_CONNECTIONS_PER_PEER_KEY = "io.numConnectionsPerPeer";
 
     private String module;
 
@@ -64,5 +72,20 @@ public class TransportConfig {
     public int receiveBuf() {
         String receiveBuf = conf.getOrDefault(SPARK_NETWORK_IO_RECEIVE_BUFFER_KEY, "10240");
         return Integer.parseInt(receiveBuf);
+    }
+
+    public int numConnectionsPerPeer() {
+        String connections = conf.getOrDefault(SPARK_NETWORK_IO_NUM_CONNECTIONS_PER_PEER_KEY, "10");
+        return Integer.parseInt(connections);
+    }
+
+    public int clientThreads() {
+        String clientThreads = conf.getOrDefault(SPARK_NETWORK_IO_CLIENT_THREADS_KEY, "10");
+        return Integer.parseInt(clientThreads);
+    }
+
+    public boolean saslServerAlwaysEncrypt() {
+        String sasl = conf.getOrDefault("spark.network.sasl.serverAlwaysEncrypt", "false");
+        return Boolean.valueOf(sasl);
     }
 }
