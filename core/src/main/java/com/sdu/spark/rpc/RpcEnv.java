@@ -23,6 +23,7 @@ public abstract class RpcEnv {
      * @param endPoint : Rpc节点
      * */
     public abstract RpcEndPointRef setRpcEndPointRef(String name, RpcEndPoint endPoint);
+    public abstract RpcEndPointRef setRpcEndPointRef(String name, RpcAddress rpcAddress);
 
     /**
      * 关闭Rpc节点

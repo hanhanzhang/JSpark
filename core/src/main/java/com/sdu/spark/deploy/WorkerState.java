@@ -1,4 +1,4 @@
-package com.sdu.spark.rpc.deploy;
+package com.sdu.spark.deploy;
 
 /**
  * 工作节点状态

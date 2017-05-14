@@ -22,8 +22,8 @@ public class RpcAddress {
         return host + ":" + port;
     }
 
-    public String toRpcURL() {
-        return "rpc://" + hostPort();
+    public String toSparkURL() {
+        return "JSpark://" + hostPort();
     }
 
     @Override

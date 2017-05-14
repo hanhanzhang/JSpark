@@ -18,9 +18,14 @@ public abstract class RpcEndPointRef implements Serializable {
     public abstract RpcAddress address();
 
     /**
-     *
+     * 发送单向消息[即不需要消息响应]
      * */
     public abstract void send(Object message);
+
+    /**
+     * 发送双向消息[需要消息响应]
+     * */
+    public abstract Future<?> ask(Object message);
 
     public abstract <T> Future<T> ask(Object message, int timeout);
 }

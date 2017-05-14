@@ -1,4 +1,4 @@
-package com.sdu.spark.rpc.deploy;
+package com.sdu.spark.deploy;
 
 import com.sdu.spark.rpc.RpcEndPointRef;
 import lombok.Getter;
@@ -56,6 +56,7 @@ public class WorkerInfo implements Serializable{
      * 上次心跳时间
      * */
     @Setter
+    @Getter
     private long lastHeartbeat = System.currentTimeMillis();
 
     public WorkerInfo(String workerId, String host, int port, int cores, int memory, RpcEndPointRef endPointRef) {

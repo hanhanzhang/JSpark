@@ -7,6 +7,7 @@ import com.sdu.spark.rpc.RpcConfig;
 import com.sdu.spark.rpc.RpcEndPoint;
 import com.sdu.spark.rpc.RpcEndPointRef;
 import com.sdu.spark.utils.ThreadUtils;
+import com.sdu.spark.rpc.netty.IndexMessage.*;
 import lombok.Getter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,7 +18,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 /**
- * {@link Dispatcher}路由消息给适合的{@link }
+ * {@link Dispatcher}负责路由接收到的消息[本地消息及网络消息]给{@link RpcEndPoint}
  *
  * @author hanhan.zhang
  * */
@@ -104,6 +105,15 @@ public class Dispatcher {
         endPointRefs.remove(endPoint);
     }
 
+    public void postLocalMessage(RequestMessage message) {
+        RpcMessage rpcMessage = new RpcMessage(message.getSenderAddress(), message.getContent());
+        postMessage(message.getReceiver().name(), rpcMessage);
+    }
+
+    public void postOnewayMessage(RequestMessage message) {
+        OneWayMessage oneWayMessage = new OneWayMessage(message.getSenderAddress(), message.getContent());
+        postMessage(message.getReceiver().name(), oneWayMessage);
+    }
 
     private void postMessage(String endPointName, IndexMessage message) {
         EndPointData data = endPoints.get(endPointName);

@@ -27,7 +27,17 @@ public interface IndexMessage {
         private RpcAddress address;
     }
 
+    @AllArgsConstructor
+    @Getter
     class RpcMessage implements IndexMessage {
+        private RpcAddress senderAddress;
+        private Object content;
+    }
 
+    @AllArgsConstructor
+    @Getter
+    class OneWayMessage implements IndexMessage {
+        private RpcAddress senderAddress;
+        private Object content;
     }
 }

@@ -1,4 +1,4 @@
-package com.sdu.spark.rpc.deploy;
+package com.sdu.spark.deploy;
 
 /**
  * @author hanhan.zhang

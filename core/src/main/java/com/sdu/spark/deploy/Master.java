@@ -1,16 +1,13 @@
-package com.sdu.spark.rpc.deploy;
+package com.sdu.spark.deploy;
 
 import com.sdu.spark.rpc.*;
-import com.sdu.spark.rpc.deploy.DeployMessage.*;
-import com.sdu.spark.rpc.deploy.MasterMessage.*;
+import com.sdu.spark.deploy.DeployMessage.*;
+import com.sdu.spark.deploy.MasterMessage.*;
 import com.sdu.spark.utils.ThreadUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -24,7 +21,7 @@ public class Master extends RpcEndPoint {
 
     public static final Logger LOGGER = LoggerFactory.getLogger(Master.class);
 
-    private static final String END_POINT_NAME = "RpcMaster";
+    public static final String MASTER = "JSparkMaster";
 
     // RpcEnv
     private RpcEnv rpcEnv;
@@ -61,12 +58,12 @@ public class Master extends RpcEndPoint {
 
     @Override
     public RpcEndPointRef self() {
-        return rpcEnv.setRpcEndPointRef(END_POINT_NAME, this);
+        return rpcEnv.setRpcEndPointRef(MASTER, this);
     }
 
     @Override
     public void onStart() {
-        LOGGER.info("start rpc master at {}", address.toRpcURL());
+        LOGGER.info("start rpc master at {}", address.toSparkURL());
         messageThread.scheduleWithFixedDelay(() -> self().send(new CheckForWorkerTimeOut()),
                                              config.getCheckWorkerTimeout(),
                                              config.getCheckWorkerTimeout(),
@@ -98,17 +95,19 @@ public class Master extends RpcEndPoint {
     @Override
     public void receive(Object msg) {
         if (msg instanceof CheckForWorkerTimeOut) {
-
-        } else if (msg instanceof WorkerHeartbeat) {
+            timeoutDeadWorkers();
+        } else if (msg instanceof WorkerHeartbeat) {       // 工作节点心跳消息
             WorkerHeartbeat heartbeat = (WorkerHeartbeat) msg;
             String workerId = heartbeat.getWorkerId();
             WorkerInfo workerInfo = idToWorker.get(workerId);
             if (workerInfo == null) {
-
+                LOGGER.info("Got {} from unregistered worker {}, asking it to re-register.",
+                            heartbeat, workerId);
+                heartbeat.getWorker().send(new ReconnectWorker(self()));
             } else {
                 workerInfo.setLastHeartbeat(System.currentTimeMillis());
             }
-        } else if (msg instanceof RegisterWorker) {
+        } else if (msg instanceof RegisterWorker) {       // 注册工作节点
             RegisterWorker registerWorker = (RegisterWorker) msg;
             if (idToWorker.containsKey(registerWorker.getWorkerId())) {
                 registerWorker.getWorker().send(new RegisterWorkerFailed("Duplicate worker ID"));
@@ -116,8 +115,26 @@ public class Master extends RpcEndPoint {
                 WorkerInfo workerInfo = new WorkerInfo(registerWorker.getWorkerId(), registerWorker.getHost(),
                                                        registerWorker.getPort(), registerWorker.getCores(),
                                                        registerWorker.getMemory(), registerWorker.getWorker());
-                registerWorker(workerInfo);
+                if (registerWorker(workerInfo)) {
+                    registerWorker.getWorker().send(new RegisteredWorker(self()));
+                    // 调度分配应用
+                    schedule();
+                } else {
+                    RpcAddress workerAddress = registerWorker.getWorker().address();
+                    LOGGER.info("Worker registration failed. Attempted to re-register worker at same " +
+                            "address: {}", workerAddress);
+                    registerWorker.getWorker().send(new RegisterWorkerFailed("Attempted to re-register worker at same address: "
+                            + workerAddress));
+                }
             }
+        } else if (msg instanceof WorkerSchedulerStateResponse) {
+
+        } else if (msg instanceof WorkerLatestState) {
+
+        } else if (msg instanceof RegisterApplication) {    // 注册应用
+
+        } else if (msg instanceof ExecutorStateChanged) {   // Executor变化
+
         }
     }
 
@@ -144,5 +161,30 @@ public class Master extends RpcEndPoint {
 
     private void removeWorker(WorkerInfo worker) {
 
+    }
+
+    private void schedule() {
+
+    }
+
+    /**
+     * 摘掉心跳超时工作节点
+     * */
+    private void timeoutDeadWorkers() {
+        Iterator<WorkerInfo> it = workers.iterator();
+        while (it.hasNext()) {
+            WorkerInfo worker = it.next();
+            if (worker.getLastHeartbeat() < System.currentTimeMillis() - config.getWorkerTimeout() &&
+                    worker.getState() != WorkerState.DEAD) {
+                LOGGER.info("Removing worker {} because we got no heartbeat in {} seconds", worker.getWorkerId(),
+                        config.getWorkerTimeout());
+                removeWorker(worker);
+                it.remove();
+            } else {
+                if (worker.getLastHeartbeat() < System.currentTimeMillis() - (config.getDeadWorkerPersistenceTimes() + 1) * config.getWorkerTimeout()) {
+                    it.remove();
+                }
+            }
+        }
     }
 }

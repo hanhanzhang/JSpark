@@ -1,10 +1,14 @@
 package com.sdu.spark.rpc.netty;
 
 import com.google.common.collect.Maps;
+import com.google.common.collect.MoreCollectors;
+import com.google.common.util.concurrent.MoreExecutors;
 import com.sdu.spark.rpc.*;
 import com.sdu.spark.rpc.netty.OutboxMessage.*;
 import com.sdu.spark.utils.ThreadUtils;
+import com.sdu.spark.utils.Utils;
 
+import java.nio.ByteBuffer;
 import java.util.Map;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -35,6 +39,10 @@ public class NettyRpcEnv extends RpcEnv {
      * 远端服务连接线程
      * */
     private ThreadPoolExecutor clientConnectionExecutor;
+    /**
+     * 投递消息线程
+     * */
+    private ThreadPoolExecutor deliverMessageExecutor;
 
     private AtomicBoolean stopped = new AtomicBoolean(false);
 
@@ -42,6 +50,7 @@ public class NettyRpcEnv extends RpcEnv {
         this.host = rpcConfig.getHost();
         this.dispatcher = new Dispatcher(this, rpcConfig);
         this.clientConnectionExecutor = ThreadUtils.newDaemonCachedThreadPool("netty-rpc-connect-%d", rpcConfig.getRpcConnectThreads(), 60);
+        this.deliverMessageExecutor = ThreadUtils.newDaemonCachedThreadPool("rpc-deliver-message-%d", rpcConfig.getDeliverThreads(), 60);
     }
 
     @Override
@@ -59,9 +68,15 @@ public class NettyRpcEnv extends RpcEnv {
         return dispatcher.registerRpcEndPoint(name, endPoint);
     }
 
+    @Override
+    public RpcEndPointRef setRpcEndPointRef(String name, RpcAddress rpcAddress) {
+        NettyRpcEndPointRef endPointRef = new NettyRpcEndPointRef(name, rpcAddress, this);
+        Future<?> future =  endPointRef.ask(new CheckExistence(name));
+        return Utils.getFutureResult(future);
+    }
 
     /**
-     * 发送消息
+     * 单向消息[即不需要消息响应]
      * */
     public void send(RequestMessage message) {
         RpcAddress address = message.getReceiver().address();
@@ -69,6 +84,21 @@ public class NettyRpcEnv extends RpcEnv {
 
         } else { // 发送给远端的消息
             postToOutbox(message.getReceiver(), new OneWayOutboxMessage(message.serialize()));
+        }
+    }
+
+    /**
+     * 双向消息[需要消息响应]
+     * */
+    public Future<?> ask(RequestMessage message) {
+        if (message.getReceiver().address() == address()) {
+            // 发送本地消息
+            return deliverMessageExecutor.submit(() -> dispatcher.postLocalMessage(message));
+        } else {
+            // 发送网络消息
+//            RpcOutboxMessage outboxMessage = new RpcOutboxMessage(message.serialize());
+//            return deliverMessageExecutor.submit(() -> postToOutbox());
+            return null;
         }
     }
 
