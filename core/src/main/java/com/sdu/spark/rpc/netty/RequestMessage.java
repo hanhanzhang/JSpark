@@ -1,5 +1,6 @@
 package com.sdu.spark.rpc.netty;
 
+import com.sdu.spark.network.client.TransportClient;
 import com.sdu.spark.rpc.RpcAddress;
 import com.sdu.spark.utils.ByteBufferInputStream;
 import com.sdu.spark.utils.ByteBufferOutputStream;
@@ -12,7 +13,6 @@ import java.nio.ByteBuffer;
 /**
  * @author hanhan.zhang
  * */
-@AllArgsConstructor
 @Getter
 public class RequestMessage {
     /**
@@ -24,9 +24,19 @@ public class RequestMessage {
      * */
     private NettyRpcEndPointRef receiver;
     /**
+     * 远端服务的客户端
+     * */
+    private TransportClient client;
+    /**
      * 消息体
      * */
     private Object content;
+
+    public RequestMessage(RpcAddress senderAddress, NettyRpcEndPointRef receiver, Object content) {
+        this.senderAddress = senderAddress;
+        this.receiver = receiver;
+        this.content = content;
+    }
 
     public ByteBuffer serialize() {
         ByteBufferOutputStream bos = new ByteBufferOutputStream();

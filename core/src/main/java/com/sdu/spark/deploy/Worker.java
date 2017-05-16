@@ -57,7 +57,7 @@ public class Worker extends RpcEndPoint {
     /**
      * Rpc配置
      * */
-    private RpcConfig config;
+    private JSparkConfig config;
     /**
      * Master节点引用
      * */
@@ -80,7 +80,7 @@ public class Worker extends RpcEndPoint {
 
     private DateTimeFormatter createDateFormat = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
-    public Worker(RpcConfig config, RpcEnv rpcEnv, String endPointName, int cores, int memory, RpcAddress masterRpcAddress, String workerDirPath) {
+    public Worker(JSparkConfig config, RpcEnv rpcEnv, String endPointName, int cores, int memory, RpcAddress masterRpcAddress, String workerDirPath) {
         this.config = config;
         this.rpcEnv = rpcEnv;
         this.endPointName = endPointName;

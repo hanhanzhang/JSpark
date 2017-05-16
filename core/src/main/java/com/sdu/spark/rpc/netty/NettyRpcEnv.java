@@ -1,14 +1,20 @@
 package com.sdu.spark.rpc.netty;
 
 import com.google.common.collect.Maps;
-import com.google.common.collect.MoreCollectors;
-import com.google.common.util.concurrent.MoreExecutors;
+import com.sdu.spark.network.TransportContext;
+import com.sdu.spark.network.client.TransportClient;
+import com.sdu.spark.network.client.TransportClientBootstrap;
+import com.sdu.spark.network.client.TransportClientFactory;
+import com.sdu.spark.network.server.StreamManager;
+import com.sdu.spark.network.utils.TransportConfig;
 import com.sdu.spark.rpc.*;
 import com.sdu.spark.rpc.netty.OutboxMessage.*;
 import com.sdu.spark.utils.ThreadUtils;
 import com.sdu.spark.utils.Utils;
 
-import java.nio.ByteBuffer;
+import java.io.IOException;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -32,10 +38,6 @@ public class NettyRpcEnv extends RpcEnv {
      * */
     private Map<RpcAddress, Outbox> outboxes = Maps.newConcurrentMap();
     /**
-     * 远端服务客户端工厂
-     * */
-    private TransportClientFactory clientFactory = new TransportClientFactory();
-    /**
      * 远端服务连接线程
      * */
     private ThreadPoolExecutor clientConnectionExecutor;
@@ -43,14 +45,22 @@ public class NettyRpcEnv extends RpcEnv {
      * 投递消息线程
      * */
     private ThreadPoolExecutor deliverMessageExecutor;
+    /**
+     * Netty通信上下文
+     * */
+    private TransportContext transportContext;
+    private TransportClientFactory clientFactory;
 
     private AtomicBoolean stopped = new AtomicBoolean(false);
 
-    public NettyRpcEnv(RpcConfig rpcConfig) {
-        this.host = rpcConfig.getHost();
-        this.dispatcher = new Dispatcher(this, rpcConfig);
-        this.clientConnectionExecutor = ThreadUtils.newDaemonCachedThreadPool("netty-rpc-connect-%d", rpcConfig.getRpcConnectThreads(), 60);
-        this.deliverMessageExecutor = ThreadUtils.newDaemonCachedThreadPool("rpc-deliver-message-%d", rpcConfig.getDeliverThreads(), 60);
+    public NettyRpcEnv(JSparkConfig sparkConfig) {
+        this.host = sparkConfig.getHost();
+        this.dispatcher = new Dispatcher(this, sparkConfig);
+        this.clientConnectionExecutor = ThreadUtils.newDaemonCachedThreadPool("netty-rpc-connect-%d", sparkConfig.getRpcConnectThreads(), 60);
+        this.deliverMessageExecutor = ThreadUtils.newDaemonCachedThreadPool("rpc-deliver-message-%d", sparkConfig.getDeliverThreads(), 60);
+        StreamManager streamManager = null;
+        this.transportContext = new TransportContext(fromSparkConf(sparkConfig), new NettyRpcHandler(streamManager, this.dispatcher, this));
+        this.clientFactory = this.transportContext.createClientFactory(createClientBootstraps());
     }
 
     @Override
@@ -132,11 +142,23 @@ public class NettyRpcEnv extends RpcEnv {
     }
 
     public TransportClient createClient(RpcAddress address) {
-        return clientFactory.createClient(address.getHost(), address.getPort());
+        try {
+            return clientFactory.createClient(address.getHost(), address.getPort());
+        } catch (Exception e) {
+            throw new IllegalStateException(e);
+        }
+
     }
 
     public Future<TransportClient> asyncCreateClient(RpcAddress address) {
         return clientConnectionExecutor.submit(() -> createClient(address));
+    }
+
+    public void removeOutbox(RpcAddress address) {
+        Outbox outbox = outboxes.remove(address);
+        if (outbox != null) {
+            outbox.stop();
+        }
     }
 
     @Override
@@ -152,6 +174,14 @@ public class NettyRpcEnv extends RpcEnv {
     @Override
     public void shutdown() {
 
+    }
+
+    private TransportConfig fromSparkConf(JSparkConfig conf) {
+        return null;
+    }
+
+    private List<TransportClientBootstrap> createClientBootstraps() {
+        return Collections.emptyList();
     }
 
 }

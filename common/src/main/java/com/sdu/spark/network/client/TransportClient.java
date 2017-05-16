@@ -91,4 +91,8 @@ public class TransportClient implements Closeable {
         Preconditions.checkState(clientId == null, "Client ID has already been set.");
         this.clientId = id;
     }
+
+    public Channel getChannel() {
+        return channel;
+    }
 }

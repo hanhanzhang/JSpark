@@ -1,7 +1,8 @@
 package com.sdu.spark.rpc.netty;
 
+import com.sdu.spark.network.client.TransportClient;
 import com.sdu.spark.rpc.ICallback;
-import com.sdu.spark.rpc.RpcResponseCallback;
+import com.sdu.spark.network.client.RpcResponseCallback;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 

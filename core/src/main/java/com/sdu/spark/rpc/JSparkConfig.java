@@ -10,7 +10,7 @@ import java.io.Serializable;
  * */
 @Getter
 @Builder
-public class RpcConfig implements Serializable {
+public class JSparkConfig implements Serializable {
 
     /**
      * RpcEnv Server绑定的地址

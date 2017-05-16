@@ -8,7 +8,6 @@ import com.sdu.spark.network.protocol.MessageDecoder;
 import com.sdu.spark.network.protocol.MessageEncoder;
 import com.sdu.spark.network.server.*;
 import com.sdu.spark.network.utils.TransportConfig;
-import com.sun.jdi.connect.Transport;
 import io.netty.channel.Channel;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.timeout.IdleStateHandler;

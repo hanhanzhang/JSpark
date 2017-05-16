@@ -28,7 +28,7 @@ public class Master extends RpcEndPoint {
     /**
      * RpcMaster配置
      * */
-    private RpcConfig config;
+    private JSparkConfig config;
     /**
      * Master节点地址
      * */
@@ -50,7 +50,7 @@ public class Master extends RpcEndPoint {
 
     private ScheduledFuture<?> checkWorkerTimeoutTask;
 
-    public Master(RpcConfig config, RpcEnv rpcEnv, RpcAddress address) {
+    public Master(JSparkConfig config, RpcEnv rpcEnv, RpcAddress address) {
         this.config = config;
         this.rpcEnv = rpcEnv;
         this.address = address;

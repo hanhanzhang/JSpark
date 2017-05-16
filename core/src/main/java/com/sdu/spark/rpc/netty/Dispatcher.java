@@ -2,8 +2,9 @@ package com.sdu.spark.rpc.netty;
 
 
 import com.google.common.collect.Maps;
+import com.sdu.spark.network.client.RpcResponseCallback;
 import com.sdu.spark.rpc.RpcAddress;
-import com.sdu.spark.rpc.RpcConfig;
+import com.sdu.spark.rpc.JSparkConfig;
 import com.sdu.spark.rpc.RpcEndPoint;
 import com.sdu.spark.rpc.RpcEndPointRef;
 import com.sdu.spark.utils.ThreadUtils;
@@ -12,6 +13,7 @@ import lombok.Getter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -53,10 +55,10 @@ public class Dispatcher {
 
     private static final int DEFAULT_DISPATCHER_THREADS = 5;
 
-    public Dispatcher(NettyRpcEnv nettyRpcEnv, RpcConfig rpcConfig) {
+    public Dispatcher(NettyRpcEnv nettyRpcEnv, JSparkConfig JSparkConfig) {
         this.nettyRpcEnv = nettyRpcEnv;
 
-        int threads = rpcConfig.getDispatcherThreads();
+        int threads = JSparkConfig.getDispatcherThreads();
         if (threads <= 0) {
             threads = DEFAULT_DISPATCHER_THREADS;
         }
@@ -107,21 +109,42 @@ public class Dispatcher {
 
     public void postLocalMessage(RequestMessage message) {
         RpcMessage rpcMessage = new RpcMessage(message.getSenderAddress(), message.getContent());
-        postMessage(message.getReceiver().name(), rpcMessage);
+        postMessage(message.getReceiver().name(), rpcMessage, null);
     }
 
-    public void postOnewayMessage(RequestMessage message) {
+    public void postOneWayMessage(RequestMessage message) {
         OneWayMessage oneWayMessage = new OneWayMessage(message.getSenderAddress(), message.getContent());
-        postMessage(message.getReceiver().name(), oneWayMessage);
+        postMessage(message.getReceiver().name(), oneWayMessage, null);
     }
 
-    private void postMessage(String endPointName, IndexMessage message) {
+    public void postRemoteMessage(RequestMessage message, RpcResponseCallback callback) {
+        RpcMessage rpcMessage = new RpcMessage(message.getSenderAddress(), message.getContent());
+        postMessage(message.getReceiver().name(), rpcMessage, callback);
+    }
+
+    private void postMessage(String endPointName, IndexMessage message, RpcResponseCallback callback) {
         EndPointData data = endPoints.get(endPointName);
         synchronized (this) {
             if (stopped) {
-                throw new IllegalStateException("RpcEnv already stopped.");
+                if (callback != null) {
+                    callback.onFailure(new IllegalStateException("RpcEnv already stopped."));
+                } else {
+                    throw new IllegalStateException("RpcEnv already stopped.");
+                }
             }
             data.index.post(message);
+            receivers.offer(data);
+        }
+    }
+
+    /**
+     * 广播消息
+     * */
+    public void postToAll(IndexMessage message) {
+        Iterator<String> it = endPoints.keySet().iterator();
+        while (it.hasNext()) {
+            String pointName = it.next();
+            postMessage(pointName, message, null);
         }
     }
 
