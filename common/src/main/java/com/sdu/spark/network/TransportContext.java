@@ -71,11 +71,11 @@ public class TransportContext {
     }
 
     /**
+     * {@link Channel}创建{@link TransportClient}
+     *
      * 初始化ChannelHandler
      * */
-    public TransportChannelHandler  initializePipeline(
-            SocketChannel channel,
-            RpcHandler channelRpcHandler) {
+    public TransportChannelHandler  initializePipeline(SocketChannel channel, RpcHandler channelRpcHandler) {
         try {
             TransportChannelHandler channelHandler = createChannelHandler(channel, channelRpcHandler);
             channel.pipeline()

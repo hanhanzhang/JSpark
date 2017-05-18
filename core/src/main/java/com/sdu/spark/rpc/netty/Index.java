@@ -33,6 +33,7 @@ public class Index {
     public Index(RpcEndPoint endPoint, RpcEndPointRef endPointRef) {
         this.endPoint = endPoint;
         this.endPointRef = endPointRef;
+        // 投递启动消息
         messageBox.add(new OnStart());
     }
 
@@ -51,23 +52,27 @@ public class Index {
      * 处理消息
      * */
     public void process(Dispatcher dispatcher) {
-        IndexMessage message = null;
+        IndexMessage message;
         synchronized (this) {
             message = messageBox.poll();
         }
 
         while (true) {
-            if (message instanceof OnStart) {
+            if (message instanceof OnStart) {                           // 信箱启动
                 endPoint.onStart();
-            } else if (message instanceof OnStop) {
+            } else if (message instanceof OnStop) {                     // 信箱关闭
                 dispatcher.removeRpcEndPointRef(endPoint);
                 endPoint.onStop();
-            } else if (message instanceof RemoteProcessConnect) {
+            } else if (message instanceof RemoteProcessConnect) {       // 远端连接到RpcEnv[广播给每个RpcEndPoint]
                 endPoint.onConnect(((RemoteProcessConnect) message).getAddress());
-            } else if (message instanceof RemoteProcessDisconnect) {
+            } else if (message instanceof RemoteProcessDisconnect) {    // 远端关闭RpcEnv连接[广播给每个RpcEndPoint]
                 endPoint.onDisconnect(((RemoteProcessDisconnect) message).getAddress());
-            } else if (message instanceof RpcMessage) {
-
+            } else if (message instanceof RpcMessage) {                 // 向远端发送消息
+                RpcMessage msg = (RpcMessage) message;
+                endPoint.receive(msg.getContent());
+            } else if (message instanceof OneWayMessage) {
+                OneWayMessage msg = (OneWayMessage) message;
+                endPoint.receive(msg.getContent());
             }
             message = messageBox.poll();
             if (message == null) {

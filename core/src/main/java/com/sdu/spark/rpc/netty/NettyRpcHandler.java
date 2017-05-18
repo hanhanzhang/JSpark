@@ -17,7 +17,7 @@ import java.nio.ByteBuffer;
  *
  * @author hanhan.zhang
  * */
-public class NettyRpcHandler extends RpcHandler{
+public class NettyRpcHandler extends RpcHandler {
 
     private StreamManager streamManager;
     private Dispatcher dispatcher;

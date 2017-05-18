@@ -63,6 +63,9 @@ public class Dispatcher {
             threads = DEFAULT_DISPATCHER_THREADS;
         }
         pool = ThreadUtils.newDaemonCachedThreadPool("dispatcher-event-loop-%d", threads, 60);
+        /**
+         * 启动消息处理任务
+         * */
         for (int i = 0; i < threads; ++i) {
             pool.execute(new MessageLoop());
         }
@@ -107,16 +110,25 @@ public class Dispatcher {
         endPointRefs.remove(endPoint);
     }
 
+    /**
+     * 本地消息
+     * */
     public void postLocalMessage(RequestMessage message) {
         RpcMessage rpcMessage = new RpcMessage(message.getSenderAddress(), message.getContent());
         postMessage(message.getReceiver().name(), rpcMessage, null);
     }
 
+    /**
+     * 向RpcEndPoint投递单向消息[即不需要响应]
+     * */
     public void postOneWayMessage(RequestMessage message) {
         OneWayMessage oneWayMessage = new OneWayMessage(message.getSenderAddress(), message.getContent());
         postMessage(message.getReceiver().name(), oneWayMessage, null);
     }
 
+    /**
+     * 向RpcEndPoint投递双向消息[即需要响应]
+     * */
     public void postRemoteMessage(RequestMessage message, RpcResponseCallback callback) {
         RpcMessage rpcMessage = new RpcMessage(message.getSenderAddress(), message.getContent());
         postMessage(message.getReceiver().name(), rpcMessage, callback);

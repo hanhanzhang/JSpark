@@ -20,5 +20,6 @@ public abstract class RpcEndPoint {
 
     public abstract void onDisconnect(RpcAddress rpcAddress);
 
+    // Rpc消息处理
     public abstract void receive(Object msg);
 }

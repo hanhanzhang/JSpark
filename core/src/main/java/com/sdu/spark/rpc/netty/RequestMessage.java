@@ -38,6 +38,14 @@ public class RequestMessage {
         this.content = content;
     }
 
+    /**
+     * 序列化:
+     *
+     *  1: 发送方地址
+     *  2: 接收方地址
+     *  3: 接收方{@link com.sdu.spark.rpc.RpcEndPoint}名字
+     *  4: 发送内容
+     * */
     public ByteBuffer serialize() {
         ByteBufferOutputStream bos = new ByteBufferOutputStream();
         DataOutputStream out = new DataOutputStream(bos);
@@ -57,6 +65,14 @@ public class RequestMessage {
         }
     }
 
+    /**
+     * 反序列化:
+     *
+     *  1: 发送方地址
+     *  2: 接收方地址
+     *  3: 接收方{@link com.sdu.spark.rpc.RpcEndPoint}名字
+     *  4: 发送内容
+     * */
     public static RequestMessage deserialize(ByteBuffer buffer, NettyRpcEnv rpcEnv, TransportClient client) {
         ByteBufferInputStream bis = new ByteBufferInputStream(buffer);
         DataInputStream input = new DataInputStream(bis);
