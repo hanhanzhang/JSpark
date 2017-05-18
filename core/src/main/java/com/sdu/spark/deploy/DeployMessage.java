@@ -18,10 +18,9 @@ public interface DeployMessage extends Serializable {
      * 工作节点心跳信息
      * */
     @AllArgsConstructor
-    @Getter
     class WorkerHeartbeat implements DeployMessage {
-        private String workerId;
-        private RpcEndPointRef worker;
+        public String workerId;
+        public RpcEndPointRef worker;
     }
 
     class SendHeartbeat implements DeployMessage {}
@@ -30,14 +29,13 @@ public interface DeployMessage extends Serializable {
      * 工作节点注册消息
      * */
     @AllArgsConstructor
-    @Getter
     class RegisterWorker implements DeployMessage {
-        private String workerId;
-        private String host;
-        private int port;
-        private int cores;
-        private int memory;
-        private RpcEndPointRef worker;
+        public String workerId;
+        public String host;
+        public int port;
+        public int cores;
+        public int memory;
+        public RpcEndPointRef worker;
     }
 
     /**
@@ -49,40 +47,36 @@ public interface DeployMessage extends Serializable {
      * 工作节点注册响应消息
      * */
     @AllArgsConstructor
-    @Getter
     class RegisteredWorker implements DeployMessage, RegisteredWorkerResponse {
-        private RpcEndPointRef master;
+        public RpcEndPointRef master;
     }
 
     /**
      * 工作节点注册失败消息
      * */
     @AllArgsConstructor
-    @Getter
     class RegisterWorkerFailed implements DeployMessage, RegisteredWorkerResponse {
-        private String message;
+        public String message;
     }
 
     /**
      * 工作节点状态消息
      * */
     @AllArgsConstructor
-    @Getter
     class WorkerLatestState implements DeployMessage {
-        private String workerId;
-        private List<ExecutorDescription> executors;
-        private List<String> driverIds;
+        public String workerId;
+        public List<ExecutorDescription> executors;
+        public List<String> driverIds;
     }
 
     /**
      * 工作节点资源调度响应消息
      * */
     @AllArgsConstructor
-    @Getter
     class WorkerSchedulerStateResponse implements DeployMessage {
-        private String workerId;
-        private List<ExecutorDescription> executors;
-        private List<String> driverIds;
+        public String workerId;
+        public List<ExecutorDescription> executors;
+        public List<String> driverIds;
     }
 
     /**
@@ -93,25 +87,87 @@ public interface DeployMessage extends Serializable {
     }
 
     /**
+     * 移除应用消息
+     * */
+    @AllArgsConstructor
+    class UnregisterApplication implements DeployMessage {
+        public String appId;
+    }
+
+    /**
      * Worker重连消息
      * */
     @AllArgsConstructor
-    @Getter
     class ReconnectWorker implements DeployMessage {
-        private RpcEndPointRef master;
+        public RpcEndPointRef master;
     }
 
     /**
      * Executor变更消息
      * */
     @AllArgsConstructor
-    @Getter
     class ExecutorStateChanged implements DeployMessage {
-        private String executorId;
-        private String appId;
-        private ExecutorState state;
-        private String message;
-        private int exitStatus;
+        public String executorId;
+        public String appId;
+        public ExecutorState state;
+        public String message;
+        public int exitStatus;
     }
 
+    /**
+     * Driver变更消息
+     * */
+    @AllArgsConstructor
+    class DriverStateChanged implements DeployMessage {
+        public String driverId;
+        public DriverState state;
+        public Exception exception;
+    }
+
+    @AllArgsConstructor
+    class MasterChangeAcknowledged implements DeployMessage {
+        public String appId;
+    }
+
+    /**
+     * 注册Driver信息
+     * */
+    @AllArgsConstructor
+    class RequestSubmitDriver implements DeployMessage {
+        public DriverDescription driverDescription;
+    }
+
+    /**
+     * 杀死Driver消息
+     * */
+    @AllArgsConstructor
+    class RequestKillDriver implements DeployMessage {
+        public String driverId;
+    }
+
+    /**
+     * Driver状态查询消息
+     * */
+    @AllArgsConstructor
+    class RequestDriverStatus implements DeployMessage {
+        public String driverId;
+    }
+
+    /**
+     * Executor消息
+     * */
+    @AllArgsConstructor
+    class RequestExecutors implements DeployMessage {
+        public String appId;
+        public int requestedTotal;
+    }
+
+    /**
+     * 杀死Executor消息
+     * */
+    @AllArgsConstructor
+    class KillExecutors implements DeployMessage {
+        public String appId;
+        public String[] executorIds;
+    }
 }

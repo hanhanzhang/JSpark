@@ -4,7 +4,6 @@ import com.sdu.spark.network.client.TransportClient;
 import com.sdu.spark.rpc.RpcAddress;
 import com.sdu.spark.utils.ByteBufferInputStream;
 import com.sdu.spark.utils.ByteBufferOutputStream;
-import lombok.AllArgsConstructor;
 import lombok.Getter;
 
 import java.io.*;

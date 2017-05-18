@@ -113,25 +113,28 @@ public class Dispatcher {
     /**
      * 本地消息
      * */
-    public void postLocalMessage(RequestMessage message) {
-        RpcMessage rpcMessage = new RpcMessage(message.getSenderAddress(), message.getContent());
-        postMessage(message.getReceiver().name(), rpcMessage, null);
+    public void postLocalMessage(RequestMessage req) {
+        LocalNettyRpcCallContext callContext = new LocalNettyRpcCallContext(req.getSenderAddress());
+        RpcMessage rpcMessage = new RpcMessage(req.getSenderAddress(), req.getContent(), callContext);
+        postMessage(req.getReceiver().name(), rpcMessage, null);
     }
 
     /**
      * 向RpcEndPoint投递单向消息[即不需要响应]
      * */
-    public void postOneWayMessage(RequestMessage message) {
-        OneWayMessage oneWayMessage = new OneWayMessage(message.getSenderAddress(), message.getContent());
-        postMessage(message.getReceiver().name(), oneWayMessage, null);
+    public void postOneWayMessage(RequestMessage req) {
+        OneWayMessage oneWayMessage = new OneWayMessage(req.getSenderAddress(), req.getContent());
+        postMessage(req.getReceiver().name(), oneWayMessage, null);
     }
 
     /**
      * 向RpcEndPoint投递双向消息[即需要响应]
      * */
-    public void postRemoteMessage(RequestMessage message, RpcResponseCallback callback) {
-        RpcMessage rpcMessage = new RpcMessage(message.getSenderAddress(), message.getContent());
-        postMessage(message.getReceiver().name(), rpcMessage, callback);
+    public void postRemoteMessage(RequestMessage req, RpcResponseCallback callback) {
+        RemoteNettyRpcCallContext callContext = new RemoteNettyRpcCallContext(req.getSenderAddress(),
+                nettyRpcEnv, callback);
+        RpcMessage rpcMessage = new RpcMessage(req.getSenderAddress(), req.getContent(), callContext);
+        postMessage(req.getReceiver().name(), rpcMessage, callback);
     }
 
     private void postMessage(String endPointName, IndexMessage message, RpcResponseCallback callback) {

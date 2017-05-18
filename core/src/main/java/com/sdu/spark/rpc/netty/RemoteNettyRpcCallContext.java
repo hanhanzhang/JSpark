@@ -6,12 +6,14 @@ import com.sdu.spark.rpc.RpcAddress;
 /**
  * @author hanhan.zhang
  * */
-public class RemoteNettpRpcCallContext extends NettyRpcCallContext {
+public class RemoteNettyRpcCallContext extends NettyRpcCallContext {
 
+    private NettyRpcEnv rpcEnv;
     private RpcResponseCallback callback;
 
-    public RemoteNettpRpcCallContext(RpcAddress senderAddress, RpcResponseCallback callback) {
+    public RemoteNettyRpcCallContext(RpcAddress senderAddress, NettyRpcEnv rpcEnv, RpcResponseCallback callback) {
         super(senderAddress);
+        this.rpcEnv = rpcEnv;
         this.callback = callback;
     }
 

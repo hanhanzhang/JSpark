@@ -94,47 +94,80 @@ public class Master extends RpcEndPoint {
 
     @Override
     public void receive(Object msg) {
-        if (msg instanceof CheckForWorkerTimeOut) {
+        if (msg instanceof ElectedLeader) {                 // Master选主处理
+
+        } else if (msg instanceof CompleteRecovery) {       // Master恢复
+
+        } else if (msg instanceof RevokedLeadership) {
+
+        } else if (msg instanceof CheckForWorkerTimeOut) {
             timeoutDeadWorkers();
         } else if (msg instanceof WorkerHeartbeat) {       // 工作节点心跳消息
             WorkerHeartbeat heartbeat = (WorkerHeartbeat) msg;
-            String workerId = heartbeat.getWorkerId();
+            String workerId = heartbeat.workerId;
             WorkerInfo workerInfo = idToWorker.get(workerId);
             if (workerInfo == null) {
                 LOGGER.info("Got {} from unregistered worker {}, asking it to re-register.",
                             heartbeat, workerId);
-                heartbeat.getWorker().send(new ReconnectWorker(self()));
+                heartbeat.worker.send(new ReconnectWorker(self()));
             } else {
                 workerInfo.setLastHeartbeat(System.currentTimeMillis());
             }
         } else if (msg instanceof RegisterWorker) {       // 注册工作节点
             RegisterWorker registerWorker = (RegisterWorker) msg;
-            if (idToWorker.containsKey(registerWorker.getWorkerId())) {
-                registerWorker.getWorker().send(new RegisterWorkerFailed("Duplicate worker ID"));
+            if (idToWorker.containsKey(registerWorker.workerId)) {
+                registerWorker.worker.send(new RegisterWorkerFailed("Duplicate worker ID"));
             } else {
-                WorkerInfo workerInfo = new WorkerInfo(registerWorker.getWorkerId(), registerWorker.getHost(),
-                                                       registerWorker.getPort(), registerWorker.getCores(),
-                                                       registerWorker.getMemory(), registerWorker.getWorker());
+                WorkerInfo workerInfo = new WorkerInfo(registerWorker.workerId, registerWorker.host,
+                                                       registerWorker.port, registerWorker.cores,
+                                                       registerWorker.memory, registerWorker.worker);
                 if (registerWorker(workerInfo)) {
-                    registerWorker.getWorker().send(new RegisteredWorker(self()));
+                    registerWorker.worker.send(new RegisteredWorker(self()));
                     // 调度分配应用
                     schedule();
                 } else {
-                    RpcAddress workerAddress = registerWorker.getWorker().address();
+                    RpcAddress workerAddress = registerWorker.worker.address();
                     LOGGER.info("Worker registration failed. Attempted to re-register worker at same " +
                             "address: {}", workerAddress);
-                    registerWorker.getWorker().send(new RegisterWorkerFailed("Attempted to re-register worker at same address: "
+                    registerWorker.worker.send(new RegisterWorkerFailed("Attempted to re-register worker at same address: "
                             + workerAddress));
                 }
             }
+        } else if (msg instanceof MasterChangeAcknowledged) {
+
         } else if (msg instanceof WorkerSchedulerStateResponse) {
 
         } else if (msg instanceof WorkerLatestState) {
 
         } else if (msg instanceof RegisterApplication) {    // 注册应用
 
+        } else if (msg instanceof UnregisterApplication) {  // 移除应用
+
         } else if (msg instanceof ExecutorStateChanged) {   // Executor变化
 
+        } else if (msg instanceof DriverStateChanged) {
+
+        }
+    }
+
+    @Override
+    public void receiveAndReply(Object msg, RpcCallContext context) {
+        if (msg instanceof RequestSubmitDriver) {           // 请求注册Driver
+
+        } else if (msg instanceof RequestKillDriver) {      // 杀死Driver
+
+        } else if (msg instanceof RequestDriverStatus) {
+
+        } else if (msg instanceof RequestMasterState) {
+
+        } else if (msg instanceof BoundPortsRequest) {
+
+        } else if (msg instanceof RequestExecutors) {
+
+        } else if (msg instanceof KillExecutors) {
+
+        }  else {
+            throw new IllegalArgumentException("Unknown message");
         }
     }
 

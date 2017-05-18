@@ -57,6 +57,7 @@ public interface IndexMessage {
     class RpcMessage implements IndexMessage {
         private RpcAddress senderAddress;
         private Object content;
+        private NettyRpcCallContext context;
     }
 
     @AllArgsConstructor

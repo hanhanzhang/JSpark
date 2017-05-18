@@ -69,7 +69,7 @@ public class Index {
                 endPoint.onDisconnect(((RemoteProcessDisconnect) message).getAddress());
             } else if (message instanceof RpcMessage) {                 // 向远端发送消息
                 RpcMessage msg = (RpcMessage) message;
-                endPoint.receive(msg.getContent());
+                endPoint.receiveAndReply(msg.getContent(), msg.getContext());
             } else if (message instanceof OneWayMessage) {
                 OneWayMessage msg = (OneWayMessage) message;
                 endPoint.receive(msg.getContent());

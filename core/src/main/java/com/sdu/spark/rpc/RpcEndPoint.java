@@ -20,6 +20,13 @@ public abstract class RpcEndPoint {
 
     public abstract void onDisconnect(RpcAddress rpcAddress);
 
-    // Rpc消息处理
+    /**
+     * Rpc消息处理但不响应
+     * */
     public abstract void receive(Object msg);
+
+    /**
+     * Rpc消息处理需做响应
+     * */
+    public abstract void receiveAndReply(Object msg, RpcCallContext context);
 }

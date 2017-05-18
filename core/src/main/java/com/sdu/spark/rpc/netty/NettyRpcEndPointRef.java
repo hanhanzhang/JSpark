@@ -12,14 +12,17 @@ import java.util.concurrent.Future;
  * @author hanhan.zhang
  * */
 public class NettyRpcEndPointRef extends RpcEndPointRef {
-
+    /**
+     * 被引用Rpc节点名称
+     * */
     private String name;
-
     /**
      * 被引用Rpc节点的地址
      * */
     private RpcAddress address;
-
+    /**
+     * {@link NettyRpcEndPointRef}所属的RpcEnv
+     * */
     private NettyRpcEnv rpcEnv;
 
     @Getter
@@ -45,13 +48,13 @@ public class NettyRpcEndPointRef extends RpcEndPointRef {
     @Override
     public void send(Object message) {
         assert rpcEnv != null;
-        rpcEnv.send(new RequestMessage(address(), this, message));
+        rpcEnv.send(new RequestMessage(rpcEnv.address(), this, message));
     }
 
     @Override
     public Future<?> ask(Object message) {
         assert rpcEnv != null;
-        return rpcEnv.ask(new RequestMessage(address(), this, message));
+        return rpcEnv.ask(new RequestMessage(rpcEnv.address(), this, message));
     }
 
     @Override

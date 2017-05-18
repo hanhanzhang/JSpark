@@ -118,6 +118,11 @@ public class Worker extends RpcEndPoint {
     }
 
     @Override
+    public void receiveAndReply(Object msg, RpcCallContext context) {
+
+    }
+
+    @Override
     public void onStart() {
         LOGGER.info("Starting Spark worker {} with {} cores, {} RAM", rpcEnv.address().hostPort(),
                 cores, memory);
@@ -228,9 +233,9 @@ public class Worker extends RpcEndPoint {
     private void handleRegisterResponse(RegisteredWorkerResponse msg) {
         if (msg instanceof RegisteredWorker) {
             RegisteredWorker registeredWorker = (RegisteredWorker) msg;
-            LOGGER.info("Successfully registered with master {}", registeredWorker.getMaster().address().toSparkURL());
+            LOGGER.info("Successfully registered with master {}", registeredWorker.master.address().toSparkURL());
             register = true;
-            master = registeredWorker.getMaster();
+            master = registeredWorker.master;
             cancelLastRegistrationRetry();
             /**
              * 向Master发送心跳消息
