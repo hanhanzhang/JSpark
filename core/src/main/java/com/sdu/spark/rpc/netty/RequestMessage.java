@@ -4,7 +4,6 @@ import com.sdu.spark.network.client.TransportClient;
 import com.sdu.spark.rpc.RpcAddress;
 import com.sdu.spark.utils.ByteBufferInputStream;
 import com.sdu.spark.utils.ByteBufferOutputStream;
-import lombok.Getter;
 
 import java.io.*;
 import java.nio.ByteBuffer;
@@ -12,20 +11,19 @@ import java.nio.ByteBuffer;
 /**
  * @author hanhan.zhang
  * */
-@Getter
 public class RequestMessage {
     /**
      * 消息发送地址
      * */
-    private RpcAddress senderAddress;
+    public RpcAddress senderAddress;
     /**
      * 消息接收方
      * */
-    private NettyRpcEndPointRef receiver;
+    public NettyRpcEndPointRef receiver;
     /**
      * 远端服务的客户端
      * */
-    private TransportClient client;
+    public TransportClient client;
     /**
      * 消息体
      * */

@@ -3,6 +3,7 @@ package com.sdu.spark.rpc.netty;
 import com.sdu.spark.network.client.TransportClient;
 import com.sdu.spark.rpc.ICallback;
 import com.sdu.spark.network.client.RpcResponseCallback;
+import com.sdu.spark.rpc.NettyRpcResponseCallback;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 
@@ -60,12 +61,24 @@ public interface OutboxMessage extends Serializable {
     }
 
     class RpcOutboxMessage implements OutboxMessage, RpcResponseCallback {
-        private ByteBuffer content;
-        private TransportClient client;
-        private long requestId;
+        /**
+         * RpcMessage内容
+         * */
+        public ByteBuffer content;
+        /**
+         * 消息发送客户端
+         * */
+        public TransportClient client;
+        /**
+         * 消息标识
+         * */
+        public long requestId;
 
-        public RpcOutboxMessage(ByteBuffer content, ICallback<TransportClient, Void> callback) {
+        private NettyRpcResponseCallback callback;
+
+        public RpcOutboxMessage(ByteBuffer content, NettyRpcResponseCallback callback) {
             this.content = content;
+            this.callback = callback;
         }
 
         @Override
@@ -76,18 +89,12 @@ public interface OutboxMessage extends Serializable {
 
         @Override
         public void onSuccess(ByteBuffer response) {
-
+            this.callback.onSuccess(response);
         }
 
         @Override
         public void onFailure(Throwable e) {
-
-        }
-
-        public void onTimeout() {
-            if (client != null) {
-                client.removeRpcRequest(this.requestId);
-            }
+            this.callback.onFailure(e);
         }
     }
 }

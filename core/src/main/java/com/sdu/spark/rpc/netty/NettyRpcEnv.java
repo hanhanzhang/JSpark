@@ -9,10 +9,11 @@ import com.sdu.spark.network.server.StreamManager;
 import com.sdu.spark.network.utils.TransportConfig;
 import com.sdu.spark.rpc.*;
 import com.sdu.spark.rpc.netty.OutboxMessage.*;
+import com.sdu.spark.rpc.netty.OutboxMessage.CheckExistence;
+import com.sdu.spark.rpc.netty.OutboxMessage.OneWayOutboxMessage;
 import com.sdu.spark.utils.ThreadUtils;
 import com.sdu.spark.utils.Utils;
 
-import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -89,11 +90,11 @@ public class NettyRpcEnv extends RpcEnv {
      * 单向消息[即不需要消息响应]
      * */
     public void send(RequestMessage message) {
-        RpcAddress address = message.getReceiver().address();
+        RpcAddress address = message.receiver.address();
         if (address() == address) { // 发送给本地的消息
 
         } else { // 发送给远端的消息
-            postToOutbox(message.getReceiver(), new OneWayOutboxMessage(message.serialize()));
+            postToOutbox(message.receiver, new OneWayOutboxMessage(message.serialize()));
         }
     }
 
@@ -101,14 +102,17 @@ public class NettyRpcEnv extends RpcEnv {
      * 双向消息[需要消息响应]
      * */
     public Future<?> ask(RequestMessage message) {
-        if (message.getReceiver().address() == address()) {
+        if (message.receiver.address() == address()) {
             // 发送本地消息
             return deliverMessageExecutor.submit(() -> dispatcher.postLocalMessage(message));
         } else {
             // 发送网络消息
+            NettyRpcResponseCallback callback = new NettyRpcResponseCallback();
+            OutboxMessage.RpcOutboxMessage outboxMessage = new RpcOutboxMessage(message.serialize(), callback);
+            postToOutbox(message.receiver, outboxMessage);
 //            RpcOutboxMessage outboxMessage = new RpcOutboxMessage(message.serialize());
 //            return deliverMessageExecutor.submit(() -> postToOutbox());
-            return null;
+            return callback.getResponseFuture();
         }
     }
 
