@@ -7,7 +7,7 @@ import java.util.Map;
 /**
  * @author hanhan.zhang
  * */
-public class TransportConfig {
+public class TransportConf {
     /**
      * IO模型[NIO, EPOLL]
      * */
@@ -41,7 +41,7 @@ public class TransportConfig {
 
     private Map<String, String> conf;
 
-    public TransportConfig(String module) {
+    public TransportConf(String module) {
         this.module = module;
         conf = Maps.newConcurrentMap();
     }

@@ -45,4 +45,8 @@ public class JSparkConfig implements Serializable {
      * 向Master注册重试次数
      * */
     private int maxRetryConnectTimes;
+    /**
+     * RpcServer是否验证
+     * */
+    private boolean authenticationEnabled;
 }

@@ -7,7 +7,7 @@ import com.sdu.spark.network.client.TransportResponseHandler;
 import com.sdu.spark.network.protocol.MessageDecoder;
 import com.sdu.spark.network.protocol.MessageEncoder;
 import com.sdu.spark.network.server.*;
-import com.sdu.spark.network.utils.TransportConfig;
+import com.sdu.spark.network.utils.TransportConf;
 import io.netty.channel.Channel;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.timeout.IdleStateHandler;
@@ -26,7 +26,7 @@ public class TransportContext {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(TransportContext.class);
 
-    private final TransportConfig conf;
+    private final TransportConf conf;
     private final RpcHandler rpcHandler;
     private final boolean closeIdleConnections;
 
@@ -36,11 +36,11 @@ public class TransportContext {
     private static final MessageEncoder ENCODER = MessageEncoder.INSTANCE;
     private static final MessageDecoder DECODER = MessageDecoder.INSTANCE;
 
-    public TransportContext(TransportConfig conf, RpcHandler rpcHandler) {
+    public TransportContext(TransportConf conf, RpcHandler rpcHandler) {
         this(conf, rpcHandler, false);
     }
 
-    public TransportContext(TransportConfig conf, RpcHandler rpcHandler, boolean closeIdleConnections) {
+    public TransportContext(TransportConf conf, RpcHandler rpcHandler, boolean closeIdleConnections) {
         this.conf = conf;
         this.rpcHandler = rpcHandler;
         this.closeIdleConnections = closeIdleConnections;
@@ -62,7 +62,7 @@ public class TransportContext {
         return new TransportServer(this, host, port, rpcHandler, serverBootstraps);
     }
 
-    public TransportConfig getConf() {
+    public TransportConf getConf() {
         return conf;
     }
 

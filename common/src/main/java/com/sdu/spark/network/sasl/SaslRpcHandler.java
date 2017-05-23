@@ -5,7 +5,7 @@ import com.sdu.spark.network.client.TransportClient;
 import com.sdu.spark.network.server.RpcHandler;
 import com.sdu.spark.network.server.StreamManager;
 import com.sdu.spark.network.utils.JavaUtils;
-import com.sdu.spark.network.utils.TransportConfig;
+import com.sdu.spark.network.utils.TransportConf;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
@@ -25,7 +25,7 @@ public class SaslRpcHandler extends RpcHandler {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(SaslRpcHandler.class);
 
-    private final TransportConfig conf;
+    private final TransportConf conf;
 
     private final Channel channel;
     /**
@@ -47,7 +47,7 @@ public class SaslRpcHandler extends RpcHandler {
     private SparkSaslServer saslServer;
 
 
-    public SaslRpcHandler(TransportConfig conf, Channel channel, RpcHandler delegate, SecretKeyHolder secretKeyHolder) {
+    public SaslRpcHandler(TransportConf conf, Channel channel, RpcHandler delegate, SecretKeyHolder secretKeyHolder) {
         this.conf = conf;
         this.channel = channel;
         this.delegate = delegate;

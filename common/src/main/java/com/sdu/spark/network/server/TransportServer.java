@@ -6,7 +6,7 @@ import com.sdu.spark.network.TransportContext;
 import com.sdu.spark.network.utils.IOModel;
 import com.sdu.spark.network.utils.JavaUtils;
 import com.sdu.spark.network.utils.NettyUtils;
-import com.sdu.spark.network.utils.TransportConfig;
+import com.sdu.spark.network.utils.TransportConf;
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.PooledByteBufAllocator;
 import io.netty.channel.ChannelFuture;
@@ -33,7 +33,7 @@ public class TransportServer implements Closeable {
     private static final Logger LOGGER = LoggerFactory.getLogger(TransportServer.class);
 
     private TransportContext context;
-    private TransportConfig conf;
+    private TransportConf conf;
     private RpcHandler appRpcHandler;
     private List<TransportServerBootstrap> bootstraps;
 

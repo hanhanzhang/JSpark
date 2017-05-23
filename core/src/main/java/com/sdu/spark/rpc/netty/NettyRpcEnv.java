@@ -1,12 +1,17 @@
 package com.sdu.spark.rpc.netty;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.sdu.spark.SecurityManager;
 import com.sdu.spark.network.TransportContext;
 import com.sdu.spark.network.client.TransportClient;
 import com.sdu.spark.network.client.TransportClientBootstrap;
 import com.sdu.spark.network.client.TransportClientFactory;
+import com.sdu.spark.network.crypto.AuthServerBootstrap;
 import com.sdu.spark.network.server.StreamManager;
-import com.sdu.spark.network.utils.TransportConfig;
+import com.sdu.spark.network.server.TransportServer;
+import com.sdu.spark.network.server.TransportServerBootstrap;
+import com.sdu.spark.network.utils.TransportConf;
 import com.sdu.spark.rpc.*;
 import com.sdu.spark.rpc.netty.OutboxMessage.*;
 import com.sdu.spark.rpc.netty.OutboxMessage.CheckExistence;
@@ -26,6 +31,12 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * */
 public class NettyRpcEnv extends RpcEnv {
     private String host;
+
+    private JSparkConfig conf;
+    /**
+     * Spark权限管理模块
+     * */
+    private SecurityManager securityManager;
     /**
      * RpcEnv Server端, 负责网络数据传输
      * */
@@ -54,7 +65,8 @@ public class NettyRpcEnv extends RpcEnv {
 
     private AtomicBoolean stopped = new AtomicBoolean(false);
 
-    public NettyRpcEnv(JSparkConfig sparkConfig) {
+    public NettyRpcEnv(JSparkConfig sparkConfig, SecurityManager securityManager) {
+        this.conf = sparkConfig;
         this.host = sparkConfig.getHost();
         this.dispatcher = new Dispatcher(this, sparkConfig);
         this.clientConnectionExecutor = ThreadUtils.newDaemonCachedThreadPool("netty-rpc-connect-%d", sparkConfig.getRpcConnectThreads(), 60);
@@ -62,6 +74,7 @@ public class NettyRpcEnv extends RpcEnv {
         StreamManager streamManager = null;
         this.transportContext = new TransportContext(fromSparkConf(sparkConfig), new NettyRpcHandler(streamManager, this.dispatcher, this));
         this.clientFactory = this.transportContext.createClientFactory(createClientBootstraps());
+        this.securityManager = securityManager;
     }
 
     @Override
@@ -69,6 +82,8 @@ public class NettyRpcEnv extends RpcEnv {
         return server != null ? new RpcAddress(host, server.getPort()) : null;
     }
 
+
+    /****************************RpcEndPoint节点注册****************************/
     @Override
     public RpcEndPointRef endPointRef(RpcEndPoint endPoint) {
         return dispatcher.getRpcEndPointRef(endPoint);
@@ -86,6 +101,8 @@ public class NettyRpcEnv extends RpcEnv {
         return Utils.getFutureResult(future);
     }
 
+
+    /*******************************Rpc消息发送***********************************/
     /**
      * 单向消息[即不需要消息响应]
      * */
@@ -110,15 +127,10 @@ public class NettyRpcEnv extends RpcEnv {
             NettyRpcResponseCallback callback = new NettyRpcResponseCallback();
             OutboxMessage.RpcOutboxMessage outboxMessage = new RpcOutboxMessage(message.serialize(), callback);
             postToOutbox(message.receiver, outboxMessage);
-//            RpcOutboxMessage outboxMessage = new RpcOutboxMessage(message.serialize());
-//            return deliverMessageExecutor.submit(() -> postToOutbox());
             return callback.getResponseFuture();
         }
     }
 
-    /**
-     *
-     * */
     private void postToOutbox(NettyRpcEndPointRef receiver, OutboxMessage message) {
         if (receiver.getClient() != null) {
             message.sendWith(receiver.getClient());
@@ -145,6 +157,26 @@ public class NettyRpcEnv extends RpcEnv {
         }
     }
 
+    public void removeOutbox(RpcAddress address) {
+        Outbox outbox = outboxes.remove(address);
+        if (outbox != null) {
+            outbox.stop();
+        }
+    }
+
+    /******************************RpcServer启动********************************/
+    public void startServer(String host, int port) {
+        List<TransportServerBootstrap> bootstraps;
+        if (securityManager.isAuthenticationEnabled()) {
+            bootstraps = Lists.newArrayList(new AuthServerBootstrap(fromSparkConf(conf), securityManager));
+        } else {
+            bootstraps = Collections.emptyList();
+        }
+        server = transportContext.createServer(host, port, bootstraps);
+        // 注册RpcEndPoint节点
+
+    }
+
     public TransportClient createClient(RpcAddress address) {
         try {
             return clientFactory.createClient(address.getHost(), address.getPort());
@@ -156,13 +188,6 @@ public class NettyRpcEnv extends RpcEnv {
 
     public Future<TransportClient> asyncCreateClient(RpcAddress address) {
         return clientConnectionExecutor.submit(() -> createClient(address));
-    }
-
-    public void removeOutbox(RpcAddress address) {
-        Outbox outbox = outboxes.remove(address);
-        if (outbox != null) {
-            outbox.stop();
-        }
     }
 
     @Override
@@ -180,7 +205,7 @@ public class NettyRpcEnv extends RpcEnv {
 
     }
 
-    private TransportConfig fromSparkConf(JSparkConfig conf) {
+    private TransportConf fromSparkConf(JSparkConfig conf) {
         return null;
     }
 
