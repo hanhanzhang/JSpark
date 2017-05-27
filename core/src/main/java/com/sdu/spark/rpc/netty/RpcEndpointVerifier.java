@@ -3,11 +3,11 @@ package com.sdu.spark.rpc.netty;
 import com.sdu.spark.rpc.*;
 
 /**
- * RpcEndPoint用于询问'NAME'的Rpc节点是否存在
- *
  * @author hanhan.zhang
  * */
 public class RpcEndpointVerifier extends RpcEndPoint {
+
+    public static final String NAME = "endpoint-verifier";
 
     private RpcEnv rpcEnv;
 
@@ -20,7 +20,7 @@ public class RpcEndpointVerifier extends RpcEndPoint {
 
     @Override
     public RpcEndPointRef self() {
-        return rpcEnv.endPointRef(this);
+        return rpcEnv.setRpcEndPointRef(NAME, this);
     }
 
     @Override
@@ -55,6 +55,6 @@ public class RpcEndpointVerifier extends RpcEndPoint {
 
     @Override
     public void receiveAndReply(Object msg, RpcCallContext context) {
-
+        
     }
 }

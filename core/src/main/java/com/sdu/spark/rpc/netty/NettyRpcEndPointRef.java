@@ -9,6 +9,16 @@ import lombok.Setter;
 import java.util.concurrent.Future;
 
 /**
+ * Note:
+ *
+ *  1: {@link NettyRpcEndPointRef}归属于{@link NettyRpcEnv}
+ *
+ *  2: 使用{@link NettyRpcEndPointRef}发送消息时:
+ *
+ *      1': 发送方地址 = RpcEnv.address[即RpcEnv启动的RpcServer地址]
+ *
+ *      2': 接收方地址 = {@link NettyRpcEndPointRef#address}
+ *
  * @author hanhan.zhang
  * */
 public class NettyRpcEndPointRef extends RpcEndPointRef {

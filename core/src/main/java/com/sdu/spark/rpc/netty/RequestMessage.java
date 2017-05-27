@@ -27,7 +27,7 @@ public class RequestMessage {
     /**
      * 消息体
      * */
-    private Object content;
+    public Object content;
 
     public RequestMessage(RpcAddress senderAddress, NettyRpcEndPointRef receiver, Object content) {
         this.senderAddress = senderAddress;

@@ -30,6 +30,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * @author hanhan.zhang
  * */
 public class NettyRpcEnv extends RpcEnv {
+
+
     private String host;
 
     private JSparkConfig conf;
@@ -96,8 +98,8 @@ public class NettyRpcEnv extends RpcEnv {
 
     @Override
     public RpcEndPointRef setRpcEndPointRef(String name, RpcAddress rpcAddress) {
-        NettyRpcEndPointRef endPointRef = new NettyRpcEndPointRef(name, rpcAddress, this);
-        Future<?> future =  endPointRef.ask(new CheckExistence(name));
+        NettyRpcEndPointRef verifier = new NettyRpcEndPointRef(RpcEndpointVerifier.NAME, rpcAddress, this);
+        Future<?> future =  verifier.ask(new CheckExistence(name));
         return Utils.getFutureResult(future);
     }
 
@@ -164,7 +166,7 @@ public class NettyRpcEnv extends RpcEnv {
         }
     }
 
-    /******************************RpcServer启动********************************/
+    /*****************************Rpca启动********************************/
     public void startServer(String host, int port) {
         List<TransportServerBootstrap> bootstraps;
         if (securityManager.isAuthenticationEnabled()) {
@@ -174,7 +176,7 @@ public class NettyRpcEnv extends RpcEnv {
         }
         server = transportContext.createServer(host, port, bootstraps);
         // 注册RpcEndPoint节点
-
+        dispatcher.registerRpcEndPoint(RpcEndpointVerifier.NAME, new RpcEndpointVerifier(this, dispatcher));
     }
 
     public TransportClient createClient(RpcAddress address) {
