@@ -11,6 +11,7 @@ import com.sdu.spark.network.crypto.AuthServerBootstrap;
 import com.sdu.spark.network.server.StreamManager;
 import com.sdu.spark.network.server.TransportServer;
 import com.sdu.spark.network.server.TransportServerBootstrap;
+import com.sdu.spark.network.utils.IOModel;
 import com.sdu.spark.network.utils.TransportConf;
 import com.sdu.spark.rpc.*;
 import com.sdu.spark.rpc.netty.OutboxMessage.*;
@@ -67,9 +68,9 @@ public class NettyRpcEnv extends RpcEnv {
 
     private AtomicBoolean stopped = new AtomicBoolean(false);
 
-    public NettyRpcEnv(JSparkConfig sparkConfig, SecurityManager securityManager) {
+    public NettyRpcEnv(JSparkConfig sparkConfig, String host, SecurityManager securityManager) {
         this.conf = sparkConfig;
-        this.host = sparkConfig.getHost();
+        this.host = host;
         this.dispatcher = new Dispatcher(this, sparkConfig);
         this.clientConnectionExecutor = ThreadUtils.newDaemonCachedThreadPool("netty-rpc-connect-%d", sparkConfig.getRpcConnectThreads(), 60);
         this.deliverMessageExecutor = ThreadUtils.newDaemonCachedThreadPool("rpc-deliver-message-%d", sparkConfig.getDeliverThreads(), 60);
@@ -121,7 +122,7 @@ public class NettyRpcEnv extends RpcEnv {
      * 双向消息[需要消息响应]
      * */
     public Future<?> ask(RequestMessage message) {
-        if (message.receiver.address() == address()) {
+        if (message.receiver.address().equals(address())) {
             // 发送本地消息
             return deliverMessageExecutor.submit(() -> dispatcher.postLocalMessage(message));
         } else {
@@ -181,7 +182,7 @@ public class NettyRpcEnv extends RpcEnv {
 
     public TransportClient createClient(RpcAddress address) {
         try {
-            return clientFactory.createClient(address.getHost(), address.getPort());
+            return clientFactory.createClient(address.host, address.port);
         } catch (Exception e) {
             throw new IllegalStateException(e);
         }
@@ -208,7 +209,7 @@ public class NettyRpcEnv extends RpcEnv {
     }
 
     private TransportConf fromSparkConf(JSparkConfig conf) {
-        return null;
+        return new TransportConf(IOModel.NIO.name(), Collections.emptyMap());
     }
 
     private List<TransportClientBootstrap> createClientBootstraps() {

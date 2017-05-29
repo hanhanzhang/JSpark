@@ -195,7 +195,7 @@ public class Worker extends RpcEndPoint {
                 }
                 RpcAddress address = master.address();
                 LOGGER.info("connect master : {}", address.hostPort());
-                RpcEndPointRef masterPointRef = rpcEnv.setRpcEndPointRef(Master.MASTER, address);
+                RpcEndPointRef masterPointRef = rpcEnv.setRpcEndPointRef(Master.ENDPOINT_NAME, address);
                 sendRegisterMessageToMaster(masterPointRef);
             }
             if (connectionAttemptCount == config.getMaxRetryConnectTimes()) {
@@ -216,7 +216,7 @@ public class Worker extends RpcEndPoint {
     private Future<?> tryRegisterMaster() {
         return registerExecutorService.submit(() -> {
             LOGGER.info("connect master {}", masterRpcAddress.hostPort());
-            RpcEndPointRef masterPointRef = rpcEnv.setRpcEndPointRef(Master.MASTER, masterRpcAddress);
+            RpcEndPointRef masterPointRef = rpcEnv.setRpcEndPointRef(Master.ENDPOINT_NAME, masterRpcAddress);
             sendRegisterMessageToMaster(masterPointRef);
         });
     }
@@ -264,11 +264,11 @@ public class Worker extends RpcEndPoint {
     }
 
     private String host() {
-        return rpcEnv.address().getHost();
+        return rpcEnv.address().host;
     }
 
     private int port() {
-        return rpcEnv.address().getPort();
+        return rpcEnv.address().port;
     }
 
     private String generateWorkId() {

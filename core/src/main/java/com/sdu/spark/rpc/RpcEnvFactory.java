@@ -5,6 +5,6 @@ package com.sdu.spark.rpc;
  * */
 public interface RpcEnvFactory {
 
-    RpcEnv create(JSparkConfig conf);
+    RpcEnv create(RpcEnvConfig conf);
 
 }

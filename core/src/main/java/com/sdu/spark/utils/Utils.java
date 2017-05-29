@@ -18,4 +18,7 @@ public class Utils {
         }
     }
 
+    public static int convertStringToInt(String text) {
+        return Integer.parseInt(text);
+    }
 }

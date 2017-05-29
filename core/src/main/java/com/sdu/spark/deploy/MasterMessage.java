@@ -38,15 +38,16 @@ public interface MasterMessage extends Serializable {
     }
 
     /**
-     *
+     * RpcEndPoint绑定端口请求
      * */
     class BoundPortsRequest implements MasterMessage {}
 
+    /**
+     * RpcEndPoint端口绑定响应
+     * */
     @AllArgsConstructor
-    @Getter
     class BoundPortsResponse implements MasterMessage {
         int rpcEndpointPort;
-        int webUIPort;
         int restPort;
     }
 

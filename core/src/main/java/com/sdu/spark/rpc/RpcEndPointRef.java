@@ -25,7 +25,7 @@ public abstract class RpcEndPointRef implements Serializable {
     /**
      * 发送双向消息[需要消息响应]
      * */
-    public abstract Future<?> ask(Object message);
+    public abstract <T> Future<T> ask(Object message);
 
     public abstract <T> Future<T> ask(Object message, int timeout);
 }

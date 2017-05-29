@@ -1,5 +1,6 @@
 package com.sdu.spark.deploy;
 
+import com.sdu.spark.SecurityManager;
 import com.sdu.spark.rpc.*;
 import com.sdu.spark.deploy.DeployMessage.*;
 import com.sdu.spark.deploy.MasterMessage.*;
@@ -8,9 +9,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+
+import static com.sdu.spark.utils.Utils.convertStringToInt;
+import static com.sdu.spark.utils.Utils.getFutureResult;
 
 /**
  * 集群Master节点, 负责管理集群及Application信息
@@ -21,7 +26,7 @@ public class Master extends RpcEndPoint {
 
     public static final Logger LOGGER = LoggerFactory.getLogger(Master.class);
 
-    public static final String MASTER = "JSparkMaster";
+    public static final String ENDPOINT_NAME = "JSparkMaster";
 
     // RpcEnv
     private RpcEnv rpcEnv;
@@ -58,7 +63,7 @@ public class Master extends RpcEndPoint {
 
     @Override
     public RpcEndPointRef self() {
-        return rpcEnv.setRpcEndPointRef(MASTER, this);
+        return rpcEnv.setRpcEndPointRef(ENDPOINT_NAME, this);
     }
 
     @Override
@@ -152,6 +157,7 @@ public class Master extends RpcEndPoint {
 
     @Override
     public void receiveAndReply(Object msg, RpcCallContext context) {
+        System.out.println("消息类型 : " + msg.getClass().getName());
         if (msg instanceof RequestSubmitDriver) {           // 请求注册Driver
 
         } else if (msg instanceof RequestKillDriver) {      // 杀死Driver
@@ -161,7 +167,7 @@ public class Master extends RpcEndPoint {
         } else if (msg instanceof RequestMasterState) {
 
         } else if (msg instanceof BoundPortsRequest) {
-
+            context.reply(new BoundPortsResponse(address.port, address.port));
         } else if (msg instanceof RequestExecutors) {
 
         } else if (msg instanceof KillExecutors) {
@@ -220,4 +226,34 @@ public class Master extends RpcEndPoint {
             }
         }
     }
+
+    public static void main(String[] args) {
+        args = new String[]{"127.0.0.1", "6712"};
+
+        JSparkConfig sparkConfig = JSparkConfig.builder()
+                                                .deliverThreads(1)
+                                                .dispatcherThreads(1)
+                                                .rpcConnectThreads(1)
+                                                .maxRetryConnectTimes(2)
+                                                .checkWorkerTimeout(10)
+                                                .deadWorkerPersistenceTimes(2)
+                                                .workerTimeout(20)
+                                                .build();
+        SecurityManager securityManager = new SecurityManager(sparkConfig);
+
+        // 启动RpcEnv
+        RpcEnv rpcEnv = RpcEnv.create(args[0], convertStringToInt(args[1]), sparkConfig, securityManager);
+
+        // 向RpcEnv注册Master节点
+        Master master = new Master(sparkConfig, rpcEnv, rpcEnv.address());
+        RpcEndPointRef masterRef = rpcEnv.setRpcEndPointRef(ENDPOINT_NAME, master);
+
+        // 向Master的对应RpcEndPoint节点发送消息
+        Future<BoundPortsResponse> future = masterRef.ask(new BoundPortsRequest());
+        BoundPortsResponse response = getFutureResult(future);
+        if (response != null) {
+            LOGGER.info("Master bind port : {}", response.rpcEndpointPort);
+        }
+    }
+
 }

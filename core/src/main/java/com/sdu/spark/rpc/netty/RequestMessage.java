@@ -97,8 +97,8 @@ public class RequestMessage {
             out.writeBoolean(false);
         } else {
             out.writeBoolean(true);
-            out.writeUTF(address.getHost());
-            out.writeInt(address.getPort());
+            out.writeUTF(address.host);
+            out.writeInt(address.port);
         }
     }
 

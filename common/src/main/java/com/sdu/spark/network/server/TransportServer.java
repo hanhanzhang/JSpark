@@ -56,7 +56,7 @@ public class TransportServer implements Closeable {
     }
 
     private void init(String hostToBind, int portToBind) {
-        IOModel ioModel = IOModel.valueOf(conf.ioModel());
+        IOModel ioModel = IOModel.convert(conf.ioModel());
         EventLoopGroup bossGroup =
                 NettyUtils.createEventLoop(ioModel, conf.serverThreads(), conf.getModuleName() + "-server");
         EventLoopGroup workerGroup = bossGroup;

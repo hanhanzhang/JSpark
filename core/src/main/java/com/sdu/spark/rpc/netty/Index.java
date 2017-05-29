@@ -63,13 +63,13 @@ public class Index {
             } else if (message instanceof OnStop) {                     // 信箱关闭
                 dispatcher.removeRpcEndPointRef(endPoint);
                 endPoint.onStop();
+            } else if (message instanceof RpcMessage) {                 // 向远端发送消息
+                RpcMessage msg = (RpcMessage) message;
+                endPoint.receiveAndReply(msg.getContent(), msg.getContext());
             } else if (message instanceof RemoteProcessConnect) {       // 远端连接到RpcEnv[广播给每个RpcEndPoint]
                 endPoint.onConnect(((RemoteProcessConnect) message).getAddress());
             } else if (message instanceof RemoteProcessDisconnect) {    // 远端关闭RpcEnv连接[广播给每个RpcEndPoint]
                 endPoint.onDisconnect(((RemoteProcessDisconnect) message).getAddress());
-            } else if (message instanceof RpcMessage) {                 // 向远端发送消息
-                RpcMessage msg = (RpcMessage) message;
-                endPoint.receiveAndReply(msg.getContent(), msg.getContext());
             } else if (message instanceof OneWayMessage) {
                 OneWayMessage msg = (OneWayMessage) message;
                 endPoint.receive(msg.getContent());

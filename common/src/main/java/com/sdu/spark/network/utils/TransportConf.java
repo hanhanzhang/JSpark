@@ -41,9 +41,10 @@ public class TransportConf {
 
     private Map<String, String> conf;
 
-    public TransportConf(String module) {
+    public TransportConf(String module, Map<String, String> conf) {
         this.module = module;
-        conf = Maps.newConcurrentMap();
+        this.conf = Maps.newConcurrentMap();
+        this.conf.putAll(conf);
     }
 
     public String ioModel() {

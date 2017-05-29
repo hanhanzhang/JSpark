@@ -13,6 +13,6 @@ public class LocalNettyRpcCallContext extends NettyRpcCallContext {
 
     @Override
     public void send(Object message) {
-
+        System.out.println("消息响应: " + message.getClass().getName());
     }
 }

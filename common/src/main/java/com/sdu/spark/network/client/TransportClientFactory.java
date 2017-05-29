@@ -68,8 +68,8 @@ public class TransportClientFactory {
         this.conf = context.getConf();
         this.clientBootstraps = clientBootstraps;
         this.connectionPool = new ConcurrentHashMap<>();
-        this.socketChannelClass = NettyUtils.getClientChannelClass(IOModel.valueOf(conf.ioModel()));
-        this.workerGroup = NettyUtils.createEventLoop(IOModel.valueOf(conf.ioModel()), conf.clientThreads(),
+        this.socketChannelClass = NettyUtils.getClientChannelClass(IOModel.convert(conf.ioModel()));
+        this.workerGroup = NettyUtils.createEventLoop(IOModel.convert(conf.ioModel()), conf.clientThreads(),
                 conf.getModuleName() + "-client");
     }
 

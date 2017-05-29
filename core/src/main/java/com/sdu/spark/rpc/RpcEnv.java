@@ -1,5 +1,8 @@
 package com.sdu.spark.rpc;
 
+import com.sdu.spark.SecurityManager;
+import com.sdu.spark.rpc.netty.NettyRpcEnvFactory;
+
 /**
  *
  * @author hanhan.zhang
@@ -36,4 +39,17 @@ public abstract class RpcEnv {
      * 关闭RpcEnv
      * */
     public abstract void shutdown();
+
+    /**
+     * 创建RpcEnv
+     * */
+    public static RpcEnv create(String host, int port, JSparkConfig conf, SecurityManager securityManager) {
+       return create(host, port, conf, securityManager, false);
+    }
+
+    public static RpcEnv create(String host, int port, JSparkConfig conf,
+                                SecurityManager securityManager, boolean clientModel) {
+        RpcEnvConfig rpcEnvConf = new RpcEnvConfig(conf, host, port, securityManager, clientModel);
+        return new NettyRpcEnvFactory().create(rpcEnvConf);
+    }
 }

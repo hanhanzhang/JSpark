@@ -1,7 +1,6 @@
 package com.sdu.spark.rpc;
 
 import lombok.AllArgsConstructor;
-import lombok.Getter;
 
 import java.net.URI;
 
@@ -11,12 +10,11 @@ import java.net.URI;
  * @author hanhan.zhang
  * */
 @AllArgsConstructor
-@Getter
 public class RpcAddress {
 
-    private String host;
+    public String host;
 
-    private int port;
+    public int port;
 
     public String hostPort() {
         return host + ":" + port;
