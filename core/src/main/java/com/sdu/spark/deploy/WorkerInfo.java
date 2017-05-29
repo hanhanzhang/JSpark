@@ -32,7 +32,7 @@ public class WorkerInfo implements Serializable{
     /**
      * 工作节点JVM内存
      * */
-    private int memory;
+    private long memory;
     /**
      * 工作节点网络通信引用
      * */
@@ -46,7 +46,7 @@ public class WorkerInfo implements Serializable{
     /**
      * 工作节点已用内存
      * */
-    private int memoryUsed;
+    private long memoryUsed;
     /**
      * 工作节点状态
      * */
@@ -59,7 +59,7 @@ public class WorkerInfo implements Serializable{
     @Getter
     private long lastHeartbeat = System.currentTimeMillis();
 
-    public WorkerInfo(String workerId, String host, int port, int cores, int memory, RpcEndPointRef endPointRef) {
+    public WorkerInfo(String workerId, String host, int port, int cores, long memory, RpcEndPointRef endPointRef) {
         this.workerId = workerId;
         this.host = host;
         this.port = port;
@@ -79,7 +79,7 @@ public class WorkerInfo implements Serializable{
     /**
      * 可用内存数
      * */
-    public int freeMemory() {
+    public long freeMemory() {
         return memory - memoryUsed;
     }
 

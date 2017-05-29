@@ -253,6 +253,8 @@ public class Master extends RpcEndPoint {
         if (response != null) {
             LOGGER.info("Master bind port : {}", response.rpcEndpointPort);
         }
+
+        rpcEnv.awaitTermination();
     }
 
 }

@@ -34,7 +34,7 @@ public interface DeployMessage extends Serializable {
         public String host;
         public int port;
         public int cores;
-        public int memory;
+        public long memory;
         public RpcEndPointRef worker;
     }
 

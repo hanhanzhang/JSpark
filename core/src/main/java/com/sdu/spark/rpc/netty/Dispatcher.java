@@ -110,9 +110,11 @@ public class Dispatcher {
      * */
     public Object postLocalMessage(RequestMessage req) throws ExecutionException, InterruptedException {
         NettyLocalResponseCallback<Object> callback = new NettyLocalResponseCallback<>();
+
         LocalNettyRpcCallContext callContext = new LocalNettyRpcCallContext(req.senderAddress, callback);
         RpcMessage rpcMessage = new RpcMessage(req.senderAddress, req.content, callContext);
         postMessage(req.receiver.name(), rpcMessage, null);
+
         return callback.getResponse();
     }
 

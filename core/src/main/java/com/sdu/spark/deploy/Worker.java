@@ -1,5 +1,6 @@
 package com.sdu.spark.deploy;
 
+import com.sdu.spark.SecurityManager;
 import com.sdu.spark.rpc.*;
 import com.sdu.spark.deploy.WorkerLocalMessage.*;
 import com.sdu.spark.deploy.DeployMessage.*;
@@ -12,6 +13,8 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.concurrent.*;
 
+import static com.sdu.spark.utils.Utils.convertStringToInt;
+
 /**
  * 集群工作节点
  *
@@ -21,15 +24,16 @@ public class Worker extends RpcEndPoint {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(Worker.class);
 
+    public static final String ENDPOINT_NAME = "JSparkWorker";
+
     private RpcEnv rpcEnv;
+
+    private DateTimeFormatter createDateFormat = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
+
     /**
      * Worker唯一标识
      * */
-    private String workerId = generateWorkId();
-    /**
-     * Worker节点名称
-     * */
-    private String endPointName;
+    private String workerId;
     /**
      * Master网络地址
      * */
@@ -45,7 +49,7 @@ public class Worker extends RpcEndPoint {
     /**
      * 工作节点内存
      * */
-    private int memory;
+    private long memory;
     /**
      * 是否注解到Master
      * */
@@ -78,12 +82,9 @@ public class Worker extends RpcEndPoint {
     private ScheduledFuture<?> registrationRetryTimer;
     private Future<?> registerMasterFuture;
 
-    private DateTimeFormatter createDateFormat = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
-
-    public Worker(JSparkConfig config, RpcEnv rpcEnv, String endPointName, int cores, int memory, RpcAddress masterRpcAddress, String workerDirPath) {
+    public Worker(JSparkConfig config, RpcEnv rpcEnv, int cores, long memory, RpcAddress masterRpcAddress, String workerDirPath) {
         this.config = config;
         this.rpcEnv = rpcEnv;
-        this.endPointName = endPointName;
         this.cores = cores;
         this.memory = memory;
         this.masterRpcAddress = masterRpcAddress;
@@ -92,6 +93,7 @@ public class Worker extends RpcEndPoint {
         registerExecutorService = ThreadUtils.newDaemonCachedThreadPool("worker-register-thread", 1, 60);
         // 防止数据丢包及网络延迟导致Master节点接收不到心跳
         heartbeatTimeInterval = this.config.getCheckWorkerTimeout() / 4;
+        this.workerId = generateWorkId();
     }
 
     public Worker(RpcEnv rpcEnv, RpcAddress masterRpcAddress) {
@@ -101,7 +103,7 @@ public class Worker extends RpcEndPoint {
 
     @Override
     public RpcEndPointRef self() {
-        return rpcEnv.setRpcEndPointRef(endPointName, this);
+        return rpcEnv.endPointRef(this);
     }
 
     @Override
@@ -126,7 +128,7 @@ public class Worker extends RpcEndPoint {
     public void onStart() {
         LOGGER.info("Starting Spark worker {} with {} cores, {} RAM", rpcEnv.address().hostPort(),
                 cores, memory);
-        createDir();
+//        createDir();
         startRegisterWithMaster();
     }
 
@@ -274,5 +276,40 @@ public class Worker extends RpcEndPoint {
     private String generateWorkId() {
         return "worker-" + LocalDateTime.now().format(createDateFormat) + "-" +
                 host() + "-" + port();
+    }
+
+    public static void main(String[] args) {
+        /**
+         * 0: Worker绑定host地址
+         * 1: Worker绑定port端口
+         * 2: Worker注册的Master地址
+         * 3: Worker启动分配的CPU数
+         * 4: Worker启动分配的JVM数
+         * */
+        RpcAddress masterAddress = new RpcAddress("127.0.0.1", 6712);
+        int cpu = Runtime.getRuntime().availableProcessors() * 2;
+        long memory = Runtime.getRuntime().maxMemory();
+        args = new String[] {"127.0.0.1", "6713"};
+
+        JSparkConfig sparkConfig = JSparkConfig.builder()
+                                                .deliverThreads(1)
+                                                .dispatcherThreads(1)
+                                                .rpcConnectThreads(1)
+                                                .maxRetryConnectTimes(2)
+                                                .checkWorkerTimeout(10)
+                                                .deadWorkerPersistenceTimes(2)
+                                                .workerTimeout(20)
+                                                .build();
+        SecurityManager securityManager = new SecurityManager(sparkConfig);
+        // 启动RpcEnv
+        RpcEnv rpcEnv = RpcEnv.create(args[0], convertStringToInt(args[1]), sparkConfig, securityManager);
+
+        Worker worker = new Worker(sparkConfig, rpcEnv, cpu, memory, masterAddress, "");
+
+        // 向Worker's RpcEnv注册Worker节点
+        // 向RpcEnv注册Worker节点时, 会向Index投递OnStart消息, 进而调用RpcEndPoint.onStart()方法
+        rpcEnv.setRpcEndPointRef(ENDPOINT_NAME, worker);
+
+        rpcEnv.awaitTermination();
     }
 }

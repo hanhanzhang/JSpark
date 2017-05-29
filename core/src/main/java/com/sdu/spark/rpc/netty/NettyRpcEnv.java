@@ -113,9 +113,11 @@ public class NettyRpcEnv extends RpcEnv {
      * */
     public void send(RequestMessage message) {
         RpcAddress address = message.receiver.address();
-        if (address() == address) { // 发送给本地的消息
-
-        } else { // 发送给远端的消息
+        if (address().equals(address)) {
+            // 发送给本地的消息
+            dispatcher.postOneWayMessage(message);
+        } else {
+            // 发送给远端的消息
             postToOutbox(message.receiver, new OneWayOutboxMessage(message.serialize()));
         }
     }
@@ -126,15 +128,10 @@ public class NettyRpcEnv extends RpcEnv {
     public Future<?> ask(RequestMessage message) {
         if (message.receiver.address().equals(address())) {
             // 发送本地消息
-            return deliverMessageExecutor.submit(() -> {
-                try {
-                    dispatcher.postLocalMessage(message);
-                } catch (ExecutionException e) {
-                    LOGGER.error("post local message error", e);
-                } catch (RejectedExecutionException e) {
-                    LOGGER.error("deliver message thread reject local message task", e);
-                } catch (InterruptedException e) {
-                    LOGGER.error("await local message process thread interrupt", e);
+            return deliverMessageExecutor.submit(new Callable<Object>() {
+                @Override
+                public Object call() throws Exception {
+                    return dispatcher.postLocalMessage(message);
                 }
             });
         } else {
@@ -179,7 +176,7 @@ public class NettyRpcEnv extends RpcEnv {
         }
     }
 
-    /*****************************Rpca启动********************************/
+    /*****************************RpcEnv关联RpcServer启动********************************/
     public void startServer(String host, int port) {
         List<TransportServerBootstrap> bootstraps;
         if (securityManager.isAuthenticationEnabled()) {
