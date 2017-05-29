@@ -19,12 +19,13 @@ import com.sdu.spark.rpc.netty.OutboxMessage.CheckExistence;
 import com.sdu.spark.rpc.netty.OutboxMessage.OneWayOutboxMessage;
 import com.sdu.spark.utils.ThreadUtils;
 import com.sdu.spark.utils.Utils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Future;
-import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -32,6 +33,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * */
 public class NettyRpcEnv extends RpcEnv {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(NettyRpcEnv.class);
 
     private String host;
 
@@ -124,7 +126,17 @@ public class NettyRpcEnv extends RpcEnv {
     public Future<?> ask(RequestMessage message) {
         if (message.receiver.address().equals(address())) {
             // 发送本地消息
-            return deliverMessageExecutor.submit(() -> dispatcher.postLocalMessage(message));
+            return deliverMessageExecutor.submit(() -> {
+                try {
+                    dispatcher.postLocalMessage(message);
+                } catch (ExecutionException e) {
+                    LOGGER.error("post local message error", e);
+                } catch (RejectedExecutionException e) {
+                    LOGGER.error("deliver message thread reject local message task", e);
+                } catch (InterruptedException e) {
+                    LOGGER.error("await local message process thread interrupt", e);
+                }
+            });
         } else {
             // 发送网络消息
             NettyRpcResponseCallback callback = new NettyRpcResponseCallback();

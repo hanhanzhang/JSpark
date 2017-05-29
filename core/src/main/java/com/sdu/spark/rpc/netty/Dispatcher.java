@@ -3,10 +3,7 @@ package com.sdu.spark.rpc.netty;
 
 import com.google.common.collect.Maps;
 import com.sdu.spark.network.client.RpcResponseCallback;
-import com.sdu.spark.rpc.RpcAddress;
-import com.sdu.spark.rpc.JSparkConfig;
-import com.sdu.spark.rpc.RpcEndPoint;
-import com.sdu.spark.rpc.RpcEndPointRef;
+import com.sdu.spark.rpc.*;
 import com.sdu.spark.utils.ThreadUtils;
 import com.sdu.spark.rpc.netty.IndexMessage.*;
 import lombok.Getter;
@@ -15,9 +12,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Iterator;
 import java.util.Map;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 
 /**
  * {@link Dispatcher}负责路由接收到的消息[本地消息及网络消息]给{@link RpcEndPoint}
@@ -113,10 +108,12 @@ public class Dispatcher {
     /**
      * 本地消息
      * */
-    public void postLocalMessage(RequestMessage req) {
-        LocalNettyRpcCallContext callContext = new LocalNettyRpcCallContext(req.senderAddress);
+    public Object postLocalMessage(RequestMessage req) throws ExecutionException, InterruptedException {
+        NettyLocalResponseCallback<Object> callback = new NettyLocalResponseCallback<>();
+        LocalNettyRpcCallContext callContext = new LocalNettyRpcCallContext(req.senderAddress, callback);
         RpcMessage rpcMessage = new RpcMessage(req.senderAddress, req.content, callContext);
         postMessage(req.receiver.name(), rpcMessage, null);
+        return callback.getResponse();
     }
 
     /**

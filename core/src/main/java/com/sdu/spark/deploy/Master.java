@@ -157,7 +157,6 @@ public class Master extends RpcEndPoint {
 
     @Override
     public void receiveAndReply(Object msg, RpcCallContext context) {
-        System.out.println("消息类型 : " + msg.getClass().getName());
         if (msg instanceof RequestSubmitDriver) {           // 请求注册Driver
 
         } else if (msg instanceof RequestKillDriver) {      // 杀死Driver
@@ -249,7 +248,7 @@ public class Master extends RpcEndPoint {
         RpcEndPointRef masterRef = rpcEnv.setRpcEndPointRef(ENDPOINT_NAME, master);
 
         // 向Master的对应RpcEndPoint节点发送消息
-        Future<BoundPortsResponse> future = masterRef.ask(new BoundPortsRequest());
+        Future<?> future = masterRef.ask(new BoundPortsRequest());
         BoundPortsResponse response = getFutureResult(future);
         if (response != null) {
             LOGGER.info("Master bind port : {}", response.rpcEndpointPort);

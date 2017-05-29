@@ -1,5 +1,6 @@
 package com.sdu.spark.rpc.netty;
 
+import com.sdu.spark.rpc.LocalResponseCallback;
 import com.sdu.spark.rpc.RpcAddress;
 
 /**
@@ -7,12 +8,15 @@ import com.sdu.spark.rpc.RpcAddress;
  * */
 public class LocalNettyRpcCallContext extends NettyRpcCallContext {
 
-    public LocalNettyRpcCallContext(RpcAddress senderAddress) {
+    private LocalResponseCallback<Object> callback;
+
+    public LocalNettyRpcCallContext(RpcAddress senderAddress, LocalResponseCallback<Object> callback) {
         super(senderAddress);
+        this.callback = callback;
     }
 
     @Override
     public void send(Object message) {
-        System.out.println("消息响应: " + message.getClass().getName());
+        callback.onSuccess(message);
     }
 }
