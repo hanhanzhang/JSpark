@@ -217,7 +217,7 @@ public class Worker extends RpcEndPoint {
 
     private Future<?> tryRegisterMaster() {
         return registerExecutorService.submit(() -> {
-            LOGGER.info("connect master {}", masterRpcAddress.hostPort());
+            LOGGER.info("try connect master {}", masterRpcAddress.hostPort());
             RpcEndPointRef masterPointRef = rpcEnv.setRpcEndPointRef(Master.ENDPOINT_NAME, masterRpcAddress);
             sendRegisterMessageToMaster(masterPointRef);
         });

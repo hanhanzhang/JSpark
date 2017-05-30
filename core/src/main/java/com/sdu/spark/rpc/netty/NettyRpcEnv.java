@@ -14,18 +14,25 @@ import com.sdu.spark.network.server.TransportServerBootstrap;
 import com.sdu.spark.network.utils.IOModel;
 import com.sdu.spark.network.utils.TransportConf;
 import com.sdu.spark.rpc.*;
-import com.sdu.spark.rpc.netty.OutboxMessage.*;
 import com.sdu.spark.rpc.netty.OutboxMessage.CheckExistence;
 import com.sdu.spark.rpc.netty.OutboxMessage.OneWayOutboxMessage;
+import com.sdu.spark.rpc.netty.OutboxMessage.RpcOutboxMessage;
+import com.sdu.spark.serializer.JavaSerializerInstance;
+import com.sdu.spark.serializer.SerializationStream;
 import com.sdu.spark.utils.ThreadUtils;
 import com.sdu.spark.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+import java.io.OutputStream;
+import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.*;
+import java.util.concurrent.Callable;
+import java.util.concurrent.Future;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -42,6 +49,10 @@ public class NettyRpcEnv extends RpcEnv {
      * Spark权限管理模块
      * */
     private SecurityManager securityManager;
+    /**
+     * Spark网络序列化实例
+     * */
+    private JavaSerializerInstance serializerInstance;
     /**
      * RpcEnv Server端, 负责网络数据传输
      * */
@@ -70,7 +81,7 @@ public class NettyRpcEnv extends RpcEnv {
 
     private AtomicBoolean stopped = new AtomicBoolean(false);
 
-    public NettyRpcEnv(JSparkConfig sparkConfig, String host, SecurityManager securityManager) {
+    public NettyRpcEnv(JSparkConfig sparkConfig, String host, JavaSerializerInstance serializerInstance, SecurityManager securityManager) {
         this.conf = sparkConfig;
         this.host = host;
         this.dispatcher = new Dispatcher(this, sparkConfig);
@@ -79,6 +90,7 @@ public class NettyRpcEnv extends RpcEnv {
         StreamManager streamManager = null;
         this.transportContext = new TransportContext(fromSparkConf(sparkConfig), new NettyRpcHandler(streamManager, this.dispatcher, this));
         this.clientFactory = this.transportContext.createClientFactory(createClientBootstraps());
+        this.serializerInstance = serializerInstance;
         this.securityManager = securityManager;
     }
 
@@ -118,7 +130,7 @@ public class NettyRpcEnv extends RpcEnv {
             dispatcher.postOneWayMessage(message);
         } else {
             // 发送给远端的消息
-            postToOutbox(message.receiver, new OneWayOutboxMessage(message.serialize()));
+            postToOutbox(message.receiver, new OneWayOutboxMessage(message.serialize(this)));
         }
     }
 
@@ -137,7 +149,7 @@ public class NettyRpcEnv extends RpcEnv {
         } else {
             // 发送网络消息
             NettyRpcResponseCallback callback = new NettyRpcResponseCallback();
-            OutboxMessage.RpcOutboxMessage outboxMessage = new RpcOutboxMessage(message.serialize(), callback);
+            OutboxMessage.RpcOutboxMessage outboxMessage = new RpcOutboxMessage(message.serialize(this), callback);
             postToOutbox(message.receiver, outboxMessage);
             return callback.getResponseFuture();
         }
@@ -200,6 +212,19 @@ public class NettyRpcEnv extends RpcEnv {
 
     public Future<TransportClient> asyncCreateClient(RpcAddress address) {
         return clientConnectionExecutor.submit(() -> createClient(address));
+    }
+
+    /*****************************Rpc网络消息序列化*****************************/
+    public ByteBuffer serialize(Object content) throws IOException {
+        return serializerInstance.serialize(content);
+    }
+
+    public SerializationStream serializeStream(OutputStream out) throws IOException {
+        return serializerInstance.serializeStream(out);
+    }
+
+    public <T> T deserialize(TransportClient client, ByteBuffer buf) throws IOException {
+        return serializerInstance.deserialize(buf);
     }
 
     @Override

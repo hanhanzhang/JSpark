@@ -2,8 +2,11 @@ package com.sdu.spark.rpc.netty;
 
 import com.sdu.spark.network.client.TransportClient;
 import com.sdu.spark.rpc.RpcAddress;
+import com.sdu.spark.serializer.SerializationStream;
 import com.sdu.spark.utils.ByteBufferInputStream;
 import com.sdu.spark.utils.ByteBufferOutputStream;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.*;
 import java.nio.ByteBuffer;
@@ -12,6 +15,9 @@ import java.nio.ByteBuffer;
  * @author hanhan.zhang
  * */
 public class RequestMessage {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(RequestMessage.class);
+
     /**
      * 消息发送地址
      * */
@@ -43,20 +49,25 @@ public class RequestMessage {
      *  3: 接收方{@link com.sdu.spark.rpc.RpcEndPoint}名字
      *  4: 发送内容
      * */
-    public ByteBuffer serialize() {
+    public ByteBuffer serialize(NettyRpcEnv rpcEnv) {
         ByteBufferOutputStream bos = new ByteBufferOutputStream();
         DataOutputStream out = new DataOutputStream(bos);
         try {
-            ObjectOutputStream objOut = new ObjectOutputStream(out);
             writeRpcAddress(out, senderAddress);
             writeRpcAddress(out, receiver.address());
             out.writeUTF(receiver.name());
+
             // 发送消息体
-            objOut.writeObject(content);
-            close(objOut);
+            SerializationStream s = rpcEnv.serializeStream(out);
+            try {
+                s.writeObject(content);
+            } finally {
+                s.close();
+            }
             return bos.toByteBuffer();
         } catch (IOException e) {
-            throw new IllegalStateException("serialize error");
+            LOGGER.error("serialize request message error", e);
+            throw new IllegalStateException("serialize request message error", e);
         } finally {
             close(out);
         }
@@ -74,16 +85,14 @@ public class RequestMessage {
         ByteBufferInputStream bis = new ByteBufferInputStream(buffer);
         DataInputStream input = new DataInputStream(bis);
         try {
-            ObjectInputStream objInput = new ObjectInputStream(input);
             RpcAddress senderAddress = readRpcAddress(input);
             RpcAddress receiverAddress = readRpcAddress(input);
             String name = input.readUTF();
             // 消息体
-            Object content = objInput.readObject();
-            close(objInput);
             NettyRpcEndPointRef endPointRef = new NettyRpcEndPointRef(name, receiverAddress, rpcEnv);
             endPointRef.setClient(client);
-            return new RequestMessage(senderAddress, endPointRef, content);
+
+            return new RequestMessage(senderAddress, endPointRef, rpcEnv.deserialize(client, buffer));
         } catch (Exception e) {
             // ignore
             throw new IllegalStateException("deserialize error");

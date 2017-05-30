@@ -45,4 +45,9 @@ public class JSparkConfig implements Serializable {
      * RpcServer是否验证
      * */
     private boolean authenticationEnabled;
+
+    /**
+     * Rpc ObjectOutStream重置阈值
+     * */
+    private int countReset = 100;
 }
