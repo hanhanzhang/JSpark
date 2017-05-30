@@ -61,10 +61,10 @@ public class RequestMessage {
             SerializationStream s = rpcEnv.serializeStream(out);
             try {
                 s.writeObject(content);
+                return bos.toByteBuffer();
             } finally {
                 s.close();
             }
-            return bos.toByteBuffer();
         } catch (IOException e) {
             LOGGER.error("serialize request message error", e);
             throw new IllegalStateException("serialize request message error", e);
@@ -128,7 +128,7 @@ public class RequestMessage {
         try {
             out.close();
         } catch (IOException e) {
-            // ignore
+            e.printStackTrace();
         }
     }
 

@@ -63,9 +63,12 @@ public class MessageEncoder extends MessageToMessageEncoder<Message> {
         int headerLength = 8 + msgType.encodedLength() + in.encodedLength();
         long frameLength = headerLength + (isBodyInFrame ? bodyLength : 0);
         ByteBuf header = ctx.alloc().heapBuffer(headerLength);
+
+        // 写入传输内容
         header.writeLong(frameLength);
         msgType.encode(header);
         in.encode(header);
+
         assert header.writableBytes() == 0;
 
         if(body != null) {
