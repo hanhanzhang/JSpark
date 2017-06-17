@@ -17,6 +17,8 @@ import java.util.concurrent.TimeUnit;
 import static com.sdu.spark.network.utils.NettyUtils.getRemoteAddress;
 
 /**
+ * 远端服务(RpcEndPoint)客户端
+ *
  * @author hanhan.zhang
  * */
 public class TransportClient implements Closeable {

@@ -12,6 +12,9 @@ import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
 
 /**
+ * Todo:
+ *  研究Netty的内存管理(http://blog.csdn.net/heishiyuriyao/article/details/49049575)
+ *
  * @author hanhan.zhang
  * */
 public class MessageWithHeader extends AbstractReferenceCounted implements FileRegion {
