@@ -139,6 +139,18 @@ public class TransportClientFactory {
         long preConnect = System.nanoTime();
         ChannelFuture cf = bootstrap.connect(address);
 
+        try {
+            if (!cf.await(1000L)) {
+                throw new RuntimeException(String.format("Connecting to %s timed out (%s ms)", address, 1000));
+            } else if (cf.cause() != null) {
+                throw new RuntimeException(String.format("Failed to connect to %s", address), cf.cause());
+            }
+        } catch (InterruptedException e) {
+            // Ignore
+            e.printStackTrace();
+        }
+
+
         TransportClient client = clientRef.get();
         Channel channel = channelRef.get();
         assert client != null : "Channel future completed successfully with null client";

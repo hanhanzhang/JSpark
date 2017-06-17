@@ -13,6 +13,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.concurrent.*;
 
+import static com.sdu.spark.network.utils.NettyUtils.getIpV4;
 import static com.sdu.spark.utils.Utils.convertStringToInt;
 
 /**
@@ -286,10 +287,11 @@ public class Worker extends RpcEndPoint {
          * 3: Worker启动分配的CPU数
          * 4: Worker启动分配的JVM数
          * */
-        RpcAddress masterAddress = new RpcAddress("127.0.0.1", 6712);
+        String ip = getIpV4();
+        RpcAddress masterAddress = new RpcAddress(ip, 6712);
         int cpu = Runtime.getRuntime().availableProcessors() * 2;
         long memory = Runtime.getRuntime().maxMemory();
-        args = new String[] {"127.0.0.1", "6713"};
+        args = new String[] {ip, "6713"};
 
         JSparkConfig sparkConfig = JSparkConfig.builder()
                                                 .deliverThreads(1)

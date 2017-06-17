@@ -43,9 +43,9 @@ public interface OutboxMessage extends Serializable {
      *
      * */
     @AllArgsConstructor
-    @Getter
     class CheckExistence implements OutboxMessage {
-        private String name;
+
+        public String name;
 
         @Override
         public void sendWith(TransportClient client) {

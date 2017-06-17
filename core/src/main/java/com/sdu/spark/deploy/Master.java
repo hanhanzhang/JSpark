@@ -14,6 +14,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
+import static com.sdu.spark.network.utils.NettyUtils.getIpV4;
 import static com.sdu.spark.utils.Utils.convertStringToInt;
 import static com.sdu.spark.utils.Utils.getFutureResult;
 
@@ -227,7 +228,9 @@ public class Master extends RpcEndPoint {
     }
 
     public static void main(String[] args) {
-        args = new String[]{"127.0.0.1", "6712"};
+        String ip = getIpV4();
+
+        args = new String[]{ip, "6712"};
 
         JSparkConfig sparkConfig = JSparkConfig.builder()
                                                 .deliverThreads(1)

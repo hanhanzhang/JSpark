@@ -8,6 +8,7 @@ import com.sdu.spark.network.protocol.MessageDecoder;
 import com.sdu.spark.network.protocol.MessageEncoder;
 import com.sdu.spark.network.server.*;
 import com.sdu.spark.network.utils.TransportConf;
+import com.sdu.spark.network.utils.TransportFrameDecoder;
 import io.netty.channel.Channel;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.timeout.IdleStateHandler;
@@ -75,12 +76,12 @@ public class TransportContext {
      *
      * 初始化ChannelHandler
      * */
-    public TransportChannelHandler  initializePipeline(SocketChannel channel, RpcHandler channelRpcHandler) {
+    public TransportChannelHandler initializePipeline(SocketChannel channel, RpcHandler channelRpcHandler) {
         try {
             TransportChannelHandler channelHandler = createChannelHandler(channel, channelRpcHandler);
             channel.pipeline()
                     .addLast("encoder", ENCODER)
-//                    .addLast(TransportFrameDecoder.HANDLER_NAME, NettyUtils.createFrameDecoder())
+                    .addLast(TransportFrameDecoder.HANDLER_NAME, new TransportFrameDecoder())
                     .addLast("decoder", DECODER)
                     .addLast("idleStateHandler", new IdleStateHandler(0, 0, 120))
                     // NOTE: Chunks are currently guaranteed to be returned in the order of request, but this

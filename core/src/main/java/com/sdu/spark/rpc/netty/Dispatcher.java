@@ -95,6 +95,17 @@ public class Dispatcher {
     }
 
     /**
+     * 验证是否存在{@param name}的RpcEndPoint
+     * */
+    public RpcEndPointRef verify(String name) {
+        EndPointData endPointData = endPoints.get(name);
+        if (endPointData == null) {
+            return null;
+        }
+        return endPointData.endPointRef;
+    }
+
+    /**
      * 返回Rpc节点的引用
      * */
     public RpcEndPointRef getRpcEndPointRef(RpcEndPoint endPoint) {

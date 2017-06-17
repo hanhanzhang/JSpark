@@ -113,7 +113,7 @@ public class RequestMessage {
 
     private static RpcAddress readRpcAddress(DataInputStream input) throws IOException {
         boolean isNull = input.readBoolean();
-        if (isNull) {
+        if (!isNull) {
             return null;
         }
         String host = input.readUTF();

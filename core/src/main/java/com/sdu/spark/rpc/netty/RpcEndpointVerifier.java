@@ -1,6 +1,8 @@
 package com.sdu.spark.rpc.netty;
 
 import com.sdu.spark.rpc.*;
+import com.sdu.spark.rpc.netty.OutboxMessage.*;
+import io.netty.channel.Channel;
 
 /**
  * @author hanhan.zhang
@@ -55,6 +57,10 @@ public class RpcEndpointVerifier extends RpcEndPoint {
 
     @Override
     public void receiveAndReply(Object msg, RpcCallContext context) {
-        
+        if (msg instanceof CheckExistence) {
+            CheckExistence existence = (CheckExistence) msg;
+            RpcEndPointRef endPointRef = dispatcher.verify(existence.name);
+            context.reply(endPointRef);
+        }
     }
 }

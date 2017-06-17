@@ -11,6 +11,7 @@ import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
 import io.netty.util.concurrent.DefaultThreadFactory;
 
+import java.net.InetAddress;
 import java.util.concurrent.ThreadFactory;
 
 
@@ -18,6 +19,14 @@ import java.util.concurrent.ThreadFactory;
  * @author hanhan.zhang
  * */
 public class NettyUtils {
+
+    public static String getIpV4() {
+        try {
+            return InetAddress.getLocalHost().getHostAddress();
+        } catch (Exception e) {
+            return "127.0.0.1";
+        }
+    }
 
     public static String getRemoteAddress(Channel channel) {
         if (channel != null && channel.remoteAddress() != null) {

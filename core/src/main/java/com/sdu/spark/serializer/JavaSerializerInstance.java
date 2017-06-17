@@ -29,11 +29,17 @@ public class JavaSerializerInstance implements SerializerInstance {
 
     @Override
     public <T> ByteBuffer serialize(T object) throws IOException {
-        ByteBufferOutputStream bos = new ByteBufferOutputStream();
-        SerializationStream out = serializeStream(bos);
-        out.writeObject(object);
-        out.close();
-        return bos.toByteBuffer();
+        SerializationStream out = null;
+        try {
+            ByteBufferOutputStream bos = new ByteBufferOutputStream();
+            out = serializeStream(bos);
+            out.writeObject(object);
+            return bos.toByteBuffer();
+        } finally {
+            if (out != null) {
+                out.close();
+            }
+        }
     }
 
     @Override
