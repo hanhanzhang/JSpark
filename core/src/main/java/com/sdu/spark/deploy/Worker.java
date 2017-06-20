@@ -4,6 +4,8 @@ import com.sdu.spark.SecurityManager;
 import com.sdu.spark.rpc.*;
 import com.sdu.spark.deploy.WorkerLocalMessage.*;
 import com.sdu.spark.deploy.DeployMessage.*;
+import com.sdu.spark.rpc.netty.NettyRpcEndPointRef;
+import com.sdu.spark.rpc.netty.NettyRpcEnv;
 import com.sdu.spark.utils.ThreadUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -215,14 +217,14 @@ public class Worker extends RpcEndPoint {
 
     private Future<?> tryRegisterMaster() {
         return registerExecutorService.submit(() -> {
-            LOGGER.info("JSpark Worker节点[{}]向JSpark Master[{}]注册", rpcEnv.address().hostPort(),
-                    masterRpcAddress.hostPort());
             RpcEndPointRef masterPointRef = rpcEnv.setRpcEndPointRef(Master.ENDPOINT_NAME, masterRpcAddress);
             sendRegisterMessageToMaster(masterPointRef);
         });
     }
 
     private void sendRegisterMessageToMaster(RpcEndPointRef masterRef) {
+        LOGGER.info("JSpark Worker节点[{}]尝试向JSpark Master[{}]注册", rpcEnv.address().hostPort(),
+                masterRef.address().hostPort());
         masterRef.send(new RegisterWorker(workerId, host(), port(), cores, memory, self()));
     }
 

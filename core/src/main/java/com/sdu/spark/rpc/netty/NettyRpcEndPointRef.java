@@ -34,6 +34,7 @@ public class NettyRpcEndPointRef extends RpcEndPointRef {
      * 关键字'transient'表明在序列化时, 字段不被序列化
      * {@link NettyRpcEndPointRef}所属的RpcEnv
      * */
+    @Setter
     private transient NettyRpcEnv rpcEnv;
 
     @Getter

@@ -112,9 +112,19 @@ public class NettyRpcEnv extends RpcEnv {
 
     @Override
     public RpcEndPointRef setRpcEndPointRef(String name, RpcAddress rpcAddress) {
-        NettyRpcEndPointRef verifier = new NettyRpcEndPointRef(RpcEndpointVerifier.NAME, rpcAddress, this);
-        Future<?> future =  verifier.ask(new CheckExistence(name));
-        return Utils.getFutureResult(future);
+        NettyRpcEndPointRef rpcEndPointRef = null;
+        try {
+            NettyRpcEndPointRef verifier = new NettyRpcEndPointRef(RpcEndpointVerifier.NAME, rpcAddress, this);
+            Future<?> future =  verifier.ask(new CheckExistence(name));
+            rpcEndPointRef = Utils.getFutureResult(future);
+            rpcEndPointRef.setRpcEnv(this);
+            return rpcEndPointRef;
+        } finally {
+            if (rpcEndPointRef != null) {
+                LOGGER.info("RpcEnv注册远端RpcEndPoint的引用RpcEndPointRef(host = {}, name = {})",
+                        rpcEndPointRef.address().hostPort(), rpcEndPointRef.name());
+            }
+        }
     }
 
 
