@@ -31,13 +31,14 @@ public class NettyRpcEndPointRef extends RpcEndPointRef {
      * */
     private RpcAddress address;
     /**
+     * 关键字'transient'表明在序列化时, 字段不被序列化
      * {@link NettyRpcEndPointRef}所属的RpcEnv
      * */
-    private NettyRpcEnv rpcEnv;
+    private transient NettyRpcEnv rpcEnv;
 
     @Getter
     @Setter
-    private TransportClient client;
+    private transient TransportClient client;
 
     public NettyRpcEndPointRef(String name, RpcAddress address, NettyRpcEnv rpcEnv) {
         this.name = name;

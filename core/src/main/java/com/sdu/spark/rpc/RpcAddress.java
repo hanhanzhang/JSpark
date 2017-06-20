@@ -2,6 +2,7 @@ package com.sdu.spark.rpc;
 
 import lombok.AllArgsConstructor;
 
+import java.io.Serializable;
 import java.net.URI;
 
 /**
@@ -10,7 +11,7 @@ import java.net.URI;
  * @author hanhan.zhang
  * */
 @AllArgsConstructor
-public class RpcAddress {
+public class RpcAddress implements Serializable {
 
     public String host;
 

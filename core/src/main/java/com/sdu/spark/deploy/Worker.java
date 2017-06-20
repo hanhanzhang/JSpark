@@ -127,7 +127,7 @@ public class Worker extends RpcEndPoint {
 
     @Override
     public void onStart() {
-        LOGGER.info("Starting Spark worker {} with {} cores, {} RAM", rpcEnv.address().hostPort(),
+        LOGGER.info("JSpark Worker节点启动: hostPort = {}, JVM = {} RAM", rpcEnv.address().hostPort(),
                 cores, memory);
 //        createDir();
         startRegisterWithMaster();
@@ -166,9 +166,6 @@ public class Worker extends RpcEndPoint {
     }
 
     /*******************************向Master注册工作节点*****************************/
-    /**
-     * 向Master节点注册Worker
-     * */
     private void startRegisterWithMaster() {
         if (registrationRetryTimer == null) {
             scheduleMessageThread.scheduleWithFixedDelay(()-> {
@@ -197,7 +194,7 @@ public class Worker extends RpcEndPoint {
                     registerMasterFuture.cancel(true);
                 }
                 RpcAddress address = master.address();
-                LOGGER.info("connect master : {}", address.hostPort());
+                LOGGER.info("JSpark Master节点地址: {}", address.hostPort());
                 RpcEndPointRef masterPointRef = rpcEnv.setRpcEndPointRef(Master.ENDPOINT_NAME, address);
                 sendRegisterMessageToMaster(masterPointRef);
             }
@@ -218,7 +215,8 @@ public class Worker extends RpcEndPoint {
 
     private Future<?> tryRegisterMaster() {
         return registerExecutorService.submit(() -> {
-            LOGGER.info("try connect master {}", masterRpcAddress.hostPort());
+            LOGGER.info("JSpark Worker节点[{}]向JSpark Master[{}]注册", rpcEnv.address().hostPort(),
+                    masterRpcAddress.hostPort());
             RpcEndPointRef masterPointRef = rpcEnv.setRpcEndPointRef(Master.ENDPOINT_NAME, masterRpcAddress);
             sendRegisterMessageToMaster(masterPointRef);
         });
@@ -229,20 +227,14 @@ public class Worker extends RpcEndPoint {
     }
 
     /*******************************注册节点响应处理*********************************/
-
-    /**
-     * 注册工作节点响应处理
-     * */
     private void handleRegisterResponse(RegisteredWorkerResponse msg) {
         if (msg instanceof RegisteredWorker) {
             RegisteredWorker registeredWorker = (RegisteredWorker) msg;
-            LOGGER.info("Successfully registered with master {}", registeredWorker.master.address().toSparkURL());
+            LOGGER.info("JSpark Worker节点成功注册到JSpark Master节点: {}", registeredWorker.master.address().toSparkURL());
             register = true;
             master = registeredWorker.master;
             cancelLastRegistrationRetry();
-            /**
-             * 向Master发送心跳消息
-             * */
+            // 向Master发送心跳消息
             scheduleMessageThread.scheduleWithFixedDelay(() -> {
                 // 向本地投递心跳消息
                 self().send(new SendHeartbeat());

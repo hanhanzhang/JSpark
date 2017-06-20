@@ -3,6 +3,8 @@ package com.sdu.spark.rpc;
 import com.sdu.spark.SecurityManager;
 import com.sdu.spark.rpc.netty.NettyRpcEnvFactory;
 
+import java.io.Serializable;
+
 /**
  *
  * @author hanhan.zhang

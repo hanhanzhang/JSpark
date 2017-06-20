@@ -2,6 +2,7 @@ package com.sdu.spark.rpc.netty;
 
 import com.sdu.spark.network.client.RpcResponseCallback;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.concurrent.*;
 
@@ -18,6 +19,12 @@ public class NettyRpcResponseCallback implements RpcResponseCallback {
 
     private Throwable cause;
 
+    private NettyRpcEnv rpcEnv;
+
+    public NettyRpcResponseCallback(NettyRpcEnv rpcEnv) {
+        this.rpcEnv = rpcEnv;
+    }
+
     @Override
     public void onSuccess(ByteBuffer response) {
         this.value = response;
@@ -30,11 +37,11 @@ public class NettyRpcResponseCallback implements RpcResponseCallback {
         finished.countDown();
     }
 
-    public Future<ByteBuffer> getResponseFuture() {
-        return new Future<ByteBuffer>() {
+    public Future<Object> getResponseFuture() {
+        return new Future<Object>() {
             @Override
             public boolean cancel(boolean mayInterruptIfRunning) {
-                if (finished.getCount() > 1) {
+                if (finished.getCount() > 0) {
                     cancelled = true;
                     finished.countDown();
                     return true;
@@ -53,13 +60,13 @@ public class NettyRpcResponseCallback implements RpcResponseCallback {
             }
 
             @Override
-            public ByteBuffer get() throws InterruptedException, ExecutionException {
+            public Object get() throws InterruptedException, ExecutionException {
                 finished.await();
                 return getValue();
             }
 
             @Override
-            public ByteBuffer get(long timeout, TimeUnit unit) throws InterruptedException, ExecutionException, TimeoutException {
+            public Object get(long timeout, TimeUnit unit) throws InterruptedException, ExecutionException, TimeoutException {
                 if (finished.await(timeout, unit)) {
                     return getValue();
                 } else {
@@ -67,13 +74,18 @@ public class NettyRpcResponseCallback implements RpcResponseCallback {
                 }
             }
 
-            private ByteBuffer getValue() throws ExecutionException {
+            private Object getValue() throws ExecutionException {
                 if (cancelled) {
                     throw new CancellationException("task already cancel");
                 } else if (cause != null) {
                     throw new ExecutionException("task execute exception", cause);
                 }
-                return value;
+                try {
+                    return rpcEnv.deserialize(null, value);
+                } catch (IOException e) {
+                    throw new ExecutionException("deserialize to java object exception", e);
+                }
+
             }
 
         };

@@ -9,7 +9,7 @@ import java.util.concurrent.*;
  * */
 public class NettyLocalResponseCallback<T> implements LocalResponseCallback<T> {
 
-    private CountDownLatch finised = new CountDownLatch(1);
+    private CountDownLatch finished = new CountDownLatch(1);
 
     private T value;
 
@@ -18,17 +18,17 @@ public class NettyLocalResponseCallback<T> implements LocalResponseCallback<T> {
     @Override
     public void onSuccess(T value) {
         this.value = value;
-        finised.countDown();
+        finished.countDown();
     }
 
     @Override
     public void onFailure(Throwable cause) {
         this.error = cause;
-        finised.countDown();
+        finished.countDown();
     }
 
     public T getResponse() throws ExecutionException, InterruptedException {
-        finised.await();
+        finished.await();
         if (error != null) {
             throw new ExecutionException("task execute exception", error);
         }

@@ -30,7 +30,6 @@ import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Callable;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -140,15 +139,10 @@ public class NettyRpcEnv extends RpcEnv {
     public Future<?> ask(RequestMessage message) {
         if (message.receiver.address().equals(address())) {
             // 发送本地消息
-            return deliverMessageExecutor.submit(new Callable<Object>() {
-                @Override
-                public Object call() throws Exception {
-                    return dispatcher.postLocalMessage(message);
-                }
-            });
+            return deliverMessageExecutor.submit(() -> dispatcher.postLocalMessage(message));
         } else {
             // 发送网络消息
-            NettyRpcResponseCallback callback = new NettyRpcResponseCallback();
+            NettyRpcResponseCallback callback = new NettyRpcResponseCallback(this);
             OutboxMessage.RpcOutboxMessage outboxMessage = new RpcOutboxMessage(message.serialize(this), callback);
             postToOutbox(message.receiver, outboxMessage);
             return callback.getResponseFuture();
