@@ -4,6 +4,8 @@ import com.sdu.spark.SecurityManager;
 import com.sdu.spark.rpc.*;
 import com.sdu.spark.deploy.DeployMessage.*;
 import com.sdu.spark.deploy.MasterMessage.*;
+import com.sdu.spark.rpc.netty.NettyRpcEndPointRef;
+import com.sdu.spark.rpc.netty.NettyRpcEnv;
 import com.sdu.spark.utils.ThreadUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -64,7 +66,7 @@ public class Master extends RpcEndPoint {
 
     @Override
     public RpcEndPointRef self() {
-        return rpcEnv.setRpcEndPointRef(ENDPOINT_NAME, this);
+        return rpcEnv.endPointRef(this);
     }
 
     @Override
@@ -110,17 +112,26 @@ public class Master extends RpcEndPoint {
             timeoutDeadWorkers();
         } else if (msg instanceof WorkerHeartbeat) {       // 工作节点心跳消息
             WorkerHeartbeat heartbeat = (WorkerHeartbeat) msg;
+            LOGGER.info("JSpark Master收到心跳: workerId = {}, hostPort = {}",
+                    heartbeat.workerId, heartbeat.worker.address().hostPort());
+            if (heartbeat.worker instanceof NettyRpcEndPointRef) {
+                ((NettyRpcEndPointRef) heartbeat.worker).setRpcEnv((NettyRpcEnv) rpcEnv);
+            }
+
             String workerId = heartbeat.workerId;
             WorkerInfo workerInfo = idToWorker.get(workerId);
             if (workerInfo == null) {
-                LOGGER.info("Got {} from unregistered worker {}, asking it to re-register.",
-                            heartbeat, workerId);
+                LOGGER.info("JSpark Master收到未注册JSpark Worker心跳: workerId = {}, hostPort = {}",
+                            heartbeat.workerId, heartbeat.worker.address().hostPort());
                 heartbeat.worker.send(new ReconnectWorker(self()));
             } else {
                 workerInfo.setLastHeartbeat(System.currentTimeMillis());
             }
         } else if (msg instanceof RegisterWorker) {       // 注册工作节点
             RegisterWorker registerWorker = (RegisterWorker) msg;
+            if (registerWorker.worker instanceof NettyRpcEndPointRef) {
+                ((NettyRpcEndPointRef) registerWorker.worker).setRpcEnv((NettyRpcEnv) rpcEnv);
+            }
             if (idToWorker.containsKey(registerWorker.workerId)) {
                 registerWorker.worker.send(new RegisterWorkerFailed("Duplicate worker ID"));
             } else {

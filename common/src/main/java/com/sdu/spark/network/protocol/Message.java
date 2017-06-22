@@ -51,6 +51,8 @@ public interface Message extends Encodable {
                     return RpcResponse;
                 case 5:
                     return RpcFailure;
+                case 9:
+                    return OneWayMessage;
                 default:
                     throw new IllegalArgumentException("Unknown message type: " + id);
             }

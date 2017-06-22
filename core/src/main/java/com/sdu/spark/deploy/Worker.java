@@ -233,6 +233,9 @@ public class Worker extends RpcEndPoint {
         if (msg instanceof RegisteredWorker) {
             RegisteredWorker registeredWorker = (RegisteredWorker) msg;
             LOGGER.info("JSpark Worker节点成功注册到JSpark Master节点: {}", registeredWorker.master.address().toSparkURL());
+            if (registeredWorker.master instanceof NettyRpcEndPointRef) {
+                ((NettyRpcEndPointRef) registeredWorker.master).setRpcEnv((NettyRpcEnv) rpcEnv);
+            }
             register = true;
             master = registeredWorker.master;
             cancelLastRegistrationRetry();
