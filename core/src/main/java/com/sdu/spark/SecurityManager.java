@@ -10,7 +10,11 @@ import com.sdu.spark.rpc.JSparkConfig;
  * */
 public class SecurityManager implements SecretKeyHolder {
 
+    public static final String ENV_AUTH_SECRET = "_SPARK_AUTH_SECRET";
+
     private JSparkConfig config;
+
+    private String secretKey;
 
     public SecurityManager(JSparkConfig config) {
         this.config = config;
@@ -27,6 +31,10 @@ public class SecurityManager implements SecretKeyHolder {
 
     @Override
     public String getSecretKey(String appId) {
-        return null;
+        return getSecretKey();
+    }
+
+    public String getSecretKey() {
+        return secretKey;
     }
 }

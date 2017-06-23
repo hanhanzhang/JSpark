@@ -294,11 +294,23 @@ public class Master extends RpcEndPoint {
             /**
              * Spark任务启动Executor
              *
-             * 1:
+             * 1: scheduleExecutorsOnWorkers
              *
-             * 2:
+             *  计算每个Worker分配的CPU数(Note: 返回数组与Worker列表对应)
              *
-             * 3:
+             *  Note:
+             *
+             *      scheduleExecutorsOnWorkers第三个参数标识是否一个Worker节点启动一个Executor
+             *
+             * 2: Worker节点启动Executor(Note: Worker节点分配的CPU核数不等于零)
+             *
+             * 3: allocateWorkerResourceToExecutors
+             *
+             *  1': 根据Worker分配的CPU核数及每个Executor, 计算Worker节点需启动Executor数
+             *
+             *  2': 向Worker节点发送消息{@link LaunchExecutor}
+             *
+             *  3': 向Driver节点发送消息{@link ExecutorAdded}
              *
              * */
             List<WorkerInfo> usableWorkers = workers.stream().filter(worker -> worker.state == WorkerState.ALIVE)
@@ -306,6 +318,8 @@ public class Master extends RpcEndPoint {
                                       worker.freeCores() >= coresPerExecutor)
                     .sorted((worker1, worker2) -> worker1.freeCores() - worker2.freeCores())
                     .collect(Collectors.toList());
+
+            // 计算每个Worker节点分配CPU数(assignedCores[n]表示usableWorkers.get(n)节点可分配CPU数)
             int[] assignedCores = scheduleExecutorsOnWorkers(app, usableWorkers, true);
 
             // 在Worker节点启动Executor
@@ -335,7 +349,6 @@ public class Master extends RpcEndPoint {
                                       WorkerInfo worker, int minCoresPerExecutor, int memoryPerExecutor,
                                       int pos) {
         boolean keepScheduling = coresToAssign >= minCoresPerExecutor;
-
         boolean enoughCores = worker.freeCores() - assignedCores[pos] >= minCoresPerExecutor;
 
         if (assignedExecutors[pos] == 0) {
@@ -347,13 +360,14 @@ public class Master extends RpcEndPoint {
     }
 
     private int[] scheduleExecutorsOnWorkers(ApplicationInfo app, List<WorkerInfo> workers, boolean spreadOutApps) {
-        // 每个worker分配CPU数
+        // 每个Worker分配CPU数
         int []assignedCores = new int[workers.size()];
+        // 每个Worker
+        int []assignedExecutors = new int[workers.size()];
 
         int coresPerExecutor = app.desc.coresPerExecutor;
         int memoryPerExecutor = app.desc.memoryPerExecutorMB;
-        int []assignedExecutors = new int[workers.size()];
-        // 保证空闲资源分配
+        // 保证空闲资源分配[若集群剩余资源 < app.coreLeft(), 则将资源全分配给App]
         int coresToAssign = Math.min(app.coreLeft(), (int) workers.stream().map(WorkerInfo::freeCores).count());
 
         // 过滤可分配Executor的Worker节点
@@ -363,6 +377,8 @@ public class Master extends RpcEndPoint {
             int i = 0;
             for (WorkerInfo worker : freeWorkers) {
                 boolean keepScheduling = true;
+
+                // 默认Worker节点可分配多个Executor[若有Worker节点分配一个Executor, 则通过spreadOutApps控制]
                 while (keepScheduling && canLaunchExecutor(coresToAssign, assignedCores, assignedExecutors, worker, coresPerExecutor, memoryPerExecutor, i)) {
                     coresToAssign -= coresPerExecutor;
                     assignedCores[i] += coresPerExecutor;

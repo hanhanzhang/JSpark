@@ -28,7 +28,7 @@ public class ApplicationDescription implements Serializable {
      * */
     public int memoryPerExecutorMB;
     /**
-     * 应用启动命令
+     * 应用启动命令(即Driver启动程序入口)
      * */
     public Command command;
 
