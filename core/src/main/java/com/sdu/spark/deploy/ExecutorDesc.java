@@ -23,4 +23,9 @@ public class ExecutorDesc implements Serializable {
     public int cores;
     public int memory;
 
+
+    public String fullId() {
+      return application.id + "/" + id;
+    }
+
 }

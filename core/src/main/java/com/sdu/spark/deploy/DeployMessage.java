@@ -146,6 +146,27 @@ public interface DeployMessage extends Serializable {
     }
 
     /**
+     * 工作节点启动Driver
+     * */
+    @AllArgsConstructor
+    class LaunchDriver implements DeployMessage {
+        public String driverId;
+        public DriverDescription desc;
+    }
+
+    /**
+     * 工作节点启动Executor
+     * */
+    @AllArgsConstructor
+    class LaunchExecutor implements DeployMessage {
+        public String appId;
+        public int execId;
+        public ApplicationDescription appDesc;
+        public int cores;
+        public int memory;
+    }
+
+    /**
      * Driver状态查询消息
      * */
     @AllArgsConstructor
@@ -169,5 +190,14 @@ public interface DeployMessage extends Serializable {
     class KillExecutors implements DeployMessage {
         public String appId;
         public String[] executorIds;
+    }
+
+    @AllArgsConstructor
+    class ExecutorAdded implements DeployMessage {
+        public int execId;
+        public String workerId;
+        public String host;
+        public int cores;
+        public int memory;
     }
 }

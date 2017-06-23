@@ -5,6 +5,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.io.Serializable;
+import java.util.Map;
 
 /**
  * @author hanhan.zhang
@@ -13,51 +14,49 @@ public class WorkerInfo implements Serializable{
     /**
      * 工作节点标识
      * */
-    @Getter
-    private String workerId;
+    public String workerId;
     /**
      * 工作节点地址
      * */
-    @Getter
-    private String host;
+    public String host;
     /**
      * 工作节点监听端口
      * */
-    @Getter
-    private int port;
+    public int port;
     /**
      * 工作节点CPU核数
      * */
-    private int cores;
+    public int cores;
     /**
      * 工作节点JVM内存
      * */
-    private long memory;
+    public long memory;
     /**
      * 工作节点网络通信引用
      * */
-    @Getter
-    private RpcEndPointRef endPointRef;
+    public RpcEndPointRef endPointRef;
 
+
+
+    /*****************************不需要序列化*********************************/
     /**
      * 工作节点已用CPU核数
      * */
-    private int coresUsed;
+    public transient int coresUsed;
     /**
      * 工作节点已用内存
      * */
-    private long memoryUsed;
+    public transient long memoryUsed;
     /**
      * 工作节点状态
      * */
-    @Getter
-    private WorkerState state;
+    public transient WorkerState state;
     /**
      * 上次心跳时间
      * */
-    @Setter
-    @Getter
-    private long lastHeartbeat = System.currentTimeMillis();
+    public  long lastHeartbeat = System.currentTimeMillis();
+    private transient Map<String, ExecutorDesc> executors;
+    private transient Map<String, DriverInfo> drivers;
 
     public WorkerInfo(String workerId, String host, int port, int cores, long memory, RpcEndPointRef endPointRef) {
         this.workerId = workerId;
@@ -85,5 +84,17 @@ public class WorkerInfo implements Serializable{
 
     public boolean isAlive() {
         return state == WorkerState.ALIVE;
+    }
+
+    public void addDriver(DriverInfo driver) {
+        drivers.put(driver.id, driver);
+        memoryUsed += driver.desc.mem;
+        coresUsed += driver.desc.cores;
+    }
+
+    public void addExecutor(ExecutorDesc desc) {
+        executors.put(desc.fullId(), desc);
+        coresUsed += desc.cores;
+        memoryUsed += desc.memory;
     }
 }

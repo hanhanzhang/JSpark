@@ -20,6 +20,10 @@ public class ApplicationDescription implements Serializable {
      * */
     public int maxCores;
     /**
+     * 每个Executor分配CPU数
+     * */
+    public int coresPerExecutor;
+    /**
      * 每个JVM进程分配的内存
      * */
     public int memoryPerExecutorMB;

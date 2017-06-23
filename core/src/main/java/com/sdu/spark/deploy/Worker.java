@@ -119,6 +119,11 @@ public class Worker extends RpcEndPoint {
             if (master != null) {
                 master.send(new WorkerHeartbeat(workerId, self()));
             }
+        } else if (msg instanceof LaunchDriver) {                   // 启动Driver
+            LaunchDriver launchDriver = (LaunchDriver) msg;
+
+        } else if (msg instanceof LaunchExecutor) {
+
         }
     }
 
@@ -248,6 +253,11 @@ public class Worker extends RpcEndPoint {
 
         }
     }
+
+    /******************************Worker启动Driver*******************************/
+
+
+    /******************************Worker启动Executor*****************************/
 
     /**
      * 取消注册定时任务

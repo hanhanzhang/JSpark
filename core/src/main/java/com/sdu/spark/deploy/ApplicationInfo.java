@@ -1,9 +1,6 @@
 package com.sdu.spark.deploy;
 
-import com.google.common.collect.HashBiMap;
 import com.sdu.spark.rpc.RpcEndPointRef;
-import lombok.Getter;
-import lombok.Setter;
 
 import java.io.Serializable;
 import java.util.Date;
@@ -39,36 +36,31 @@ public class ApplicationInfo implements Serializable {
      * 默认分配CPU数
      * */
     public int defaultCores;
+
+
+    /************************************无需序列化***************************************/
     /**
      * 应用运行状态
      * */
-    @Setter
-    @Getter
-    private ApplicationState state;
+    public transient ApplicationState state;
     /**
      * 应用分配Executor信息
      * */
-    @Setter
-    @Getter
-    private HashMap<Integer, ExecutorDesc> executors;
+    public transient HashMap<Integer, ExecutorDesc> executors;
     /**
      * 应用移除的Executor信息
      * */
-    @Setter
-    @Getter
-    private ExecutorDesc[] removedExecutors;
+    public transient ExecutorDesc[] removedExecutors;
     /**
      * 分配CPU数
      * */
-    @Setter
-    @Getter
-    private int coresGranted;
+    public transient int coresGranted;
+
     /**
      * 应用运行结束时间
      * */
-    @Setter
-    @Getter
-    private long endTime;
+    public transient long endTime;
+    private transient int nextExecutorId;
 
     public ApplicationInfo(long startTime, String id, ApplicationDescription desc, Date submitDate, RpcEndPointRef driver, int defaultCores) {
         this.startTime = startTime;
@@ -77,5 +69,26 @@ public class ApplicationInfo implements Serializable {
         this.submitDate = submitDate;
         this.driver = driver;
         this.defaultCores = defaultCores;
+        this.nextExecutorId = 0;
     }
+
+    private int requestedCores() {
+        return desc.maxCores == 0 ? defaultCores : desc.maxCores;
+    }
+
+    public int coreLeft() {
+        return requestedCores() - coresGranted;
+    }
+
+    private int newExecutorId(){
+        return nextExecutorId++;
+    }
+
+    public ExecutorDesc addExecutor(WorkerInfo worker, int cores) {
+        ExecutorDesc exec = new ExecutorDesc(newExecutorId(), this, worker, cores, desc.memoryPerExecutorMB);
+        executors.put(exec.id, exec);
+        coresGranted += cores;
+        return exec;
+    }
+
 }

@@ -1,5 +1,7 @@
 package com.sdu.spark.deploy;
 
+import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.sdu.spark.SecurityManager;
 import com.sdu.spark.rpc.*;
 import com.sdu.spark.deploy.DeployMessage.*;
@@ -15,6 +17,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import static com.sdu.spark.network.utils.NettyUtils.getIpV4;
 import static com.sdu.spark.utils.Utils.convertStringToInt;
@@ -22,6 +25,12 @@ import static com.sdu.spark.utils.Utils.getFutureResult;
 
 /**
  * 集群Master节点, 负责管理集群及Application信息
+ *
+ * ToDo:
+ *
+ *  1: 理解"Driver"与"Application"之间关系
+ *
+ *  2: 理解"Driver"的Server消息处理
  *
  * @author hanhan.zhang
  * */
@@ -55,8 +64,19 @@ public class Master extends RpcEndPoint {
     private Map<String, WorkerInfo> idToWorker = new HashMap<>();
 
     private ScheduledExecutorService messageThread = ThreadUtils.newDaemonSingleThreadScheduledExecutor("master-forward-message-thread");
+    /**
+     * Master节点状态
+     * */
+    private RecoveryState state = RecoveryState.ALIVE;
 
-    private ScheduledFuture<?> checkWorkerTimeoutTask;
+    /**
+     * 待分配Driver
+     * */
+    private List<DriverInfo> waitingDrivers = Lists.newLinkedList();
+    /**
+     * 待分配Application
+     * */
+    private List<ApplicationInfo> waitingApps = Lists.newLinkedList();
 
     public Master(JSparkConfig config, RpcEnv rpcEnv, RpcAddress address) {
         this.config = config;
@@ -71,7 +91,7 @@ public class Master extends RpcEndPoint {
 
     @Override
     public void onStart() {
-        LOGGER.info("start rpc master at {}", address.toSparkURL());
+        LOGGER.info("JSpark Master节点启动：{}", address.toSparkURL());
         messageThread.scheduleWithFixedDelay(() -> self().send(new CheckForWorkerTimeOut()),
                                              config.getCheckWorkerTimeout(),
                                              config.getCheckWorkerTimeout(),
@@ -85,9 +105,7 @@ public class Master extends RpcEndPoint {
 
     @Override
     public void onStop() {
-        if (checkWorkerTimeoutTask != null) {
-            checkWorkerTimeoutTask.cancel(true);
-        }
+
     }
 
     @Override
@@ -112,7 +130,7 @@ public class Master extends RpcEndPoint {
             timeoutDeadWorkers();
         } else if (msg instanceof WorkerHeartbeat) {       // 工作节点心跳消息
             WorkerHeartbeat heartbeat = (WorkerHeartbeat) msg;
-            LOGGER.info("JSpark Master收到心跳: workerId = {}, hostPort = {}",
+            LOGGER.info("心跳: workerId = {}, hostPort = {}",
                     heartbeat.workerId, heartbeat.worker.address().hostPort());
             if (heartbeat.worker instanceof NettyRpcEndPointRef) {
                 ((NettyRpcEndPointRef) heartbeat.worker).setRpcEnv((NettyRpcEnv) rpcEnv);
@@ -121,11 +139,11 @@ public class Master extends RpcEndPoint {
             String workerId = heartbeat.workerId;
             WorkerInfo workerInfo = idToWorker.get(workerId);
             if (workerInfo == null) {
-                LOGGER.info("JSpark Master收到未注册JSpark Worker心跳: workerId = {}, hostPort = {}",
+                LOGGER.info("尚未注册Worker心跳: workerId = {}, hostPort = {}",
                             heartbeat.workerId, heartbeat.worker.address().hostPort());
                 heartbeat.worker.send(new ReconnectWorker(self()));
             } else {
-                workerInfo.setLastHeartbeat(System.currentTimeMillis());
+                workerInfo.lastHeartbeat = System.currentTimeMillis();
             }
         } else if (msg instanceof RegisterWorker) {       // 注册工作节点
             RegisterWorker registerWorker = (RegisterWorker) msg;
@@ -190,20 +208,20 @@ public class Master extends RpcEndPoint {
 
     private boolean registerWorker(WorkerInfo worker) {
         // 删除已挂掉的worker及当前注册work地址相同
-        workers.stream().filter(w -> (w.getHost() == worker.getHost() && w.getPort() == worker.getPort()) &&
-                                     (w.getState() == WorkerState.DEAD))
+        workers.stream().filter(w -> (w.host == worker.host && w.port == worker.port) &&
+                                     (w.state == WorkerState.DEAD))
                         .forEach(w -> workers.remove(w));
-        RpcAddress address = worker.getEndPointRef().address();
+        RpcAddress address = worker.endPointRef.address();
         if (addressToWorker.containsKey(address)) {
             WorkerInfo oldWorker = addressToWorker.get(address);
-            if (oldWorker.getState() == WorkerState.UNKNOWN) {
+            if (oldWorker.state == WorkerState.UNKNOWN) {
                 removeWorker(oldWorker);
             } else {
                 LOGGER.info("Attempted to re-register worker at same address: {}", address);
                 return true;
             }
         }
-        idToWorker.put(worker.getWorkerId(), worker);
+        idToWorker.put(worker.workerId, worker);
         addressToWorker.put(address, worker);
         workers.add(worker);
         return true;
@@ -213,8 +231,171 @@ public class Master extends RpcEndPoint {
 
     }
 
+    /********************************Spark应用调度资源**********************************/
     private void schedule() {
+        if (state != RecoveryState.ALIVE) {
+            return;
+        }
 
+        // 过滤已挂掉Worker节点
+        List<WorkerInfo> aliveWorkers = workers.stream().filter(WorkerInfo::isAlive).collect(Collectors.toList());
+        Collections.shuffle(aliveWorkers);
+        int numWorkersAlive = aliveWorkers.size();
+        int curPos = 0;
+
+        /**
+         *
+         * 启动Driver(即: 用户编写Spark程序入口)
+         *
+         * 1: 随机选择Spark Driver运行资源充足的Worker节点(即: 满足Driver要求的CPU数、JVM内存数)
+         *
+         * 2: 向Worker节点发送消息{@link LaunchDriver}
+         * */
+        Iterator<DriverInfo> it = waitingDrivers.iterator();
+        while (it.hasNext()) {
+            DriverInfo driverInfo = it.next();
+            boolean launched = false;
+            int numWorkersVisited = 0;
+
+            while (numWorkersVisited < numWorkersAlive && !launched) {
+                WorkerInfo workerInfo = aliveWorkers.get(curPos);
+                numWorkersVisited += 1;
+                if (workerInfo.freeMemory() >= driverInfo.desc.mem &&
+                        workerInfo.freeCores() >= driverInfo.desc.cores) {
+                    launched = true;
+                    it.remove();
+                    //
+                    launchDriver(workerInfo, driverInfo);
+                }
+
+                curPos = (curPos + 1) % numWorkersAlive;
+            }
+        }
+
+        /**
+         * Spark任务分配Executor(Executor为JVM进程)
+         * */
+        startExecutorsOnWorkers();
+    }
+
+    private void launchDriver(WorkerInfo worker, DriverInfo driver) {
+        LOGGER.info("工作节点(workerId = {}, host = {})启动Spark应用(driverId = {})",
+                worker.workerId, worker.host, driver.id);
+        worker.addDriver(driver);
+        driver.worker = worker;
+        worker.endPointRef.send(new LaunchDriver(driver.id, driver.desc));
+        driver.state = DriverState.RUNNING;
+    }
+
+    private void startExecutorsOnWorkers() {
+        waitingApps.stream().filter(app -> app.coreLeft() > 0).forEach(app -> {
+            int coresPerExecutor = app.desc.coresPerExecutor;
+
+            /**
+             * Spark任务启动Executor
+             *
+             * 1:
+             *
+             * 2:
+             *
+             * 3:
+             *
+             * */
+            List<WorkerInfo> usableWorkers = workers.stream().filter(worker -> worker.state == WorkerState.ALIVE)
+                    .filter(worker -> worker.freeMemory() >= app.desc.memoryPerExecutorMB &&
+                                      worker.freeCores() >= coresPerExecutor)
+                    .sorted((worker1, worker2) -> worker1.freeCores() - worker2.freeCores())
+                    .collect(Collectors.toList());
+            int[] assignedCores = scheduleExecutorsOnWorkers(app, usableWorkers, true);
+
+            // 在Worker节点启动Executor
+            for (int i = 0; i < assignedCores.length; ++i) {
+                int assignCores = assignedCores[i];
+                if (assignCores != 0) {
+                    allocateWorkerResourceToExecutors(app, assignCores, coresPerExecutor, usableWorkers.get(i));
+                }
+            }
+        });
+    }
+
+    private List<WorkerInfo> canLaunchWorker(int coresToAssign, int []assignedCores, int []assignedExecutors,
+                                             int coresPerExecutor, int memoryPerExecutor, List<WorkerInfo> workers) {
+        int pos = 0;
+        List<WorkerInfo> freeWorkers = Lists.newLinkedList();
+        for (WorkerInfo worker : workers) {
+            if (canLaunchExecutor(coresToAssign, assignedCores, assignedExecutors, worker, coresPerExecutor, memoryPerExecutor, pos)) {
+                freeWorkers.add(worker);
+            }
+            ++pos;
+        }
+        return freeWorkers;
+    }
+
+    private boolean canLaunchExecutor(int coresToAssign, int []assignedCores, int []assignedExecutors,
+                                      WorkerInfo worker, int minCoresPerExecutor, int memoryPerExecutor,
+                                      int pos) {
+        boolean keepScheduling = coresToAssign >= minCoresPerExecutor;
+
+        boolean enoughCores = worker.freeCores() - assignedCores[pos] >= minCoresPerExecutor;
+
+        if (assignedExecutors[pos] == 0) {
+            boolean enoughMemory = worker.freeMemory() - assignedExecutors[pos] * memoryPerExecutor >= memoryPerExecutor;
+            return keepScheduling && enoughCores && enoughMemory;
+        } else {
+            return keepScheduling && enoughCores;
+        }
+    }
+
+    private int[] scheduleExecutorsOnWorkers(ApplicationInfo app, List<WorkerInfo> workers, boolean spreadOutApps) {
+        // 每个worker分配CPU数
+        int []assignedCores = new int[workers.size()];
+
+        int coresPerExecutor = app.desc.coresPerExecutor;
+        int memoryPerExecutor = app.desc.memoryPerExecutorMB;
+        int []assignedExecutors = new int[workers.size()];
+        // 保证空闲资源分配
+        int coresToAssign = Math.min(app.coreLeft(), (int) workers.stream().map(WorkerInfo::freeCores).count());
+
+        // 过滤可分配Executor的Worker节点
+        List<WorkerInfo> freeWorkers = canLaunchWorker(coresToAssign, assignedCores, assignedExecutors, coresPerExecutor, memoryPerExecutor, workers);
+
+        while (!freeWorkers.isEmpty()) {
+            int i = 0;
+            for (WorkerInfo worker : freeWorkers) {
+                boolean keepScheduling = true;
+                while (keepScheduling && canLaunchExecutor(coresToAssign, assignedCores, assignedExecutors, worker, coresPerExecutor, memoryPerExecutor, i)) {
+                    coresToAssign -= coresPerExecutor;
+                    assignedCores[i] += coresPerExecutor;
+                    assignedExecutors[i] += 1;
+                    if (spreadOutApps) {
+                        keepScheduling = false;
+                    }
+                }
+
+                freeWorkers = canLaunchWorker(coresToAssign, assignedCores, assignedExecutors, coresPerExecutor, memoryPerExecutor, workers);
+                ++i;
+            }
+        }
+
+        return assignedCores;
+    }
+
+    private void allocateWorkerResourceToExecutors(ApplicationInfo app, int assignedCores,
+                                                   int coresPerExecutor, WorkerInfo worker) {
+        int numExecutors = assignedCores / coresPerExecutor;
+        for (int i = 1; i <= numExecutors; ++i) {
+            ExecutorDesc desc = app.addExecutor(worker, coresPerExecutor);
+            launchExecutor(worker, desc);
+            app.state = ApplicationState.RUNNING;
+        }
+
+    }
+
+    private void launchExecutor(WorkerInfo worker, ExecutorDesc exec) {
+        LOGGER.info("在工作节点(workerId = {}, host = {})启动执行器(executorId = {})", worker.workerId, worker.host, exec.id);
+        worker.addExecutor(exec);
+        worker.endPointRef.send(new LaunchExecutor(exec.application.id, exec.id, exec.application.desc, exec.cores, exec.memory));
+        exec.application.driver.send(new ExecutorAdded(exec.id, worker.workerId, worker.host, exec.cores, exec.memory));
     }
 
     /**
@@ -224,14 +405,14 @@ public class Master extends RpcEndPoint {
         Iterator<WorkerInfo> it = workers.iterator();
         while (it.hasNext()) {
             WorkerInfo worker = it.next();
-            if (worker.getLastHeartbeat() < System.currentTimeMillis() - config.getWorkerTimeout() &&
-                    worker.getState() != WorkerState.DEAD) {
-                LOGGER.info("Removing worker {} because we got no heartbeat in {} seconds", worker.getWorkerId(),
+            if (worker.lastHeartbeat < System.currentTimeMillis() - config.getWorkerTimeout() &&
+                    worker.state != WorkerState.DEAD) {
+                LOGGER.info("Removing worker {} because we got no heartbeat in {} seconds", worker.workerId,
                         config.getWorkerTimeout());
                 removeWorker(worker);
                 it.remove();
             } else {
-                if (worker.getLastHeartbeat() < System.currentTimeMillis() - (config.getDeadWorkerPersistenceTimes() + 1) * config.getWorkerTimeout()) {
+                if (worker.lastHeartbeat < System.currentTimeMillis() - (config.getDeadWorkerPersistenceTimes() + 1) * config.getWorkerTimeout()) {
                     it.remove();
                 }
             }
