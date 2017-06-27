@@ -1,9 +1,10 @@
-package com.sdu.spark.utils;
+package com.sdu.spark.deploy.worker;
 
 import com.google.common.collect.Lists;
 import com.sdu.spark.SecurityManager;
 import com.sdu.spark.deploy.Command;
 import com.sdu.spark.laucher.WorkerCommandBuilder;
+import com.sdu.spark.utils.Utils;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
 

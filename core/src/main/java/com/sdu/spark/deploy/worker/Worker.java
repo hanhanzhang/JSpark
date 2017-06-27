@@ -1,6 +1,7 @@
-package com.sdu.spark.deploy;
+package com.sdu.spark.deploy.worker;
 
 import com.sdu.spark.SecurityManager;
+import com.sdu.spark.deploy.Master;
 import com.sdu.spark.rpc.*;
 import com.sdu.spark.deploy.WorkerLocalMessage.*;
 import com.sdu.spark.deploy.DeployMessage.*;
@@ -273,6 +274,12 @@ public class Worker extends RpcEndPoint {
 
     /******************************Worker启动Executor*****************************/
     private void launchExecutor(LaunchExecutor launchExecutor) {
+        File executorDir = new File(workerDir, launchExecutor.appId + "/" + launchExecutor.execId);
+        LOGGER.info("工作节点启动Executor(execId = {}, appId = {})进程, 工作目录: {}",
+                                launchExecutor.execId, launchExecutor.appId, executorDir.getAbsolutePath());
+        if (!executorDir.mkdirs()) {
+            throw new RuntimeException(String.format("Executor工作目录%s无法创建", executorDir.getAbsolutePath()));
+        }
 
     }
 

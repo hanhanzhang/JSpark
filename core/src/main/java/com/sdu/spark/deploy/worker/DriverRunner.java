@@ -1,10 +1,10 @@
-package com.sdu.spark.deploy;
+package com.sdu.spark.deploy.worker;
 
 import com.sdu.spark.SecurityManager;
+import com.sdu.spark.deploy.DriverDescription;
+import com.sdu.spark.deploy.DriverState;
 import com.sdu.spark.rpc.JSparkConfig;
 import com.sdu.spark.rpc.RpcEndPointRef;
-import com.sdu.spark.utils.CommandUtils;
-import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -13,8 +13,7 @@ import java.io.IOException;
 import java.util.Collections;
 
 /**
- *  Todo:
- *  {@link ProcessBuilder}使用
+ *  启动Driver进程
  *
  * @author hanhan.zhang
  * */
