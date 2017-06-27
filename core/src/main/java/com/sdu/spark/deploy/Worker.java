@@ -44,7 +44,8 @@ public class Worker extends RpcEndPoint {
     /**
      * 工作目录
      * */
-    private String workerDirPath;
+    private File sparkHome;
+    private File workerDir;
     /**
      * 工作节点CPU数量
      * */
@@ -82,16 +83,23 @@ public class Worker extends RpcEndPoint {
      * */
     private int connectionAttemptCount = 0;
 
+    /**
+     * Worker节点资源管理
+     * */
+    private int coresUsed = 0;
+    private long memoryUsed = 0;
+
+
     private ScheduledFuture<?> registrationRetryTimer;
     private Future<?> registerMasterFuture;
 
-    public Worker(JSparkConfig config, RpcEnv rpcEnv, int cores, long memory, RpcAddress masterRpcAddress, String workerDirPath) {
+    public Worker(JSparkConfig config, RpcEnv rpcEnv, int cores, long memory, RpcAddress masterRpcAddress) {
         this.config = config;
         this.rpcEnv = rpcEnv;
         this.cores = cores;
         this.memory = memory;
         this.masterRpcAddress = masterRpcAddress;
-        this.workerDirPath = workerDirPath;
+        this.sparkHome = new File(System.getenv().getOrDefault("SPARK_HOME", "."));
         scheduleMessageThread = ThreadUtils.newDaemonSingleThreadScheduledExecutor("worker-schedule-message");
         registerExecutorService = ThreadUtils.newDaemonCachedThreadPool("worker-register-thread", 1, 60);
         // 防止数据丢包及网络延迟导致Master节点接收不到心跳
@@ -120,10 +128,9 @@ public class Worker extends RpcEndPoint {
                 master.send(new WorkerHeartbeat(workerId, self()));
             }
         } else if (msg instanceof LaunchDriver) {                   // 启动Driver
-            LaunchDriver launchDriver = (LaunchDriver) msg;
-
+            launchDriver((LaunchDriver) msg);
         } else if (msg instanceof LaunchExecutor) {
-
+            launchExecutor((LaunchExecutor) msg);
         }
     }
 
@@ -136,7 +143,7 @@ public class Worker extends RpcEndPoint {
     public void onStart() {
         LOGGER.info("JSpark Worker节点启动: hostPort = {}, JVM = {} RAM", rpcEnv.address().hostPort(),
                 cores, memory);
-//        createDir();
+        createWorkDir();
         startRegisterWithMaster();
     }
 
@@ -163,11 +170,11 @@ public class Worker extends RpcEndPoint {
     /**
      * 创建工作目录
      * */
-    private void createDir() {
-        File dir = new File(workerDirPath);
-        dir.mkdirs();
-        if (!dir.exists() || !dir.isDirectory()) {
-            LOGGER.error("Failed to create work directory {}", workerDirPath);
+    private void createWorkDir() {
+        workerDir = new File(sparkHome, "work");
+        boolean result = workerDir.mkdirs();
+        if (!result || !workerDir.isDirectory()) {
+            LOGGER.error("Worker(workerId = {}, host = {})创建工作目录异常", workerId, host());
             System.exit(-1);
         }
     }
@@ -255,9 +262,19 @@ public class Worker extends RpcEndPoint {
     }
 
     /******************************Worker启动Driver*******************************/
-
+    private void launchDriver(LaunchDriver launchDriver) {
+        LOGGER.info("工作节点启动Driver(driverId = {})进程", launchDriver.driverId);
+        DriverRunner runner = new DriverRunner(config, launchDriver.driverId, workerDir, sparkHome,
+                launchDriver.desc, self(), null);
+        runner.start();
+        coresUsed += launchDriver.desc.cores;
+        memoryUsed += launchDriver.desc.mem;
+    }
 
     /******************************Worker启动Executor*****************************/
+    private void launchExecutor(LaunchExecutor launchExecutor) {
+
+    }
 
     /**
      * 取消注册定时任务
@@ -313,7 +330,7 @@ public class Worker extends RpcEndPoint {
         // 启动RpcEnv
         RpcEnv rpcEnv = RpcEnv.create(args[0], convertStringToInt(args[1]), sparkConfig, securityManager);
 
-        Worker worker = new Worker(sparkConfig, rpcEnv, cpu, memory, masterAddress, "");
+        Worker worker = new Worker(sparkConfig, rpcEnv, cpu, memory, masterAddress);
 
         // 向Worker's RpcEnv注册Worker节点
         // 向RpcEnv注册Worker节点时, 会向Index投递OnStart消息, 进而调用RpcEndPoint.onStart()方法

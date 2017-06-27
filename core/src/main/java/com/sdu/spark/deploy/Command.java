@@ -18,5 +18,5 @@ public class Command implements Serializable {
     public Map<String, String> environment;
     public String[] classPathEntries;
     public String[] libraryPathEntries;
-    public String[] JavaOpts;
+    public String[] javaOpts;
 }

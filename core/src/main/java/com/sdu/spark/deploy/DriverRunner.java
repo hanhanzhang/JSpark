@@ -1,15 +1,20 @@
 package com.sdu.spark.deploy;
 
+import com.sdu.spark.SecurityManager;
 import com.sdu.spark.rpc.JSparkConfig;
 import com.sdu.spark.rpc.RpcEndPointRef;
+import com.sdu.spark.utils.CommandUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.Collections;
 
 /**
- *
+ *  Todo:
+ *  {@link ProcessBuilder}使用
  *
  * @author hanhan.zhang
  * */
@@ -21,7 +26,7 @@ public class DriverRunner {
     private String driverId;
     private File workDir;
     private File sparkHome;
-    private DriverDescription driverDesc;
+    private DriverDescription desc;
     private RpcEndPointRef worker;
     private SecurityManager securityManager;
 
@@ -34,13 +39,13 @@ public class DriverRunner {
     private volatile DriverState finishedState;
     private volatile Exception finishedException;
 
-    public DriverRunner(JSparkConfig conf, String driverId, File workDir, File sparkHome, DriverDescription driverDesc,
+    public DriverRunner(JSparkConfig conf, String driverId, File workDir, File sparkHome, DriverDescription desc,
                         RpcEndPointRef worker, SecurityManager securityManager) {
         this.conf = conf;
         this.driverId = driverId;
         this.workDir = workDir;
         this.sparkHome = sparkHome;
-        this.driverDesc = driverDesc;
+        this.desc = desc;
         this.worker = worker;
         this.securityManager = securityManager;
     }
@@ -70,10 +75,46 @@ public class DriverRunner {
         process.destroy();
     }
 
-    private int prepareAndRunDriver() {
+    private int prepareAndRunDriver() throws IOException, InterruptedException {
         File driverDir = createWorkingDirectory();
+        /**
+         * Todo: Jar文件下载
+         * */
         String localJarFilename = downloadUserJar(driverDir);
-        return 0;
+        ProcessBuilder builder = CommandUtils.buildProcessBuilder(desc.command, securityManager, desc.mem,
+                sparkHome.getAbsolutePath(), new String[0], localJarFilename, Collections.emptyMap());
+        return runDriver(builder, sparkHome, desc.supervise);
+    }
+
+    private int runDriver(ProcessBuilder builder, File baseDir, boolean supervise) throws IOException, InterruptedException {
+        builder.directory(baseDir);
+        return runCommandWithRetry(builder, supervise);
+    }
+
+    private int runCommandWithRetry(ProcessBuilder builder, boolean supervise) throws IOException, InterruptedException {
+        int exitCode = -1;
+        boolean keepTrying = !killed;
+        while (keepTrying) {
+            synchronized (this) {
+                if (killed) {
+                    return exitCode;
+                }
+                process = builder.start();
+                initialize(process);
+            }
+        }
+        return process.waitFor();
+    }
+
+    /**
+     * 初始化进程输入输出文件
+     * */
+    private void initialize(Process process) throws IOException {
+        File stdout = new File(sparkHome, "stdout");
+        CommandUtils.redirectStream(process.getInputStream(), stdout);
+
+        File stderr = new File(sparkHome, "stderr");
+        CommandUtils.redirectStream(process.getErrorStream(), stderr);
     }
 
     private File createWorkingDirectory() {
@@ -84,6 +125,9 @@ public class DriverRunner {
         return driverDir;
     }
 
+    /**
+     * Todo:
+     * */
     private String downloadUserJar(File driverDir) {
         return "";
     }
