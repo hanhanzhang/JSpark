@@ -107,7 +107,7 @@ public interface DeployMessage extends Serializable {
      * */
     @AllArgsConstructor
     class ExecutorStateChanged implements DeployMessage {
-        public String executorId;
+        public int executorId;
         public String appId;
         public ExecutorState state;
         public String message;

@@ -1,7 +1,7 @@
 package com.sdu.spark.deploy;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
+import com.google.common.collect.Maps;
 import com.sdu.spark.SecurityManager;
 import com.sdu.spark.rpc.*;
 import com.sdu.spark.deploy.DeployMessage.*;
@@ -15,7 +15,6 @@ import org.slf4j.LoggerFactory;
 import java.util.*;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
@@ -77,6 +76,11 @@ public class Master extends RpcEndPoint {
      * 待分配Application
      * */
     private List<ApplicationInfo> waitingApps = Lists.newLinkedList();
+
+    /**
+     * key = appId, value = ApplicationInfo
+     * */
+    private Map<String, ApplicationInfo> idToApp = Maps.newHashMap();
 
     public Master(JSparkConfig config, RpcEnv rpcEnv, RpcAddress address) {
         this.config = config;
@@ -179,7 +183,7 @@ public class Master extends RpcEndPoint {
         } else if (msg instanceof UnregisterApplication) {  // 移除应用
 
         } else if (msg instanceof ExecutorStateChanged) {   // Executor变化
-
+            handleExecutorStateChanged((ExecutorStateChanged) msg);
         } else if (msg instanceof DriverStateChanged) {
 
         }
@@ -228,6 +232,19 @@ public class Master extends RpcEndPoint {
     }
 
     private void removeWorker(WorkerInfo worker) {
+
+    }
+
+    /********************************Spark Executor管理*******************************/
+    private void handleExecutorStateChanged(ExecutorStateChanged executor) {
+        ExecutorDesc desc = idToApp.get(executor.appId).executors.get(executor.executorId);
+        if (desc == null) {
+            LOGGER.info("收到未知应用(appId = {})的Executor(execId = {})的状态变更", executor.appId, executor.executorId);
+            return;
+        }
+        ApplicationInfo appInfo = idToApp.get(executor.appId);
+        ExecutorState oldState = desc.state;
+        desc.state = executor.state;
 
     }
 

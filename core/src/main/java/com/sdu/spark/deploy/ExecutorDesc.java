@@ -1,7 +1,5 @@
 package com.sdu.spark.deploy;
 
-import lombok.AllArgsConstructor;
-
 import java.io.Serializable;
 
 /**
@@ -9,20 +7,25 @@ import java.io.Serializable;
  *
  * @author hanhan.zhang
  * */
-@AllArgsConstructor
 public class ExecutorDesc implements Serializable {
+    // 唯一标识
     public int id;
-    /**
-     * 应用信息
-     * */
+    // 所属Spark应用
     public ApplicationInfo application;
-    /**
-     * 应用分配Worker信息
-     * */
+    // 所属Worker
     public WorkerInfo worker;
     public int cores;
     public int memory;
 
+    public ExecutorState state = ExecutorState.LAUNCHING;
+
+    public ExecutorDesc(int id, ApplicationInfo application, WorkerInfo worker, int cores, int memory) {
+        this.id = id;
+        this.application = application;
+        this.worker = worker;
+        this.cores = cores;
+        this.memory = memory;
+    }
 
     public String fullId() {
       return application.id + "/" + id;

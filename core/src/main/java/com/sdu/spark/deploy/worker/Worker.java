@@ -1,6 +1,7 @@
 package com.sdu.spark.deploy.worker;
 
 import com.sdu.spark.SecurityManager;
+import com.sdu.spark.deploy.ExecutorState;
 import com.sdu.spark.deploy.Master;
 import com.sdu.spark.rpc.*;
 import com.sdu.spark.deploy.WorkerLocalMessage.*;
@@ -132,6 +133,8 @@ public class Worker extends RpcEndPoint {
             launchDriver((LaunchDriver) msg);
         } else if (msg instanceof LaunchExecutor) {
             launchExecutor((LaunchExecutor) msg);
+        } else if (msg instanceof ExecutorStateChanged) {           // Executor状态变更
+
         }
     }
 
@@ -281,6 +284,19 @@ public class Worker extends RpcEndPoint {
             throw new RuntimeException(String.format("Executor工作目录%s无法创建", executorDir.getAbsolutePath()));
         }
 
+        String[] localAppDirs = new String[0];
+
+        ExecutorRunner runner = new ExecutorRunner(launchExecutor.appId, launchExecutor.execId, launchExecutor.appDesc,
+                                                   launchExecutor.cores, launchExecutor.memory, self(), sparkHome, executorDir, config,
+                                                   localAppDirs, ExecutorState.RUNNING);
+        runner.start();
+        coresUsed += launchExecutor.cores;
+        memoryUsed += launchExecutor.memory;
+        if (master != null) {
+            LOGGER.info("Worker(workerId = {}, host = {})向Master发送Executor运行信息", workerId, host());
+            master.send(new ExecutorStateChanged(launchExecutor.execId, launchExecutor.appId, runner.state,
+                                                 "", 0));
+        }
     }
 
     /**
@@ -288,7 +304,7 @@ public class Worker extends RpcEndPoint {
      * */
     private void cancelLastRegistrationRetry() {
         if (registerMasterFuture != null) {
-            registerMasterFuture.cancel(true);
+            registerMasterFuture.cancel(true)   ;
             registerMasterFuture = null;
         }
         if (registrationRetryTimer != null) {
