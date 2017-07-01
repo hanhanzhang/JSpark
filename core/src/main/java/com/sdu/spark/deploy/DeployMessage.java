@@ -114,6 +114,15 @@ public interface DeployMessage extends Serializable {
         public int exitStatus;
     }
 
+    @AllArgsConstructor
+    class ExecutorUpdated implements DeployMessage {
+        int id;
+        ExecutorState state;
+        String message;
+        int exitStatus;
+        boolean workerLost;
+    }
+
     /**
      * Driver变更消息
      * */
@@ -166,6 +175,16 @@ public interface DeployMessage extends Serializable {
         public int memory;
     }
 
+    @AllArgsConstructor
+    class ApplicationRemoved implements DeployMessage {
+       String message;
+    }
+
+    @AllArgsConstructor
+    class ApplicationFinished implements DeployMessage {
+        String appId;
+    }
+
     /**
      * Driver状态查询消息
      * */
@@ -190,6 +209,15 @@ public interface DeployMessage extends Serializable {
     class KillExecutors implements DeployMessage {
         public String appId;
         public String[] executorIds;
+    }
+
+    /**
+     * 向工作节点发送KillExecutor消息
+     * */
+    @AllArgsConstructor
+    class KillExecutor implements DeployMessage {
+        public String appId;
+        public int execId;
     }
 
     @AllArgsConstructor

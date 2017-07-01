@@ -2,6 +2,7 @@ package com.sdu.spark.deploy;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.sdu.spark.SecurityManager;
 import com.sdu.spark.rpc.*;
 import com.sdu.spark.deploy.DeployMessage.*;
@@ -50,37 +51,35 @@ public class Master extends RpcEndPoint {
      * */
     private RpcAddress address;
     /**
-     * 集群工作节点
-     * */
-    private Set<WorkerInfo> workers = new HashSet<>();
-    /**
-     * 工作节点地址信息[key = 工作节点地址, value = 工作节点信息]
-     * */
-    private Map<RpcAddress, WorkerInfo> addressToWorker = new HashMap<>();
-    /**
-     * 工作节点标识[key = 工作节点唯一标识, value = 工作节点信息]
-     * */
-    private Map<String, WorkerInfo> idToWorker = new HashMap<>();
-
-    private ScheduledExecutorService messageThread = ThreadUtils.newDaemonSingleThreadScheduledExecutor("master-forward-message-thread");
-    /**
      * Master节点状态
      * */
     private RecoveryState state = RecoveryState.ALIVE;
 
-    /**
-     * 待分配Driver
-     * */
-    private List<DriverInfo> waitingDrivers = Lists.newLinkedList();
-    /**
-     * 待分配Application
-     * */
-    private List<ApplicationInfo> waitingApps = Lists.newLinkedList();
+    /***********************************JSpark集群节点资源管理*************************************/
+    // 集群工作节点
+    private Set<WorkerInfo> workers = new HashSet<>();
+    // 工作节点地址信息[key = 工作节点地址, value = 工作节点信息]
+    private Map<RpcAddress, WorkerInfo> addressToWorker = new HashMap<>();
+    // 工作节点标识[key = 工作节点唯一标识, value = 工作节点信息]
+    private Map<String, WorkerInfo> idToWorker = new HashMap<>();
+    //
+    private ScheduledExecutorService messageThread = ThreadUtils.newDaemonSingleThreadScheduledExecutor("master-forward-message-thread");
 
-    /**
-     * key = appId, value = ApplicationInfo
-     * */
+    /********************************JSpark集群应用(Application)管理*****************************/
+    // 待分配Spark Application Driver
+    private List<DriverInfo> waitingDrivers = Lists.newLinkedList();
+    // 带分配Spark Application
+    private List<ApplicationInfo> waitingApps = Lists.newLinkedList();
+    // key = appId, value = ApplicationInfo
     private Map<String, ApplicationInfo> idToApp = Maps.newHashMap();
+    // Spark集群Application集合
+    private Set<ApplicationInfo> apps = Sets.newHashSet();
+    // Spark与Application交互映射[key = Application引用, value = Application]
+    private Map<RpcEndPointRef, ApplicationInfo> endpointToApp = Maps.newHashMap();
+    private Map<RpcAddress, ApplicationInfo> addressToApp = Maps.newHashMap();
+    // Spark集群已完成的Application
+    private List<ApplicationInfo> completedApps = Lists.newArrayList();
+
 
     public Master(JSparkConfig config, RpcEnv rpcEnv, RpcAddress address) {
         this.config = config;
@@ -243,9 +242,57 @@ public class Master extends RpcEndPoint {
             return;
         }
         ApplicationInfo appInfo = idToApp.get(executor.appId);
-        ExecutorState oldState = desc.state;
         desc.state = executor.state;
 
+        desc.application.driver.send(new ExecutorUpdated(desc.id, desc.state, executor.message, executor.exitStatus, false));
+
+        if (ExecutorState.isFinished(desc.state)) {     // Executor进程结束
+            if (appInfo.isFinished()) {
+                appInfo.removeExecutor(desc);
+            }
+
+            desc.worker.removeExecutor(desc);
+            // 删除应用
+            if (executor.exitStatus != 0) {
+                Collection<ExecutorDesc> executors = appInfo.executors.values();
+                if (executors.stream().filter(exec -> exec.state == ExecutorState.RUNNING).count() == 0) {
+                    removeApplication(appInfo, ApplicationState.FINISHED);
+                }
+            }
+        }
+        // 调度Spark应用
+        schedule();
+    }
+
+    private void removeApplication(ApplicationInfo app, ApplicationState state) {
+        if (apps.contains(app)) {
+            apps.remove(app);
+            idToApp.remove(app.id);
+            endpointToApp.remove(app.driver);
+            addressToApp.remove(app.driver.address());
+            completedApps.add(app);
+
+            // 关闭Application的Executor
+            app.executors.values().forEach(this::killExecutor);
+            app.markFinished(state);
+            if (app.state != ApplicationState.FINISHED) {
+                app.driver.send(new ApplicationRemoved(app.state.name()));
+            }
+
+//            persistenceEngine.removeApplication(app)
+            schedule();
+
+            // 通知Worker节点, 更新Application状态
+            workers.forEach(worker -> worker.endPointRef.send(new ApplicationFinished(app.id)));
+        }
+    }
+
+    /********************************Spark Executor进程关闭*****************************/
+    private void killExecutor(ExecutorDesc exec) {
+        exec.worker.removeExecutor(exec);
+        // 通知Worker节点关闭Executor
+        exec.worker.endPointRef.send(new KillExecutor(exec.application.id, exec.id));
+        exec.state = ExecutorState.KILLED;
     }
 
     /********************************Spark应用调度资源**********************************/

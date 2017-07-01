@@ -1,10 +1,12 @@
 package com.sdu.spark.deploy;
 
+import com.google.common.collect.Lists;
 import com.sdu.spark.rpc.RpcEndPointRef;
 
 import java.io.Serializable;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 
 /**
  * 应用信息
@@ -50,11 +52,11 @@ public class ApplicationInfo implements Serializable {
     /**
      * 应用移除的Executor信息
      * */
-    public transient ExecutorDesc[] removedExecutors;
+    private transient List<ExecutorDesc> removedExecutors;
     /**
      * 分配CPU数
      * */
-    public transient int coresGranted;
+    private transient int coresGranted;
 
     /**
      * 应用运行结束时间
@@ -70,6 +72,7 @@ public class ApplicationInfo implements Serializable {
         this.driver = driver;
         this.defaultCores = defaultCores;
         this.nextExecutorId = 0;
+        this.removedExecutors = Lists.newLinkedList();
     }
 
     private int requestedCores() {
@@ -91,4 +94,20 @@ public class ApplicationInfo implements Serializable {
         return exec;
     }
 
+    public boolean isFinished() {
+        return state != ApplicationState.RUNNING && state != ApplicationState.WAITING;
+    }
+
+    public void removeExecutor(ExecutorDesc desc) {
+        if (executors.containsKey(desc.id)) {
+            removedExecutors.add(desc);
+            executors.remove(desc.id);
+            coresGranted -= desc.cores;
+        }
+    }
+
+    public void markFinished(ApplicationState endState) {
+        state = endState;
+        endTime = System.currentTimeMillis();
+    }
 }

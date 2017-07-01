@@ -11,6 +11,7 @@ import org.apache.commons.lang3.StringUtils;
 import java.io.File;
 import java.io.IOException;
 import java.util.Collections;
+import java.util.concurrent.TimeUnit;
 
 import static com.sdu.spark.deploy.worker.CommandUtils.redirectStream;
 
@@ -53,10 +54,8 @@ public class ExecutorRunner {
         workerThread = new Thread(() -> {
             try {
                 fetchAndRunExecutor();
-            } catch (IOException e) {
+            } catch (Exception e) {
                 // ignore
-            } catch (InterruptedException e) {
-                // ignore interrupt
             }
         }, String.format("ExecutorRunner for %s", fullId()));
         workerThread.start();
@@ -91,5 +90,32 @@ public class ExecutorRunner {
         state = ExecutorState.EXITED;
 
         worker.send(new ExecutorStateChanged(execId, appId, state, "", exitCode));
+    }
+
+    public void kill() {
+        workerThread.interrupt();
+        workerThread = null;
+        state = ExecutorState.KILLED;
+        // 关闭进程
+        int exitStatus = killProcess();
+        // 发送Executor变更消息[发送消息到本地]
+        worker.send(new ExecutorStateChanged(execId, appId, state, "", exitStatus));
+    }
+
+    private int killProcess() {
+        if (state == ExecutorState.RUNNING) {
+            state = ExecutorState.FAILED;
+        }
+        process.destroy();
+        try {
+            if (process.waitFor(10, TimeUnit.SECONDS)) {
+                return process.exitValue();
+            }
+            process.destroyForcibly();
+            return process.exitValue();
+        } catch (InterruptedException e) {
+            process.destroyForcibly();
+            return process.exitValue();
+        }
     }
 }

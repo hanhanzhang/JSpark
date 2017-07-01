@@ -97,4 +97,12 @@ public class WorkerInfo implements Serializable{
         coresUsed += desc.cores;
         memoryUsed += desc.memory;
     }
+
+    public void removeExecutor(ExecutorDesc exec) {
+        if (executors.containsKey(exec.fullId())) {
+            executors.remove(exec.fullId());
+            coresUsed -= exec.cores;
+            memoryUsed -= exec.memory;
+        }
+    }
 }

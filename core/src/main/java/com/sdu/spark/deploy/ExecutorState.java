@@ -9,7 +9,7 @@ public enum  ExecutorState {
 
     LAUNCHING, RUNNING, KILLED, FAILED, LOST, EXITED;
 
-    public static boolean isFinshed(ExecutorState state) {
+    public static boolean isFinished(ExecutorState state) {
         switch (state) {
             case KILLED:
             case FAILED:

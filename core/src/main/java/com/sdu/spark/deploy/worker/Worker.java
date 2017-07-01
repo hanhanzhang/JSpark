@@ -1,5 +1,6 @@
 package com.sdu.spark.deploy.worker;
 
+import com.google.common.collect.Maps;
 import com.sdu.spark.SecurityManager;
 import com.sdu.spark.deploy.ExecutorState;
 import com.sdu.spark.deploy.Master;
@@ -15,6 +16,7 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Map;
 import java.util.concurrent.*;
 
 import static com.sdu.spark.network.utils.NettyUtils.getIpV4;
@@ -85,11 +87,13 @@ public class Worker extends RpcEndPoint {
      * */
     private int connectionAttemptCount = 0;
 
-    /**
-     * Worker节点资源管理
-     * */
+    /*******************************Worker资源管理*******************************/
     private int coresUsed = 0;
     private long memoryUsed = 0;
+    // Worker节点启动Driver进程集合[key = driverId, value = DriverRunner]
+    private Map<String, DriverRunner> drivers = Maps.newHashMap();
+    // Worker节点启动Executor进程集合[key = appId + "/" + execId, value = ExecutorRunner]
+    private Map<String, ExecutorRunner> executors = Maps.newHashMap();
 
 
     private ScheduledFuture<?> registrationRetryTimer;
@@ -134,7 +138,10 @@ public class Worker extends RpcEndPoint {
         } else if (msg instanceof LaunchExecutor) {
             launchExecutor((LaunchExecutor) msg);
         } else if (msg instanceof ExecutorStateChanged) {           // Executor状态变更
-
+            handleExecutorStateChanged((ExecutorStateChanged) msg);
+        } else if (msg instanceof KillExecutor) {
+            // Spark Application运行结束, 工作节点关闭Executor进程
+            killExecutor((KillExecutor) msg);
         }
     }
 
@@ -270,12 +277,13 @@ public class Worker extends RpcEndPoint {
         LOGGER.info("工作节点启动Driver(driverId = {})进程", launchDriver.driverId);
         DriverRunner runner = new DriverRunner(config, launchDriver.driverId, workerDir, sparkHome,
                 launchDriver.desc, self(), null);
+        drivers.put(launchDriver.driverId, runner);
         runner.start();
         coresUsed += launchDriver.desc.cores;
         memoryUsed += launchDriver.desc.mem;
     }
 
-    /******************************Worker启动Executor*****************************/
+    /******************************Worker启动Executor进程*****************************/
     private void launchExecutor(LaunchExecutor launchExecutor) {
         File executorDir = new File(workerDir, launchExecutor.appId + "/" + launchExecutor.execId);
         LOGGER.info("工作节点启动Executor(execId = {}, appId = {})进程, 工作目录: {}",
@@ -289,6 +297,7 @@ public class Worker extends RpcEndPoint {
         ExecutorRunner runner = new ExecutorRunner(launchExecutor.appId, launchExecutor.execId, launchExecutor.appDesc,
                                                    launchExecutor.cores, launchExecutor.memory, self(), sparkHome, executorDir, config,
                                                    localAppDirs, ExecutorState.RUNNING);
+        executors.put(launchExecutor.appId + "/" + launchExecutor.execId, runner);
         runner.start();
         coresUsed += launchExecutor.cores;
         memoryUsed += launchExecutor.memory;
@@ -297,6 +306,22 @@ public class Worker extends RpcEndPoint {
             master.send(new ExecutorStateChanged(launchExecutor.execId, launchExecutor.appId, runner.state,
                                                  "", 0));
         }
+    }
+
+    /********************************Worker关闭Executor进程***************************/
+    private void killExecutor(KillExecutor executor) {
+        String key = executor.appId + "/" + executor.execId;
+        ExecutorRunner runner = executors.get(key);
+        if (runner != null) {
+            runner.kill();
+        } else {
+            LOGGER.info("关闭未知Executor(appId = {}, execId = {})", executor.appId, executor.execId);
+        }
+    }
+
+    /***************************Worker Executor运行状态消息处理*************************/
+    private void handleExecutorStateChanged(ExecutorStateChanged executorStateChanged) {
+
     }
 
     /**

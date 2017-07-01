@@ -1,13 +1,18 @@
 package com.sdu.spark.utils;
 
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.SystemUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.*;
+import java.net.URI;
 import java.nio.channels.FileChannel;
+import java.util.Arrays;
+import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.stream.Collectors;
 
 /**
  * @author hanhan.zhang
@@ -90,5 +95,31 @@ public class Utils {
         long expectedPos = initialPos + bytesToCopy;
         assert finalPos == expectedPos :
                 String.format("Current position %s do not equal to expected position %s", finalPos, expectedPos);
+    }
+
+    public static String resolveURIs(String paths) {
+        if (paths == null || paths.trim().isEmpty()) {
+            return "";
+        } else {
+            List<URI> uriList = Arrays.stream(paths.split(",")).filter(p -> !p.isEmpty()).map(Utils::resolveURI).collect(Collectors.toList());
+            return StringUtils.join(uriList, ",");
+        }
+    }
+
+    private static URI resolveURI(String path) {
+        try {
+            URI uri = new URI(path);
+            if (uri.getScheme() != null) {
+                return uri;
+            }
+            if (uri.getFragment() != null) {
+                URI absoluteURI = new File(uri.getPath()).getAbsoluteFile().toURI();
+                return new URI(absoluteURI.getScheme(), absoluteURI.getHost(), absoluteURI.getPath(),
+                        uri.getFragment());
+            }
+        } catch (Exception e) {
+            // ignore
+        }
+        return new File(path).getAbsoluteFile().toURI();
     }
 }
