@@ -43,7 +43,7 @@ public class NettyRpcEnv extends RpcEnv {
 
     private String host;
 
-    private JSparkConfig conf;
+    private SparkConf conf;
     /**
      * Spark权限管理模块
      * */
@@ -80,7 +80,7 @@ public class NettyRpcEnv extends RpcEnv {
 
     private AtomicBoolean stopped = new AtomicBoolean(false);
 
-    public NettyRpcEnv(JSparkConfig sparkConfig, String host, JavaSerializerInstance serializerInstance, SecurityManager securityManager) {
+    public NettyRpcEnv(SparkConf sparkConfig, String host, JavaSerializerInstance serializerInstance, SecurityManager securityManager) {
         this.conf = sparkConfig;
         this.host = host;
         this.dispatcher = new Dispatcher(this, sparkConfig);
@@ -246,7 +246,7 @@ public class NettyRpcEnv extends RpcEnv {
 
     }
 
-    private TransportConf fromSparkConf(JSparkConfig conf) {
+    private TransportConf fromSparkConf(SparkConf conf) {
         return new TransportConf(IOModel.NIO.name(), Collections.emptyMap());
     }
 

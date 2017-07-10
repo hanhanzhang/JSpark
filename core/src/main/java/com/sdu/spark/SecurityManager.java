@@ -1,7 +1,7 @@
 package com.sdu.spark;
 
 import com.sdu.spark.network.sasl.SecretKeyHolder;
-import com.sdu.spark.rpc.JSparkConfig;
+import com.sdu.spark.rpc.SparkConf;
 
 /**
  * JSpark权限管理
@@ -12,11 +12,11 @@ public class SecurityManager implements SecretKeyHolder {
 
     public static final String ENV_AUTH_SECRET = "_SPARK_AUTH_SECRET";
 
-    private JSparkConfig config;
+    private SparkConf config;
 
     private String secretKey;
 
-    public SecurityManager(JSparkConfig config) {
+    public SecurityManager(SparkConf config) {
         this.config = config;
     }
 

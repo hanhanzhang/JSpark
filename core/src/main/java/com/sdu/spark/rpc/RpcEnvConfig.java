@@ -9,7 +9,7 @@ import lombok.AllArgsConstructor;
 @AllArgsConstructor
 public class RpcEnvConfig {
 
-    public JSparkConfig conf;
+    public SparkConf conf;
 
     public String bindAddress;
 

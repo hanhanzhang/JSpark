@@ -50,10 +50,10 @@ public class Dispatcher {
 
     private static final int DEFAULT_DISPATCHER_THREADS = 5;
 
-    public Dispatcher(NettyRpcEnv nettyRpcEnv, JSparkConfig JSparkConfig) {
+    public Dispatcher(NettyRpcEnv nettyRpcEnv, SparkConf SparkConf) {
         this.nettyRpcEnv = nettyRpcEnv;
 
-        int threads = JSparkConfig.getDispatcherThreads();
+        int threads = SparkConf.getDispatcherThreads();
         if (threads <= 0) {
             threads = DEFAULT_DISPATCHER_THREADS;
         }

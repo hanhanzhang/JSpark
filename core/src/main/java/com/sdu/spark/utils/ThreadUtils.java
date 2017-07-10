@@ -21,6 +21,11 @@ public class ThreadUtils {
         return executor;
     }
 
+    public static ThreadPoolExecutor newDaemonCachedThreadPool(String prefix) {
+        ThreadFactory threadFactory = namedThreadFactory(prefix, true);
+        return (ThreadPoolExecutor) Executors.newCachedThreadPool(threadFactory);
+    }
+
     public static ScheduledExecutorService newDaemonSingleThreadScheduledExecutor(String threadName) {
         ThreadFactory threadFactory = namedThreadFactory(threadName, true);
         ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(1, threadFactory);

@@ -4,7 +4,7 @@ import com.sdu.spark.SecurityManager;
 import com.sdu.spark.deploy.ApplicationDescription;
 import com.sdu.spark.deploy.DeployMessage.ExecutorStateChanged;
 import com.sdu.spark.deploy.ExecutorState;
-import com.sdu.spark.rpc.JSparkConfig;
+import com.sdu.spark.rpc.SparkConf;
 import com.sdu.spark.rpc.RpcEndPointRef;
 import org.apache.commons.lang3.StringUtils;
 
@@ -29,14 +29,14 @@ public class ExecutorRunner {
     public RpcEndPointRef worker;
     public File sparkHome;
     public File executorDir;
-    public JSparkConfig conf;
+    public SparkConf conf;
     public String[] appLocalDirs;
     public ExecutorState state;
 
     private Thread workerThread;
     private Process process;
 
-    public ExecutorRunner(String appId, int execId, ApplicationDescription appDesc, int cores, int memory, RpcEndPointRef worker, File sparkHome, File executorDir, JSparkConfig conf, String[] appLocalDirs, ExecutorState state) {
+    public ExecutorRunner(String appId, int execId, ApplicationDescription appDesc, int cores, int memory, RpcEndPointRef worker, File sparkHome, File executorDir, SparkConf conf, String[] appLocalDirs, ExecutorState state) {
         this.appId = appId;
         this.execId = execId;
         this.appDesc = appDesc;

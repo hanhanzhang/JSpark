@@ -6,7 +6,10 @@ import com.sdu.spark.rpc.RpcEndPointRef;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
  * Note:
@@ -70,7 +73,7 @@ public class NettyRpcEndPointRef extends RpcEndPointRef {
     }
 
     @Override
-    public Future<?> ask(Object message, int timeout) {
-        return null;
+    public Object askSync(Object message, long timeout) throws TimeoutException, InterruptedException, ExecutionException {
+        return ask(message).get(timeout, TimeUnit.MILLISECONDS);
     }
 }

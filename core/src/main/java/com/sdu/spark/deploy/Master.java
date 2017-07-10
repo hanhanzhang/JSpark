@@ -45,7 +45,7 @@ public class Master extends RpcEndPoint {
     /**
      * RpcMaster配置
      * */
-    private JSparkConfig config;
+    private SparkConf config;
     /**
      * Master节点地址
      * */
@@ -81,7 +81,7 @@ public class Master extends RpcEndPoint {
     private List<ApplicationInfo> completedApps = Lists.newArrayList();
 
 
-    public Master(JSparkConfig config, RpcEnv rpcEnv, RpcAddress address) {
+    public Master(SparkConf config, RpcEnv rpcEnv, RpcAddress address) {
         this.config = config;
         this.rpcEnv = rpcEnv;
         this.address = address;
@@ -504,7 +504,7 @@ public class Master extends RpcEndPoint {
 
         args = new String[]{ip, "6712"};
 
-        JSparkConfig sparkConfig = JSparkConfig.builder()
+        SparkConf sparkConfig = SparkConf.builder()
                                                 .deliverThreads(1)
                                                 .dispatcherThreads(1)
                                                 .rpcConnectThreads(1)

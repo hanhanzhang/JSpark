@@ -1,7 +1,9 @@
 package com.sdu.spark.rpc;
 
 import java.io.Serializable;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeoutException;
 
 /**
  *
@@ -27,5 +29,5 @@ public abstract class RpcEndPointRef implements Serializable {
      * */
     public abstract Future<?> ask(Object message);
 
-    public abstract Future<?> ask(Object message, int timeout);
+    public abstract Object askSync(Object message, long timeout) throws TimeoutException, InterruptedException, ExecutionException;
 }

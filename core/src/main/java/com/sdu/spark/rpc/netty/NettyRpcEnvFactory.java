@@ -1,7 +1,7 @@
 package com.sdu.spark.rpc.netty;
 
 import com.sdu.spark.SecurityManager;
-import com.sdu.spark.rpc.JSparkConfig;
+import com.sdu.spark.rpc.SparkConf;
 import com.sdu.spark.rpc.RpcEnv;
 import com.sdu.spark.rpc.RpcEnvConfig;
 import com.sdu.spark.rpc.RpcEnvFactory;
@@ -18,7 +18,7 @@ public class NettyRpcEnvFactory implements RpcEnvFactory {
 
     @Override
     public RpcEnv create(RpcEnvConfig conf) {
-        JSparkConfig sparkConfig = conf.conf;
+        SparkConf sparkConfig = conf.conf;
         SecurityManager securityManager = new SecurityManager(sparkConfig);
 
         // Java序列化对象

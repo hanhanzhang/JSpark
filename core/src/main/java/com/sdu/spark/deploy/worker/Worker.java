@@ -69,7 +69,7 @@ public class Worker extends RpcEndPoint {
     /**
      * Rpc配置
      * */
-    private JSparkConfig config;
+    private SparkConf config;
     /**
      * Master节点引用
      * */
@@ -99,7 +99,7 @@ public class Worker extends RpcEndPoint {
     private ScheduledFuture<?> registrationRetryTimer;
     private Future<?> registerMasterFuture;
 
-    public Worker(JSparkConfig config, RpcEnv rpcEnv, int cores, long memory, RpcAddress masterRpcAddress) {
+    public Worker(SparkConf config, RpcEnv rpcEnv, int cores, long memory, RpcAddress masterRpcAddress) {
         this.config = config;
         this.rpcEnv = rpcEnv;
         this.cores = cores;
@@ -365,7 +365,7 @@ public class Worker extends RpcEndPoint {
         long memory = Runtime.getRuntime().maxMemory();
         args = new String[] {ip, "6713"};
 
-        JSparkConfig sparkConfig = JSparkConfig.builder()
+        SparkConf sparkConfig = SparkConf.builder()
                                                 .deliverThreads(1)
                                                 .dispatcherThreads(1)
                                                 .rpcConnectThreads(1)

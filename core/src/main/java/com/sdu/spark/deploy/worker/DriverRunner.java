@@ -3,7 +3,7 @@ package com.sdu.spark.deploy.worker;
 import com.sdu.spark.SecurityManager;
 import com.sdu.spark.deploy.DriverDescription;
 import com.sdu.spark.deploy.DriverState;
-import com.sdu.spark.rpc.JSparkConfig;
+import com.sdu.spark.rpc.SparkConf;
 import com.sdu.spark.rpc.RpcEndPointRef;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,7 +21,7 @@ public class DriverRunner {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DriverRunner.class);
 
-    private JSparkConfig conf;
+    private SparkConf conf;
     private String driverId;
     private File workDir;
     private File sparkHome;
@@ -38,7 +38,7 @@ public class DriverRunner {
     private volatile DriverState finishedState;
     private volatile Exception finishedException;
 
-    public DriverRunner(JSparkConfig conf, String driverId, File workDir, File sparkHome, DriverDescription desc,
+    public DriverRunner(SparkConf conf, String driverId, File workDir, File sparkHome, DriverDescription desc,
                         RpcEndPointRef worker, SecurityManager securityManager) {
         this.conf = conf;
         this.driverId = driverId;
