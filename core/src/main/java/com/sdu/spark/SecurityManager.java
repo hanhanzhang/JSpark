@@ -12,16 +12,16 @@ public class SecurityManager implements SecretKeyHolder {
 
     public static final String ENV_AUTH_SECRET = "_SPARK_AUTH_SECRET";
 
-    private SparkConf config;
+    private SparkConf conf;
 
     private String secretKey;
 
-    public SecurityManager(SparkConf config) {
-        this.config = config;
+    public SecurityManager(SparkConf conf) {
+        this.conf = conf;
     }
 
     public boolean isAuthenticationEnabled() {
-        return config.isAuthenticationEnabled();
+        return conf.getBoolean("spark.authenticate", true);
     }
 
     @Override

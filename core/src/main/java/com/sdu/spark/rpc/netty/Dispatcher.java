@@ -50,10 +50,10 @@ public class Dispatcher {
 
     private static final int DEFAULT_DISPATCHER_THREADS = 5;
 
-    public Dispatcher(NettyRpcEnv nettyRpcEnv, SparkConf SparkConf) {
+    public Dispatcher(NettyRpcEnv nettyRpcEnv, SparkConf conf) {
         this.nettyRpcEnv = nettyRpcEnv;
 
-        int threads = SparkConf.getDispatcherThreads();
+        int threads = conf.getInt("spark.rpc.netty.dispatcher.numThreads", Runtime.getRuntime().availableProcessors());
         if (threads <= 0) {
             threads = DEFAULT_DISPATCHER_THREADS;
         }

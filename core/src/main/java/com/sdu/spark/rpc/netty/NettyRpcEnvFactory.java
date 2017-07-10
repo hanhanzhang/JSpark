@@ -22,7 +22,7 @@ public class NettyRpcEnvFactory implements RpcEnvFactory {
         SecurityManager securityManager = new SecurityManager(sparkConfig);
 
         // Java序列化对象
-        JavaSerializerInstance serializerInstance = new JavaSerializerInstance(sparkConfig.getCountReset(),
+        JavaSerializerInstance serializerInstance = new JavaSerializerInstance(sparkConfig.getInt("spark.serializer.objectStreamReset", 100),
                 Thread.currentThread().getContextClassLoader());
 
         NettyRpcEnv rpcEnv = new NettyRpcEnv(sparkConfig, conf.bindAddress, serializerInstance, securityManager);

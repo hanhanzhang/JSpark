@@ -34,6 +34,8 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static com.sdu.spark.utils.ThreadUtils.newDaemonCachedThreadPool;
+
 /**
  * @author hanhan.zhang
  * */
@@ -80,14 +82,14 @@ public class NettyRpcEnv extends RpcEnv {
 
     private AtomicBoolean stopped = new AtomicBoolean(false);
 
-    public NettyRpcEnv(SparkConf sparkConfig, String host, JavaSerializerInstance serializerInstance, SecurityManager securityManager) {
-        this.conf = sparkConfig;
+    public NettyRpcEnv(SparkConf conf, String host, JavaSerializerInstance serializerInstance, SecurityManager securityManager) {
+        this.conf = conf;
         this.host = host;
-        this.dispatcher = new Dispatcher(this, sparkConfig);
-        this.clientConnectionExecutor = ThreadUtils.newDaemonCachedThreadPool("netty-rpc-connect-%d", sparkConfig.getRpcConnectThreads(), 60);
-        this.deliverMessageExecutor = ThreadUtils.newDaemonCachedThreadPool("rpc-deliver-message-%d", sparkConfig.getDeliverThreads(), 60);
+        this.dispatcher = new Dispatcher(this, conf);
+        this.clientConnectionExecutor = newDaemonCachedThreadPool("netty-rpc-connect-%d", conf.getInt("spark.rpc.connect.threads", 64), 60);
+        this.deliverMessageExecutor = newDaemonCachedThreadPool("rpc-deliver-message-%d", conf.getInt("spark.rpc.deliver.message.threads", 64), 60);
         StreamManager streamManager = null;
-        this.transportContext = new TransportContext(fromSparkConf(sparkConfig), new NettyRpcHandler(streamManager, this.dispatcher, this));
+        this.transportContext = new TransportContext(fromSparkConf(conf), new NettyRpcHandler(streamManager, this.dispatcher, this));
         this.clientFactory = this.transportContext.createClientFactory(createClientBootstraps());
         this.serializerInstance = serializerInstance;
         this.securityManager = securityManager;

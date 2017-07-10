@@ -45,7 +45,7 @@ public class Master extends RpcEndPoint {
     /**
      * RpcMaster配置
      * */
-    private SparkConf config;
+    private SparkConf conf;
     /**
      * Master节点地址
      * */
@@ -62,8 +62,12 @@ public class Master extends RpcEndPoint {
     private Map<RpcAddress, WorkerInfo> addressToWorker = new HashMap<>();
     // 工作节点标识[key = 工作节点唯一标识, value = 工作节点信息]
     private Map<String, WorkerInfo> idToWorker = new HashMap<>();
-    //
+
     private ScheduledExecutorService messageThread = ThreadUtils.newDaemonSingleThreadScheduledExecutor("master-forward-message-thread");
+    // Spark Worker心跳超时检测时间间隔
+    private long WORKER_TIMEOUT_MS = 60 * 1000L;
+    // Spark Worker心跳超时允许次数
+    private int REAPER_ITERATIONS = 15;
 
     /********************************JSpark集群应用(Application)管理*****************************/
     // 待分配Spark Application Driver
@@ -81,10 +85,12 @@ public class Master extends RpcEndPoint {
     private List<ApplicationInfo> completedApps = Lists.newArrayList();
 
 
-    public Master(SparkConf config, RpcEnv rpcEnv, RpcAddress address) {
-        this.config = config;
+    public Master(SparkConf conf, RpcEnv rpcEnv, RpcAddress address) {
+        this.conf = conf;
         this.rpcEnv = rpcEnv;
         this.address = address;
+        WORKER_TIMEOUT_MS = conf.getLong("spark.worker.timeout", 60) * 1000L;
+        REAPER_ITERATIONS = conf.getInt("spark.dead.worker.persistence", 15);
     }
 
     @Override
@@ -96,8 +102,8 @@ public class Master extends RpcEndPoint {
     public void onStart() {
         LOGGER.info("JSpark Master节点启动：{}", address.toSparkURL());
         messageThread.scheduleWithFixedDelay(() -> self().send(new CheckForWorkerTimeOut()),
-                                             config.getCheckWorkerTimeout(),
-                                             config.getCheckWorkerTimeout(),
+                                             0,
+                                             WORKER_TIMEOUT_MS,
                                              TimeUnit.SECONDS);
     }
 
@@ -485,14 +491,14 @@ public class Master extends RpcEndPoint {
         Iterator<WorkerInfo> it = workers.iterator();
         while (it.hasNext()) {
             WorkerInfo worker = it.next();
-            if (worker.lastHeartbeat < System.currentTimeMillis() - config.getWorkerTimeout() &&
+            if (worker.lastHeartbeat < System.currentTimeMillis() - WORKER_TIMEOUT_MS &&
                     worker.state != WorkerState.DEAD) {
                 LOGGER.info("Removing worker {} because we got no heartbeat in {} seconds", worker.workerId,
-                        config.getWorkerTimeout());
+                        WORKER_TIMEOUT_MS);
                 removeWorker(worker);
                 it.remove();
             } else {
-                if (worker.lastHeartbeat < System.currentTimeMillis() - (config.getDeadWorkerPersistenceTimes() + 1) * config.getWorkerTimeout()) {
+                if (worker.lastHeartbeat < System.currentTimeMillis() - (REAPER_ITERATIONS + 1) * WORKER_TIMEOUT_MS) {
                     it.remove();
                 }
             }
@@ -504,22 +510,20 @@ public class Master extends RpcEndPoint {
 
         args = new String[]{ip, "6712"};
 
-        SparkConf sparkConfig = SparkConf.builder()
-                                                .deliverThreads(1)
-                                                .dispatcherThreads(1)
-                                                .rpcConnectThreads(1)
-                                                .maxRetryConnectTimes(2)
-                                                .checkWorkerTimeout(10)
-                                                .deadWorkerPersistenceTimes(2)
-                                                .workerTimeout(20)
-                                                .build();
-        SecurityManager securityManager = new SecurityManager(sparkConfig);
+        SparkConf conf = new SparkConf();
+        conf.set("spark.rpc.deliver.message.threads", "32");
+        conf.set("spark.rpc.netty.dispatcher.numThreads", "32");
+        conf.set("spark.rpc.connect.threads", "32");
+        conf.set("spark.worker.timeout", "10");
+        conf.set("spark.dead.worker.persistence", "10");
+
+        SecurityManager securityManager = new SecurityManager(conf);
 
         // 启动RpcEnv
-        RpcEnv rpcEnv = RpcEnv.create(args[0], convertStringToInt(args[1]), sparkConfig, securityManager);
+        RpcEnv rpcEnv = RpcEnv.create(args[0], convertStringToInt(args[1]), conf, securityManager);
 
         // 向RpcEnv注册Master节点
-        Master master = new Master(sparkConfig, rpcEnv, rpcEnv.address());
+        Master master = new Master(conf, rpcEnv, rpcEnv.address());
         RpcEndPointRef masterRef = rpcEnv.setRpcEndPointRef(ENDPOINT_NAME, master);
 
         // 向Master的对应RpcEndPoint节点发送消息
