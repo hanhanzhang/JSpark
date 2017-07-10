@@ -22,7 +22,7 @@ public class RpcAddress implements Serializable {
     }
 
     public String toSparkURL() {
-        return "JSpark://" + hostPort();
+        return "Spark://" + hostPort();
     }
 
     @Override

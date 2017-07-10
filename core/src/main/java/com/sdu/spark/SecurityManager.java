@@ -21,7 +21,7 @@ public class SecurityManager implements SecretKeyHolder {
     }
 
     public boolean isAuthenticationEnabled() {
-        return conf.getBoolean("spark.authenticate", true);
+        return conf.getBoolean("spark.authenticate", false);
     }
 
     @Override

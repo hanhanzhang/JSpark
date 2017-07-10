@@ -31,7 +31,7 @@ public class NettyRpcEnvFactory implements RpcEnvFactory {
                     "startPort should be between 1024 and 65535 (inclusive), or 0 for a random free port.";
             rpcEnv.startServer(conf.bindAddress, conf.port);
             int actualPort = rpcEnv.address().port;
-            LOGGER.info("JSpark start netty rpc env on address {}:{}", conf.bindAddress, actualPort);
+            LOGGER.info("Spark RpcEnv绑定地址: {}:{}", conf.bindAddress, actualPort);
         }
         return rpcEnv;
     }

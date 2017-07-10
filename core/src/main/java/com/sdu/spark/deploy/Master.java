@@ -100,7 +100,7 @@ public class Master extends RpcEndPoint {
 
     @Override
     public void onStart() {
-        LOGGER.info("JSpark Master节点启动：{}", address.toSparkURL());
+        LOGGER.info("Spark Master节点启动：{}", address.toSparkURL());
         messageThread.scheduleWithFixedDelay(() -> self().send(new CheckForWorkerTimeOut()),
                                              0,
                                              WORKER_TIMEOUT_MS,
@@ -530,7 +530,7 @@ public class Master extends RpcEndPoint {
         Future<?> future = masterRef.ask(new BoundPortsRequest());
         BoundPortsResponse response = getFutureResult(future);
         if (response != null) {
-            LOGGER.info("Master bind port : {}", response.rpcEndpointPort);
+            LOGGER.info("Master绑定端口: {}", response.rpcEndpointPort);
         }
 
         rpcEnv.awaitTermination();

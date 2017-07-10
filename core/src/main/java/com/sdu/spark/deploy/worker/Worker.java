@@ -266,7 +266,7 @@ public class Worker extends RpcEndPoint {
             scheduleMessageThread.scheduleWithFixedDelay(() -> {
                 // 向本地投递心跳消息
                 self().send(new SendHeartbeat());
-            }, HEARTBEAT_MILLIS, HEARTBEAT_MILLIS, TimeUnit.SECONDS);
+            }, HEARTBEAT_MILLIS, HEARTBEAT_MILLIS, TimeUnit.MILLISECONDS);
         } else if (msg instanceof RegisterWorkerFailed) {
 
         }
@@ -369,7 +369,7 @@ public class Worker extends RpcEndPoint {
         conf.set("spark.rpc.deliver.message.threads", "32");
         conf.set("spark.rpc.netty.dispatcher.numThreads", "32");
         conf.set("spark.rpc.connect.threads", "32");
-        conf.set("spark.worker.timeout", "10");
+        conf.set("spark.worker.timeout", "1");
         conf.set("spark.dead.worker.persistence", "10");
 
         SecurityManager securityManager = new SecurityManager(conf);
