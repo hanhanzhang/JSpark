@@ -31,64 +31,45 @@ public class Worker extends RpcEndPoint {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(Worker.class);
 
-    public static final String ENDPOINT_NAME = "JSparkWorker";
+    public static final String ENDPOINT_NAME = "Worker";
 
-    private RpcEnv rpcEnv;
+    private SparkConf conf;
 
     private DateTimeFormatter createDateFormat = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
-    /**
-     * Worker唯一标识
-     * */
-    private String workerId;
-    /**
-     * Master网络地址
-     * */
+
+    /********************************Master资源管理**********************************/
+    // Master地址
     private RpcAddress masterRpcAddress;
-    /**
-     * 工作目录
-     * */
-    private File sparkHome;
-    private File workerDir;
-    /**
-     * 工作节点CPU数量
-     * */
-    private int cores;
-    /**
-     * 工作节点内存
-     * */
-    private long memory;
-    /**
-     * 是否注解到Master
-     * */
+    // 是否注解到Master
     private boolean register = false;
-    /**
-     * 发送心跳时间间隔
-     * */
-    private long HEARTBEAT_MILLIS = 60 * 1000L / 4L;
-    /**
-     * Rpc配置
-     * */
-    private SparkConf conf;
-    /**
-     * Master节点引用
-     * */
+    // Master EndPoint节点引用
     private RpcEndPointRef master;
-    /**
-     * Worker定时消息线程[心跳发送]
-     * */
+    // 心跳时间间隔
+    private long HEARTBEAT_MILLIS = 60 * 1000L / 4L;
+    // 心跳线程
     private ScheduledExecutorService scheduleMessageThread;
-    /**
-     * Worker注册Master线程
-     * */
+    // 注册线程
     private ExecutorService registerExecutorService;
-    /**
-     * 已向Master注册次数
-     * */
+    // 向Master注册次数
     private int connectionAttemptCount = 0;
 
+
     /*******************************Worker资源管理*******************************/
+    // Worker唯一标识
+    private String workerId;
+    // 工作目录
+    private File sparkHome;
+    private File workerDir;
+    // Worker RpcEnv
+    private RpcEnv rpcEnv;
+    // 分配CPU核数
+    private int cores;
+    // 分配JVm内存数
+    private long memory;
+    // 已使用CPU核数
     private int coresUsed = 0;
+    // 已使用JVM内存数
     private long memoryUsed = 0;
     // Worker节点启动Driver进程集合[key = driverId, value = DriverRunner]
     private Map<String, DriverRunner> drivers = Maps.newHashMap();
@@ -154,33 +135,11 @@ public class Worker extends RpcEndPoint {
     public void onStart() {
         LOGGER.info("JSpark Worker节点启动: hostPort = {}, JVM = {} RAM", rpcEnv.address().hostPort(),
                 cores, memory);
-//        createWorkDir();
+        createWorkDir();
         startRegisterWithMaster();
     }
 
-    @Override
-    public void onEnd() {
-
-    }
-
-    @Override
-    public void onStop() {
-
-    }
-
-    @Override
-    public void onConnect(RpcAddress rpcAddress) {
-
-    }
-
-    @Override
-    public void onDisconnect(RpcAddress rpcAddress) {
-
-    }
-
-    /**
-     * 创建工作目录
-     * */
+    /*******************************创建工作目录*************************************/
     private void createWorkDir() {
         workerDir = new File(sparkHome, "work");
         boolean result = workerDir.mkdirs();
@@ -190,7 +149,7 @@ public class Worker extends RpcEndPoint {
         }
     }
 
-    /*******************************向Master注册工作节点*****************************/
+    /*******************************注册工作节点************************************/
     private void startRegisterWithMaster() {
         if (registrationRetryTimer == null) {
             scheduleMessageThread.scheduleWithFixedDelay(()-> {
@@ -202,7 +161,6 @@ public class Worker extends RpcEndPoint {
                         "attempt scheduled already.");
         }
     }
-
     private void registerWithMaster() {
         if (register) {
             cancelLastRegistrationRetry();
@@ -237,16 +195,14 @@ public class Worker extends RpcEndPoint {
             System.exit(1);
         }
     }
-
     private Future<?> tryRegisterMaster() {
         return registerExecutorService.submit(() -> {
             RpcEndPointRef masterPointRef = rpcEnv.setRpcEndPointRef(Master.ENDPOINT_NAME, masterRpcAddress);
             sendRegisterMessageToMaster(masterPointRef);
         });
     }
-
     private void sendRegisterMessageToMaster(RpcEndPointRef masterRef) {
-        LOGGER.info("JSpark Worker节点[{}]尝试向JSpark Master[{}]注册", rpcEnv.address().hostPort(),
+        LOGGER.info("Spark Worker节点[{}]尝试向Spark Master[{}]注册", rpcEnv.address().hostPort(),
                 masterRef.address().hostPort());
         masterRef.send(new RegisterWorker(workerId, host(), port(), cores, memory, self()));
     }
@@ -255,7 +211,7 @@ public class Worker extends RpcEndPoint {
     private void handleRegisterResponse(RegisteredWorkerResponse msg) {
         if (msg instanceof RegisteredWorker) {
             RegisteredWorker registeredWorker = (RegisteredWorker) msg;
-            LOGGER.info("JSpark Worker节点成功注册到JSpark Master节点: {}", registeredWorker.master.address().toSparkURL());
+            LOGGER.info("Spark Worker节点成功注册到Spark Master节点: {}", registeredWorker.master.address().toSparkURL());
             if (registeredWorker.master instanceof NettyRpcEndPointRef) {
                 ((NettyRpcEndPointRef) registeredWorker.master).setRpcEnv((NettyRpcEnv) rpcEnv);
             }
@@ -272,7 +228,7 @@ public class Worker extends RpcEndPoint {
         }
     }
 
-    /******************************Worker启动Driver*******************************/
+    /**********************************Worker启动Driver*************************************/
     private void launchDriver(LaunchDriver launchDriver) {
         LOGGER.info("工作节点启动Driver(driverId = {})进程", launchDriver.driverId);
         DriverRunner runner = new DriverRunner(conf, launchDriver.driverId, workerDir, sparkHome,
@@ -283,7 +239,7 @@ public class Worker extends RpcEndPoint {
         memoryUsed += launchDriver.desc.mem;
     }
 
-    /******************************Worker启动Executor进程*****************************/
+    /********************************Worker启动Executor进程*********************************/
     private void launchExecutor(LaunchExecutor launchExecutor) {
         File executorDir = new File(workerDir, launchExecutor.appId + "/" + launchExecutor.execId);
         LOGGER.info("工作节点启动Executor(execId = {}, appId = {})进程, 工作目录: {}",

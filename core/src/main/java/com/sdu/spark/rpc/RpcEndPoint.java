@@ -10,23 +10,23 @@ public abstract class RpcEndPoint {
     // Rpc节点的引用节点
     public abstract RpcEndPointRef self();
 
-    public abstract void onStart();
+    public void onStart() {}
 
-    public abstract void onEnd();
+    public void onEnd() {}
 
-    public abstract void onStop();
+    public void onStop() {}
 
-    public abstract void onConnect(RpcAddress rpcAddress);
+    public void onConnect(RpcAddress rpcAddress) {}
 
-    public abstract void onDisconnect(RpcAddress rpcAddress);
+    public void onDisconnect(RpcAddress rpcAddress) {}
 
     /**
      * Rpc消息处理但不响应
      * */
-    public abstract void receive(Object msg);
+    public void receive(Object msg) {}
 
     /**
      * Rpc消息处理需做响应
      * */
-    public abstract void receiveAndReply(Object msg, RpcCallContext context);
+    public void receiveAndReply(Object msg, RpcCallContext context) {}
 }

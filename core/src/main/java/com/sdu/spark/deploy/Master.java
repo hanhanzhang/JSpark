@@ -4,9 +4,9 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.sdu.spark.SecurityManager;
-import com.sdu.spark.rpc.*;
 import com.sdu.spark.deploy.DeployMessage.*;
 import com.sdu.spark.deploy.MasterMessage.*;
+import com.sdu.spark.rpc.*;
 import com.sdu.spark.rpc.netty.NettyRpcEndPointRef;
 import com.sdu.spark.rpc.netty.NettyRpcEnv;
 import com.sdu.spark.utils.ThreadUtils;
@@ -105,26 +105,6 @@ public class Master extends RpcEndPoint {
                                              0,
                                              WORKER_TIMEOUT_MS,
                                              TimeUnit.SECONDS);
-    }
-
-    @Override
-    public void onEnd() {
-
-    }
-
-    @Override
-    public void onStop() {
-
-    }
-
-    @Override
-    public void onConnect(RpcAddress rpcAddress) {
-
-    }
-
-    @Override
-    public void onDisconnect(RpcAddress rpcAddress) {
-
     }
 
     @Override

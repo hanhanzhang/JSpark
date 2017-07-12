@@ -1,6 +1,9 @@
 package com.sdu.spark.rpc.netty;
 
-import com.sdu.spark.rpc.*;
+import com.sdu.spark.rpc.RpcCallContext;
+import com.sdu.spark.rpc.RpcEndPoint;
+import com.sdu.spark.rpc.RpcEndPointRef;
+import com.sdu.spark.rpc.RpcEnv;
 import com.sdu.spark.rpc.netty.OutboxMessage.CheckExistence;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,40 +32,10 @@ public class RpcEndpointVerifier extends RpcEndPoint {
     }
 
     @Override
-    public void onStart() {
-
-    }
-
-    @Override
-    public void onEnd() {
-
-    }
-
-    @Override
-    public void onStop() {
-
-    }
-
-    @Override
-    public void onConnect(RpcAddress rpcAddress) {
-
-    }
-
-    @Override
-    public void onDisconnect(RpcAddress rpcAddress) {
-
-    }
-
-    @Override
-    public void receive(Object msg) {
-
-    }
-
-    @Override
     public void receiveAndReply(Object msg, RpcCallContext context) {
         if (msg instanceof CheckExistence) {
             CheckExistence existence = (CheckExistence) msg;
-            LOGGER.info("JSparkRpcEndPoint verifier name : {}", existence.name);
+            LOGGER.info("SparkRpcEndPoint verifier name : {}", existence.name);
             RpcEndPointRef endPointRef = dispatcher.verify(existence.name);
             context.reply(endPointRef);
         }
