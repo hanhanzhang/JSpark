@@ -4,6 +4,7 @@ import com.sdu.spark.SecurityManager;
 import com.sdu.spark.deploy.ApplicationDescription;
 import com.sdu.spark.deploy.DeployMessage.ExecutorStateChanged;
 import com.sdu.spark.deploy.ExecutorState;
+import com.sdu.spark.executor.CoarseGrainedExecutorBackend;
 import com.sdu.spark.rpc.SparkConf;
 import com.sdu.spark.rpc.RpcEndPointRef;
 import org.apache.commons.lang3.StringUtils;
@@ -16,7 +17,21 @@ import java.util.concurrent.TimeUnit;
 import static com.sdu.spark.deploy.worker.CommandUtils.redirectStream;
 
 /**
- * 启动Executor进程
+ * Executor进程启动:
+ *
+ *  1: Executor负责计算任务, Executor对象创建及维护是由{@link CoarseGrainedExecutorBackend}负责
+ *
+ *  2: Spark通过JDK{@link ProcessBuilder}创建CoarseGrainedExecutorBackend进程, 其启动命令格式:
+ *
+ *      java -cp $Spark_ASSEMBLY_JAR \
+ *           -Xms2048M -Xmx2048M -XX:MaxPermSize=256M -Dspark.driver.port=42210 \
+ *           com.sdu.spark.executor.CoarseGrainedExecutorBackend \
+ *           --driver   $DRIVER
+ *           --executor 6
+ *           --host     127.0.0.1
+ *           --cores    8
+ *           --appId
+ *
  *
  * @author hanhan.zhang
  * */

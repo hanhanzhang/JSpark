@@ -47,7 +47,7 @@ public class Executor {
     private static final Logger LOGGER = LoggerFactory.getLogger(Executor.class);
     private ByteBuffer EMPTY_BYTE_BUFFER = ByteBuffer.wrap(new byte[0]);
 
-    /****************************Spark运行环境****************************/
+    /****************************Spark运行环境*******************************/
     private boolean isLocal;
     private String executorId;
     private SparkEnv env;

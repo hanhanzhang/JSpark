@@ -129,8 +129,11 @@ public class NettyRpcEnv extends RpcEnv {
         }
     }
 
-
-    /*******************************Rpc消息发送***********************************/
+    @Override
+    public RpcEndPointRef setupEndpointRefByURI(String uri) {
+        return null;
+    }
+/*******************************Rpc消息发送***********************************/
     /**
      * 单向消息[即不需要消息响应]
      * */

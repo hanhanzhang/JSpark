@@ -27,6 +27,7 @@ public abstract class RpcEnv {
      * */
     public abstract RpcEndPointRef setRpcEndPointRef(String name, RpcEndPoint endPoint);
     public abstract RpcEndPointRef setRpcEndPointRef(String name, RpcAddress rpcAddress);
+    public abstract RpcEndPointRef setupEndpointRefByURI(String uri);
 
     /**
      * 关闭Rpc节点
