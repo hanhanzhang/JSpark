@@ -3,9 +3,11 @@ package com.sdu.spark.rpc.netty;
 import com.sdu.spark.network.client.TransportClient;
 import com.sdu.spark.rpc.RpcAddress;
 import com.sdu.spark.rpc.RpcEndPointRef;
-import lombok.Getter;
-import lombok.Setter;
+import com.sdu.spark.rpc.RpcEndpointAddress;
 
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -25,39 +27,28 @@ import java.util.concurrent.TimeoutException;
  * @author hanhan.zhang
  * */
 public class NettyRpcEndPointRef extends RpcEndPointRef {
-    /**
-     * 被引用Rpc节点名称
-     * */
-    private String name;
-    /**
-     * 被引用Rpc节点的地址
-     * */
-    private RpcAddress address;
-    /**
-     * 关键字'transient'表明在序列化时, 字段不被序列化
-     * {@link NettyRpcEndPointRef}所属的RpcEnv
-     * */
-    @Setter
-    private transient NettyRpcEnv rpcEnv;
 
-    @Getter
-    @Setter
-    private transient TransportClient client;
+    // 引用RpcEndPoint节点的网络地址
+    private RpcEndpointAddress endpointAddress;
+    // RpcEndPoint节点客户端
+    public transient volatile TransportClient client;
 
-    public NettyRpcEndPointRef(String name, RpcAddress address, NettyRpcEnv rpcEnv) {
-        this.name = name;
-        this.address = address;
+    public transient volatile NettyRpcEnv rpcEnv;
+
+
+    public NettyRpcEndPointRef(RpcEndpointAddress address, NettyRpcEnv rpcEnv) {
+        this.endpointAddress = address;
         this.rpcEnv = rpcEnv;
     }
 
     @Override
     public String name() {
-        return name;
+        return endpointAddress == null ? null : endpointAddress.name;
     }
 
     @Override
     public RpcAddress address() {
-        return address;
+        return endpointAddress == null ? null : endpointAddress.address;
     }
 
     @Override
@@ -75,5 +66,41 @@ public class NettyRpcEndPointRef extends RpcEndPointRef {
     @Override
     public Object askSync(Object message, long timeout) throws TimeoutException, InterruptedException, ExecutionException {
         return ask(message).get(timeout, TimeUnit.MILLISECONDS);
+    }
+
+    /***************************************自定义序列化***************************************/
+    private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
+        in.defaultReadObject();
+        this.rpcEnv = NettyRpcEnv.currentEnv;
+        this.client = NettyRpcEnv.currentClient;
+    }
+    private void writeObject(ObjectOutputStream out) throws IOException {
+        out.defaultWriteObject();
+    }
+
+
+    @Override
+    public String toString() {
+        return String.format("NettyRpcEndpointRef(%s)", endpointAddress);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+
+        NettyRpcEndPointRef that = (NettyRpcEndPointRef) o;
+
+        return that.endpointAddress.equals(this.endpointAddress);
+    }
+
+    @Override
+    public int hashCode() {
+        return endpointAddress == null ? 0 : endpointAddress.hashCode();
     }
 }

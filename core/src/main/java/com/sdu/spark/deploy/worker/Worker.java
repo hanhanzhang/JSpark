@@ -135,7 +135,7 @@ public class Worker extends RpcEndPoint {
     public void onStart() {
         LOGGER.info("JSpark Worker节点启动: hostPort = {}, JVM = {} RAM", rpcEnv.address().hostPort(),
                 cores, memory);
-        createWorkDir();
+//        createWorkDir();
         startRegisterWithMaster();
     }
 
@@ -212,9 +212,6 @@ public class Worker extends RpcEndPoint {
         if (msg instanceof RegisteredWorker) {
             RegisteredWorker registeredWorker = (RegisteredWorker) msg;
             LOGGER.info("Spark Worker节点成功注册到Spark Master节点: {}", registeredWorker.master.address().toSparkURL());
-            if (registeredWorker.master instanceof NettyRpcEndPointRef) {
-                ((NettyRpcEndPointRef) registeredWorker.master).setRpcEnv((NettyRpcEnv) rpcEnv);
-            }
             register = true;
             master = registeredWorker.master;
             cancelLastRegistrationRetry();

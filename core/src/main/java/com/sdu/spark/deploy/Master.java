@@ -38,7 +38,7 @@ public class Master extends RpcEndPoint {
 
     public static final Logger LOGGER = LoggerFactory.getLogger(Master.class);
 
-    public static final String ENDPOINT_NAME = "JSparkMaster";
+    public static final String ENDPOINT_NAME = "Master";
 
     // RpcEnv
     private RpcEnv rpcEnv;
@@ -121,10 +121,6 @@ public class Master extends RpcEndPoint {
             WorkerHeartbeat heartbeat = (WorkerHeartbeat) msg;
             LOGGER.info("心跳: workerId = {}, hostPort = {}",
                     heartbeat.workerId, heartbeat.worker.address().hostPort());
-            if (heartbeat.worker instanceof NettyRpcEndPointRef) {
-                ((NettyRpcEndPointRef) heartbeat.worker).setRpcEnv((NettyRpcEnv) rpcEnv);
-            }
-
             String workerId = heartbeat.workerId;
             WorkerInfo workerInfo = idToWorker.get(workerId);
             if (workerInfo == null) {
@@ -136,9 +132,6 @@ public class Master extends RpcEndPoint {
             }
         } else if (msg instanceof RegisterWorker) {       // 注册工作节点
             RegisterWorker registerWorker = (RegisterWorker) msg;
-            if (registerWorker.worker instanceof NettyRpcEndPointRef) {
-                ((NettyRpcEndPointRef) registerWorker.worker).setRpcEnv((NettyRpcEnv) rpcEnv);
-            }
             if (idToWorker.containsKey(registerWorker.workerId)) {
                 registerWorker.worker.send(new RegisterWorkerFailed("Duplicate worker ID"));
             } else {
@@ -340,7 +333,6 @@ public class Master extends RpcEndPoint {
     private void startExecutorsOnWorkers() {
         waitingApps.stream().filter(app -> app.coreLeft() > 0).forEach(app -> {
             int coresPerExecutor = app.desc.coresPerExecutor;
-
             /**
              * Spark任务启动Executor
              *

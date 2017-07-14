@@ -70,8 +70,8 @@ public class Dispatcher {
      * 注册Rpc节点,并返回该节点的引用
      * */
     public NettyRpcEndPointRef registerRpcEndPoint(String name, RpcEndPoint endPoint) {
-        RpcAddress address = nettyRpcEnv.address();
-        NettyRpcEndPointRef endPointRef = new NettyRpcEndPointRef(name, address, nettyRpcEnv);
+        RpcEndpointAddress endpointAddress = new RpcEndpointAddress(name, nettyRpcEnv.address());
+        NettyRpcEndPointRef endPointRef = new NettyRpcEndPointRef(endpointAddress, nettyRpcEnv);
         synchronized (this) {
             if (stopped) {
                 throw new IllegalStateException("RpcEnv has stopped");

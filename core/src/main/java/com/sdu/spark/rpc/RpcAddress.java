@@ -1,7 +1,5 @@
 package com.sdu.spark.rpc;
 
-import lombok.AllArgsConstructor;
-
 import java.io.Serializable;
 import java.net.URI;
 
@@ -10,12 +8,16 @@ import java.net.URI;
  *
  * @author hanhan.zhang
  * */
-@AllArgsConstructor
 public class RpcAddress implements Serializable {
 
     public String host;
 
     public int port;
+
+    public RpcAddress(String host, int port) {
+        this.host = host;
+        this.port = port;
+    }
 
     public String hostPort() {
         return host + ":" + port;

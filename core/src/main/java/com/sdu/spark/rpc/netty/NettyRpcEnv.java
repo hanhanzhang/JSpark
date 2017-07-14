@@ -19,7 +19,6 @@ import com.sdu.spark.rpc.netty.OutboxMessage.OneWayOutboxMessage;
 import com.sdu.spark.rpc.netty.OutboxMessage.RpcOutboxMessage;
 import com.sdu.spark.serializer.JavaSerializerInstance;
 import com.sdu.spark.serializer.SerializationStream;
-import com.sdu.spark.utils.ThreadUtils;
 import com.sdu.spark.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,11 +42,14 @@ public class NettyRpcEnv implements RpcEnv {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(NettyRpcEnv.class);
 
+    public static volatile NettyRpcEnv currentEnv;
+    public static volatile TransportClient currentClient;
+
     private String host;
     private SparkConf conf;
 
     /**********************************Spark RpcEnv消息路由************************************/
-    // 发送消息信箱[key = 待接收地址, value = 发送信箱]
+    // 发送消息信箱[key = 接收地址, value = 发送信箱]
     private Map<RpcAddress, Outbox> outboxes = Maps.newConcurrentMap();
     // 接收消息路由
     private Dispatcher dispatcher;
@@ -104,10 +106,11 @@ public class NettyRpcEnv implements RpcEnv {
     public RpcEndPointRef setRpcEndPointRef(String name, RpcAddress rpcAddress) {
         NettyRpcEndPointRef rpcEndPointRef = null;
         try {
-            NettyRpcEndPointRef verifier = new NettyRpcEndPointRef(RpcEndpointVerifier.NAME, rpcAddress, this);
+            RpcEndpointAddress address = new RpcEndpointAddress(RpcEndpointVerifier.NAME, rpcAddress);
+            NettyRpcEndPointRef verifier = new NettyRpcEndPointRef(address, this);
             Future<?> future =  verifier.ask(new CheckExistence(name));
             rpcEndPointRef = Utils.getFutureResult(future);
-            rpcEndPointRef.setRpcEnv(this);
+            rpcEndPointRef.rpcEnv = this;
             return rpcEndPointRef;
         } finally {
             if (rpcEndPointRef != null) {
@@ -126,7 +129,8 @@ public class NettyRpcEnv implements RpcEnv {
     public Future<RpcEndPointRef> asyncSetupEndpointRefByURI(String uri) {
         return null;
     }
-/*******************************Rpc消息发送***********************************/
+
+    /*******************************Rpc消息发送***********************************/
     /**
      * 单向消息[即不需要消息响应]
      * */
@@ -158,8 +162,8 @@ public class NettyRpcEnv implements RpcEnv {
     }
 
     private void postToOutbox(NettyRpcEndPointRef receiver, OutboxMessage message) {
-        if (receiver.getClient() != null) {
-            message.sendWith(receiver.getClient());
+        if (receiver.client != null) {
+            message.sendWith(receiver.client);
         } else {
             if (receiver.address() == null) {
                 throw new IllegalStateException("Cannot send message to client endpoint with no listen address.");
@@ -226,6 +230,8 @@ public class NettyRpcEnv implements RpcEnv {
     }
 
     public <T> T deserialize(TransportClient client, ByteBuffer buf) throws IOException {
+        NettyRpcEnv.currentEnv = this;
+        NettyRpcEnv.currentClient = client;
         return serializerInstance.deserialize(buf);
     }
 

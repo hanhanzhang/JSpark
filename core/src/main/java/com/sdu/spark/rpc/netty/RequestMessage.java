@@ -2,6 +2,7 @@ package com.sdu.spark.rpc.netty;
 
 import com.sdu.spark.network.client.TransportClient;
 import com.sdu.spark.rpc.RpcAddress;
+import com.sdu.spark.rpc.RpcEndpointAddress;
 import com.sdu.spark.serializer.SerializationStream;
 import com.sdu.spark.utils.ByteBufferInputStream;
 import com.sdu.spark.utils.ByteBufferOutputStream;
@@ -89,8 +90,9 @@ public class RequestMessage {
             RpcAddress receiverAddress = readRpcAddress(input);
             String name = input.readUTF();
             // 消息体
-            NettyRpcEndPointRef endPointRef = new NettyRpcEndPointRef(name, receiverAddress, rpcEnv);
-            endPointRef.setClient(client);
+            RpcEndpointAddress endpointAddress = new RpcEndpointAddress(name, receiverAddress);
+            NettyRpcEndPointRef endPointRef = new NettyRpcEndPointRef(endpointAddress, rpcEnv);
+            endPointRef.client = client;
 
             return new RequestMessage(senderAddress, endPointRef, rpcEnv.deserialize(client, buffer));
         } catch (Exception e) {

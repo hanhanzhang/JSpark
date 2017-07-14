@@ -12,22 +12,17 @@ import java.util.concurrent.TimeoutException;
  * */
 public abstract class RpcEndPointRef implements Serializable {
 
+    // 引用RpcEndPoint节点的名称
     public abstract String name();
-
-    /**
-     * 被引用Rpc节点的地址
-     * */
+    // 引用RpcEndPoint节点的网络地址
     public abstract RpcAddress address();
 
-    /**
-     * 发送单向消息[即不需要消息响应]
-     * */
+
+    /*****************************Point-To-Point数据通信*****************************/
+    // 发送单向消息[即不需要消息响应]
     public abstract void send(Object message);
 
-    /**
-     * 发送双向消息[需要消息响应]
-     * */
+    // 发送双向消息[需要消息响应]
     public abstract Future<?> ask(Object message);
-
     public abstract Object askSync(Object message, long timeout) throws TimeoutException, InterruptedException, ExecutionException;
 }
