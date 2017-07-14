@@ -11,6 +11,7 @@ import com.sdu.spark.rpc.SparkConf;
 public class SecurityManager implements SecretKeyHolder {
 
     public static final String ENV_AUTH_SECRET = "_SPARK_AUTH_SECRET";
+    public static final String SPARK_AUTH_SECRET_CONF = "spark.authenticate.secret";
 
     private SparkConf conf;
 

@@ -2,10 +2,7 @@ package com.sdu.spark.executor;
 
 import com.sdu.spark.SecurityManager;
 import com.sdu.spark.SparkEnv;
-import com.sdu.spark.rpc.RpcEndPoint;
-import com.sdu.spark.rpc.RpcEndPointRef;
-import com.sdu.spark.rpc.RpcEnv;
-import com.sdu.spark.rpc.SparkConf;
+import com.sdu.spark.rpc.*;
 import com.sdu.spark.scheduler.TaskDescription;
 import com.sdu.spark.scheduler.TaskState;
 import com.sdu.spark.scheduler.cluster.CoarseGrainedClusterMessage.*;
@@ -17,6 +14,8 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.Collections;
+import java.util.Iterator;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -36,7 +35,7 @@ public class CoarseGrainedExecutorBackend extends RpcEndPoint implements Executo
     private static final Logger LOGGER = LoggerFactory.getLogger(CoarseGrainedExecutorBackend.class);
 
     public RpcEnv rpcEnv;
-    public String driverAddress;
+    public String driverUrl;
     public String executorId;
     public String hostname;
     public int cores;
@@ -47,10 +46,10 @@ public class CoarseGrainedExecutorBackend extends RpcEndPoint implements Executo
     private RpcEndPointRef driver;
     private SerializerInstance ser;
 
-    public CoarseGrainedExecutorBackend(RpcEnv rpcEnv, String driverAddress, String executorId, String hostname,
+    public CoarseGrainedExecutorBackend(RpcEnv rpcEnv, String driverUrl, String executorId, String hostname,
                                         int cores, SparkEnv env) {
         this.rpcEnv = rpcEnv;
-        this.driverAddress = driverAddress;
+        this.driverUrl = driverUrl;
         this.executorId = executorId;
         this.hostname = hostname;
         this.cores = cores;
@@ -65,7 +64,20 @@ public class CoarseGrainedExecutorBackend extends RpcEndPoint implements Executo
 
     @Override
     public void onStart() {
-
+        LOGGER.info("ExecutorBackend(execId = {})尝试连接Driver(address = {})", executorId, driverUrl);
+        driver = this.rpcEnv.setupEndpointRefByURI(driverUrl);
+        if (driver == null) {
+            String reason = String.format("ExecutorBackend(execId = %s)无法连接Driver(address = %s)", executorId, driverUrl);
+            exitExecutor(1, reason, null, false);
+        }
+        LOGGER.info("ExecutorBackend(execId = {})尝试向Driver(address = {})注册Executor", executorId, driver.address());
+        Future<?> future = driver.ask(new RegisterExecutor(executorId, self(), hostname, cores, Collections.emptyMap()));
+        boolean success = getFutureResult(future);
+        if (success) {
+            LOGGER.info("ExecutorBackend(execId = {})向Driver(address = {})注册Executor成功", executorId, driver.address());
+        } else {
+            LOGGER.info("ExecutorBackend(execId = {})向Driver(address = {})注册Executor失败", executorId, driver.address());
+        }
     }
 
     @Override
@@ -149,7 +161,36 @@ public class CoarseGrainedExecutorBackend extends RpcEndPoint implements Executo
         SparkConf conf = new SparkConf();
         RpcEnv rpcEnv = RpcEnv.create(hostname, -1, conf, new SecurityManager(conf), true);
 
-//        RpcEndPointRef driverRef = rpcEnv.setRpcEndPointRef()
+        RpcEndPointRef driverRef = rpcEnv.setupEndpointRefByURI(driverUrl);
+        try {
+            SparkAppConfig cfg = (SparkAppConfig) driverRef.askSync(new RetrieveSparkAppConfig(), Integer.MAX_VALUE);
+            cfg.sparkProperties.put("spark.app.id", appId);
+            rpcEnv.shutdown();
+
+            SparkConf driverConf = new SparkConf();
+            Iterator<String> iterator = cfg.sparkProperties.stringPropertyNames().iterator();
+            while (iterator.hasNext()) {
+                String key = iterator.next();
+                String value = cfg.sparkProperties.getProperty(key);
+                // this is required for SSL in standalone mode
+                if (SparkConf.isExecutorStartupConf(key)) {
+                    driverConf.setIfMissing(key, value);
+                } else {
+                    driverConf.set(key, value);
+                }
+            }
+
+            SparkEnv env = SparkEnv.createExecutorEnv(
+                    driverConf, executorId, hostname, cores, cfg.ioEncryptionKey, false);
+
+            env.rpcEnv.setRpcEndPointRef("Executor", new CoarseGrainedExecutorBackend(env.rpcEnv, driverUrl,
+                                                                                      executorId, hostname,
+                                                                                      cores, env));
+            env.rpcEnv.awaitTermination();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+
     }
 
     public static void main(String[] args) {

@@ -1,14 +1,26 @@
 package com.sdu.spark.scheduler.cluster;
 
+import com.sdu.spark.rpc.RpcEndPointRef;
 import lombok.AllArgsConstructor;
 
 import java.io.Serializable;
 import java.nio.ByteBuffer;
+import java.util.Map;
+import java.util.Properties;
 
 /**
  * @author hanhan.zhang
  * */
 public interface CoarseGrainedClusterMessage extends Serializable {
+
+    @AllArgsConstructor
+    class RegisterExecutor implements CoarseGrainedClusterMessage {
+        public String executorId;
+        public RpcEndPointRef executorRef;
+        public String hostname;
+        public int cores;
+        public Map<String, String> logUrls;
+    }
 
     class RegisteredExecutor implements CoarseGrainedClusterMessage, RegisterExecutorResponse {}
 
@@ -34,6 +46,14 @@ public interface CoarseGrainedClusterMessage extends Serializable {
         public String executorId;
         public boolean interruptThread;
         public String reason;
+    }
+
+    class RetrieveSparkAppConfig implements CoarseGrainedClusterMessage {}
+
+    @AllArgsConstructor
+    class SparkAppConfig implements CoarseGrainedClusterMessage {
+        public Properties sparkProperties;
+        public byte[] ioEncryptionKey;
     }
 
     class StopExecutor implements CoarseGrainedClusterMessage {}

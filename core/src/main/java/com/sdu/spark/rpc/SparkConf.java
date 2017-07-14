@@ -8,6 +8,7 @@ import java.io.Serializable;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
+import static com.sdu.spark.SecurityManager.SPARK_AUTH_SECRET_CONF;
 import static com.sdu.spark.utils.Utils.timeStringAs;
 
 /**
@@ -20,6 +21,11 @@ public class SparkConf implements Serializable {
 
     public void set(String key, String value) {
         settings.put(key, value);
+    }
+
+    public SparkConf setIfMissing(String key, String value) {
+        settings.putIfAbsent(key, value);
+        return this;
     }
 
     public String get(String key, String defaultValue) {
@@ -54,5 +60,17 @@ public class SparkConf implements Serializable {
 
     public String getAppId() {
         return get("spark.app.id");
+    }
+
+    public static boolean isExecutorStartupConf(String name) {
+        return (name.startsWith("spark.auth") && !name.equals(SPARK_AUTH_SECRET_CONF)) ||
+                name.startsWith("spark.ssl") ||
+                name.startsWith("spark.rpc") ||
+                name.startsWith("spark.network") ||
+                isSparkPortConf(name);
+    }
+
+    private static boolean isSparkPortConf(String name) {
+        return (name.startsWith("spark.") && name.endsWith(".port")) || name.startsWith("spark.port.");
     }
 }

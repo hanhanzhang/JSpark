@@ -32,7 +32,6 @@ import static com.sdu.spark.deploy.worker.CommandUtils.redirectStream;
  *           --cores    8
  *           --appId
  *
- *
  * @author hanhan.zhang
  * */
 public class ExecutorRunner {
