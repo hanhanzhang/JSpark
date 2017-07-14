@@ -229,7 +229,7 @@ public class Worker extends RpcEndPoint {
     private void launchDriver(LaunchDriver launchDriver) {
         LOGGER.info("工作节点启动Driver(driverId = {})进程", launchDriver.driverId);
         DriverRunner runner = new DriverRunner(conf, launchDriver.driverId, workerDir, sparkHome,
-                launchDriver.desc, self(), null);
+                                               launchDriver.desc, self(), null);
         drivers.put(launchDriver.driverId, runner);
         runner.start();
         coresUsed += launchDriver.desc.cores;

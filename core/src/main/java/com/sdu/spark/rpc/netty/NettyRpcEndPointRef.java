@@ -24,6 +24,10 @@ import java.util.concurrent.TimeoutException;
  *
  *      2': 接收方地址 = {@link NettyRpcEndPointRef#address}
  *
+ *  todo:
+ *      {@link #readObject(ObjectInputStream)}
+ *      {@link #writeObject(ObjectOutputStream)}
+ *
  * @author hanhan.zhang
  * */
 public class NettyRpcEndPointRef extends RpcEndPointRef {
