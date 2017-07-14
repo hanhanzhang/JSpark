@@ -26,6 +26,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Future;
@@ -240,8 +241,36 @@ public class NettyRpcEnv implements RpcEnv {
 
     @Override
     public void shutdown() {
+        try {
+            if (!stopped.compareAndSet(false, true)) {
+                return;
+            }
+
+            Iterator<Outbox> iterator = outboxes.values().iterator();
+            while (iterator.hasNext()) {
+                Outbox outbox = iterator.next();
+                outboxes.remove(outbox.address);
+                outbox.stop();
+            }
+
+            if (dispatcher != null) {
+                dispatcher.stop();
+            }
+            if (server != null) {
+                server.close();
+            }
+            if (clientFactory != null) {
+                clientFactory.close();
+            }
+            if (clientConnectionExecutor != null) {
+                clientConnectionExecutor.shutdownNow();
+            }
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
 
     }
+
 
     private TransportConf fromSparkConf(SparkConf conf) {
         return new TransportConf(IOModel.NIO.name(), Collections.emptyMap());

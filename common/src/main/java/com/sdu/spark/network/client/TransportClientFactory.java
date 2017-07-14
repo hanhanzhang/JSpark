@@ -3,6 +3,7 @@ package com.sdu.spark.network.client;
 import com.sdu.spark.network.TransportContext;
 import com.sdu.spark.network.server.TransportChannelHandler;
 import com.sdu.spark.network.utils.IOModel;
+import com.sdu.spark.network.utils.JavaUtils;
 import com.sdu.spark.network.utils.NettyUtils;
 import com.sdu.spark.network.utils.TransportConf;
 import io.netty.bootstrap.Bootstrap;
@@ -12,6 +13,7 @@ import io.netty.channel.socket.SocketChannel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
@@ -23,7 +25,7 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * @author hanhan.zhang
  * */
-public class TransportClientFactory {
+public class TransportClientFactory implements Closeable {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(TransportClientFactory.class);
 
@@ -45,6 +47,8 @@ public class TransportClientFactory {
      * */
     private EventLoopGroup workerGroup;
     private final Class<? extends Channel> socketChannelClass;
+
+
 
     /**
      * 客户端连接池
@@ -177,5 +181,24 @@ public class TransportClientFactory {
                 address, (postBootstrap - preConnect) / 1000000, (postBootstrap - preBootstrap) / 1000000);
 
         return client;
+    }
+
+    @Override
+    public void close() throws IOException {
+        for (ClientPool clientPool : connectionPool.values()) {
+            for (int i = 0; i < clientPool.clients.length; i++) {
+                TransportClient client = clientPool.clients[i];
+                if (client != null) {
+                    clientPool.clients[i] = null;
+                    JavaUtils.closeQuietly(client);
+                }
+            }
+        }
+        connectionPool.clear();
+
+        if (workerGroup != null) {
+            workerGroup.shutdownGracefully();
+            workerGroup = null;
+        }
     }
 }

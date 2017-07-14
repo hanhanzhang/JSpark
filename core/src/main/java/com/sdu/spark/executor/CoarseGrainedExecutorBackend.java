@@ -2,13 +2,16 @@ package com.sdu.spark.executor;
 
 import com.sdu.spark.SecurityManager;
 import com.sdu.spark.SparkEnv;
+import com.sdu.spark.deploy.worker.WorkerWatcher;
 import com.sdu.spark.rpc.*;
 import com.sdu.spark.scheduler.TaskDescription;
 import com.sdu.spark.scheduler.TaskState;
 import com.sdu.spark.scheduler.cluster.CoarseGrainedClusterMessage.*;
 import com.sdu.spark.scheduler.cluster.CoarseGrainedClusterMessage.Shutdown;
 import com.sdu.spark.serializer.SerializerInstance;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.math.NumberUtils;
+import org.apache.logging.log4j.util.Strings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -156,7 +159,7 @@ public class CoarseGrainedExecutorBackend extends RpcEndPoint implements Executo
         System.exit(code);
     }
 
-    private static void run(String driverUrl, String executorId, String hostname, int cores, String appId) {
+    private static void run(String driverUrl, String executorId, String hostname, int cores, String appId, String workerUrl) {
         // create RpcEnv
         SparkConf conf = new SparkConf();
         RpcEnv rpcEnv = RpcEnv.create(hostname, -1, conf, new SecurityManager(conf), true);
@@ -186,6 +189,10 @@ public class CoarseGrainedExecutorBackend extends RpcEndPoint implements Executo
             env.rpcEnv.setRpcEndPointRef("Executor", new CoarseGrainedExecutorBackend(env.rpcEnv, driverUrl,
                                                                                       executorId, hostname,
                                                                                       cores, env));
+            if (StringUtils.isNotEmpty(workerUrl)) {
+                env.rpcEnv.setRpcEndPointRef("WorkerWatcher", new WorkerWatcher(env.rpcEnv, workerUrl));
+            }
+
             env.rpcEnv.awaitTermination();
         } catch (Exception e) {
             throw new RuntimeException(e);
@@ -194,7 +201,7 @@ public class CoarseGrainedExecutorBackend extends RpcEndPoint implements Executo
     }
 
     public static void main(String[] args) {
-        String driverUrl = null, executorId = null, hostname = null, appId = null;
+        String driverUrl = null, executorId = null, hostname = null, appId = null, workerUrl = null;
         int cores = 0;
         if (args != null && args.length > 0) {
             for (String arg : args) {
@@ -215,10 +222,13 @@ public class CoarseGrainedExecutorBackend extends RpcEndPoint implements Executo
                     case "--appId":
                         appId = p[1];
                         break;
+                    case "--worker-url":
+                        workerUrl = p[1];
+                        break;
                 }
             }
 
-            run(driverUrl, executorId, hostname, cores, appId);
+            run(driverUrl, executorId, hostname, cores, appId, workerUrl);
         }
     }
 }

@@ -9,10 +9,14 @@ import org.slf4j.LoggerFactory;
 import java.io.*;
 import java.lang.management.GarbageCollectorMXBean;
 import java.lang.management.ManagementFactory;
+import java.net.InetAddress;
+import java.net.NetworkInterface;
 import java.net.URI;
+import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.Arrays;
+import java.util.Enumeration;
 import java.util.List;
 import java.util.Locale;
 import java.util.concurrent.ExecutionException;
@@ -186,5 +190,30 @@ public class Utils {
                                     .map(GarbageCollectorMXBean::getCollectionTime).count();
     }
 
+    public static Class<?> classForName(String className){
+        try {
+            return Class.forName(className, true, Thread.currentThread().getContextClassLoader());
+        } catch (ClassNotFoundException e) {
+            throw new RuntimeException(e);
+        }
+
+    }
+
+    public static String localHostName() {
+        try {
+            return findLocalInetAddress().getHostAddress();
+        } catch (Exception e) {
+            return "localhost";
+        }
+    }
+
+    private static InetAddress findLocalInetAddress() throws Exception {
+        String defaultIpOverride = System.getenv("SPARK_LOCAL_IP");
+        if (defaultIpOverride != null) {
+            return InetAddress.getByName(defaultIpOverride);
+        } else {
+           return InetAddress.getLocalHost();
+        }
+    }
 
 }

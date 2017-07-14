@@ -19,7 +19,7 @@ public class Outbox {
     /**
      * 远端服务地址
      * */
-    private RpcAddress address;
+    public RpcAddress address;
 
     /**
      * 远端服务客户端
