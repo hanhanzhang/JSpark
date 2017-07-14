@@ -39,46 +39,36 @@ import static com.sdu.spark.utils.ThreadUtils.newDaemonCachedThreadPool;
 /**
  * @author hanhan.zhang
  * */
-public class NettyRpcEnv extends RpcEnv {
+public class NettyRpcEnv implements RpcEnv {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(NettyRpcEnv.class);
 
     private String host;
-
     private SparkConf conf;
-    /**
-     * Spark权限管理模块
-     * */
-    private SecurityManager securityManager;
-    /**
-     * Spark网络序列化实例
-     * */
-    private JavaSerializerInstance serializerInstance;
-    /**
-     * RpcEnv Server端, 负责网络数据传输
-     * */
-    private TransportServer server;
-    /**
-     * 消息路由分发
-     * */
-    private Dispatcher dispatcher;
-    /**
-     * 消息发送信箱[key = 待接收地址, value = 发送信箱]
-     * */
+
+    /**********************************Spark RpcEnv消息路由************************************/
+    // 发送消息信箱[key = 待接收地址, value = 发送信箱]
     private Map<RpcAddress, Outbox> outboxes = Maps.newConcurrentMap();
-    /**
-     * 远端服务连接线程
-     * */
-    private ThreadPoolExecutor clientConnectionExecutor;
-    /**
-     * 投递消息线程
-     * */
+    // 接收消息路由
+    private Dispatcher dispatcher;
+    // 消息分发线程
     private ThreadPoolExecutor deliverMessageExecutor;
-    /**
-     * Netty通信上下文
-     * */
+
+
+    /**********************************Spark RpcEnv数据传输******************************/
+    // Spark权限管理模块
+    private SecurityManager securityManager;
+    // 数据序列化
+    private JavaSerializerInstance serializerInstance;
+    // RpcEnv网络数据监听
+    private TransportServer server;
+    // 网络数据通信
     private TransportContext transportContext;
+    // 客户端连接
     private TransportClientFactory clientFactory;
+    private ThreadPoolExecutor clientConnectionExecutor;
+
+
 
     private AtomicBoolean stopped = new AtomicBoolean(false);
 
@@ -100,8 +90,6 @@ public class NettyRpcEnv extends RpcEnv {
         return server != null ? new RpcAddress(host, server.getPort()) : null;
     }
 
-
-    /****************************RpcEndPoint节点注册****************************/
     @Override
     public RpcEndPointRef endPointRef(RpcEndPoint endPoint) {
         return dispatcher.getRpcEndPointRef(endPoint);
@@ -131,6 +119,11 @@ public class NettyRpcEnv extends RpcEnv {
 
     @Override
     public RpcEndPointRef setupEndpointRefByURI(String uri) {
+        return null;
+    }
+
+    @Override
+    public Future<RpcEndPointRef> asyncSetupEndpointRefByURI(String uri) {
         return null;
     }
 /*******************************Rpc消息发送***********************************/
