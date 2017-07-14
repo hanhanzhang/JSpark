@@ -7,8 +7,6 @@ import com.sdu.spark.SecurityManager;
 import com.sdu.spark.deploy.DeployMessage.*;
 import com.sdu.spark.deploy.MasterMessage.*;
 import com.sdu.spark.rpc.*;
-import com.sdu.spark.rpc.netty.NettyRpcEndPointRef;
-import com.sdu.spark.rpc.netty.NettyRpcEnv;
 import com.sdu.spark.utils.ThreadUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

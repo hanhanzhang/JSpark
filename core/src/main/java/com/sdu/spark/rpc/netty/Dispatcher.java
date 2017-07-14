@@ -25,27 +25,19 @@ public class Dispatcher {
 
     private NettyRpcEnv nettyRpcEnv;
 
-    /**
-     * key = Rpc节点名, value = Rpc节点
-     * */
+    /*****************************Spark Point-To-Point映射*******************************/
+    // key = RpcEndPoint Name, value = EndPointData
     private Map<String, EndPointData> endPoints = Maps.newConcurrentMap();
-
-    /**
-     * key = Rpc节点, value = Rpc节点引用
-     * */
+    // key = RpcEndPoint, value = RpcEndPointRef
     private Map<RpcEndPoint, RpcEndPointRef> endPointRefs = Maps.newConcurrentMap();
 
-    /**
-     *
-     * */
+    //
     private LinkedBlockingQueue<EndPointData> receivers = new LinkedBlockingQueue<>();
 
 
     private Boolean stopped = false;
 
-    /**
-     * 消息分发工作线程
-     * */
+    // 消息分发工作线程
     private ThreadPoolExecutor pool;
 
     private static final int DEFAULT_DISPATCHER_THREADS = 5;
@@ -57,18 +49,17 @@ public class Dispatcher {
         if (threads <= 0) {
             threads = DEFAULT_DISPATCHER_THREADS;
         }
+
         pool = ThreadUtils.newDaemonCachedThreadPool("dispatcher-event-loop-%d", threads, 60);
-        /**
-         * 启动消息处理任务
-         * */
+        // 启动消息处理任务
         for (int i = 0; i < threads; ++i) {
             pool.execute(new MessageLoop());
         }
     }
 
-    /**
-     * 注册Rpc节点,并返回该节点的引用
-     * */
+
+    /*********************************Spark Point-To-Point映射管理************************************/
+    // RpcEndPoint节点注册, 并返回RpcEndPoint节点的引用
     public NettyRpcEndPointRef registerRpcEndPoint(String name, RpcEndPoint endPoint) {
         RpcEndpointAddress endpointAddress = new RpcEndpointAddress(name, nettyRpcEnv.address());
         NettyRpcEndPointRef endPointRef = new NettyRpcEndPointRef(endpointAddress, nettyRpcEnv);
@@ -94,9 +85,6 @@ public class Dispatcher {
         }
     }
 
-    /**
-     * 验证是否存在{@param name}的RpcEndPoint
-     * */
     public RpcEndPointRef verify(String name) {
         EndPointData endPointData = endPoints.get(name);
         if (endPointData == null) {
@@ -105,9 +93,6 @@ public class Dispatcher {
         return endPointData.endPointRef;
     }
 
-    /**
-     * 返回Rpc节点的引用
-     * */
     public RpcEndPointRef getRpcEndPointRef(RpcEndPoint endPoint) {
         return endPointRefs.get(endPoint);
     }
@@ -116,9 +101,8 @@ public class Dispatcher {
         endPointRefs.remove(endPoint);
     }
 
-    /**
-     * 本地消息
-     * */
+    /******************************Spark Message路由*******************************/
+    // 本地消息
     public Object postLocalMessage(RequestMessage req) throws ExecutionException, InterruptedException {
         NettyLocalResponseCallback<Object> callback = new NettyLocalResponseCallback<>();
 
@@ -128,23 +112,24 @@ public class Dispatcher {
 
         return callback.getResponse();
     }
-
-    /**
-     * 向RpcEndPoint投递单向消息[即不需要响应]
-     * */
+    // 网络消息[单向]
     public void postOneWayMessage(RequestMessage req) {
         OneWayMessage oneWayMessage = new OneWayMessage(req.senderAddress, req.content);
         postMessage(req.receiver.name(), oneWayMessage, null);
     }
-
-    /**
-     * 向RpcEndPoint投递双向消息[即需要响应]
-     * */
+    // 网络消息[双向]
     public void postRemoteMessage(RequestMessage req, RpcResponseCallback callback) {
-        RemoteNettyRpcCallContext callContext = new RemoteNettyRpcCallContext(req.senderAddress,
-                nettyRpcEnv, callback);
+        RemoteNettyRpcCallContext callContext = new RemoteNettyRpcCallContext(req.senderAddress, nettyRpcEnv, callback);
         RpcMessage rpcMessage = new RpcMessage(req.senderAddress, req.content, callContext);
         postMessage(req.receiver.name(), rpcMessage, callback);
+    }
+    // 广播消息
+    public void postToAll(IndexMessage message) {
+        Iterator<String> it = endPoints.keySet().iterator();
+        while (it.hasNext()) {
+            String pointName = it.next();
+            postMessage(pointName, message, null);
+        }
     }
 
     private void postMessage(String endPointName, IndexMessage message, RpcResponseCallback callback) {
@@ -159,17 +144,6 @@ public class Dispatcher {
             }
             data.index.post(message);
             receivers.offer(data);
-        }
-    }
-
-    /**
-     * 广播消息
-     * */
-    public void postToAll(IndexMessage message) {
-        Iterator<String> it = endPoints.keySet().iterator();
-        while (it.hasNext()) {
-            String pointName = it.next();
-            postMessage(pointName, message, null);
         }
     }
 
@@ -190,13 +164,12 @@ public class Dispatcher {
         pool.shutdown();
     }
 
-    @Getter
     private class EndPointData {
-        private String name;
-        private RpcEndPoint endPoint;
-        private RpcEndPointRef endPointRef;
-
-        private Index index;
+        String name;
+        RpcEndPoint endPoint;
+        RpcEndPointRef endPointRef;
+        // RpcEndPoint与RpcEndPointRef间的消息收件箱
+        Index index;
 
         EndPointData(String name, RpcEndPoint endPoint, RpcEndPointRef endPointRef) {
             this.name = name;
@@ -206,9 +179,6 @@ public class Dispatcher {
         }
     }
 
-    /**
-     * 消息任务
-     * */
     private class MessageLoop implements Runnable {
         @Override
         public void run() {

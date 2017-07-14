@@ -21,7 +21,6 @@ public interface RpcEnv {
     RpcEndPointRef setRpcEndPointRef(String name, RpcEndPoint endPoint);
     RpcEndPointRef setRpcEndPointRef(String name, RpcAddress rpcAddress);
     RpcEndPointRef setupEndpointRefByURI(String uri);
-    Future<RpcEndPointRef> asyncSetupEndpointRefByURI(String uri);
 
     // RpcEndPoint关闭
     void stop(RpcEndPoint endPoint);
