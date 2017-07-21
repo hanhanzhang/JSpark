@@ -97,7 +97,7 @@ public class CoarseGrainedExecutorBackend extends RpcEndPoint implements Executo
             } else {
                 LaunchTask task = (LaunchTask) msg;
                 try {
-                    TaskDescription taskDesc = TaskDescription.decode(task.taskData);
+                    TaskDescription taskDesc = TaskDescription.decode(task.taskData.buffer);
                     executor.launchTask(this, taskDesc);
                 } catch (IOException e) {
                     LOGGER.error("序列化Spark任务异常", e);

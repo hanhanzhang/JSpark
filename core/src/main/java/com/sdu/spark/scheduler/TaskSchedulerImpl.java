@@ -1,8 +1,13 @@
 package com.sdu.spark.scheduler;
 
+import com.google.common.collect.Maps;
 import com.sdu.spark.SparkContext;
 import com.sdu.spark.rpc.SparkConf;
 import com.sdu.spark.scheduler.SchedulableBuilder.*;
+
+import java.nio.ByteBuffer;
+import java.util.List;
+import java.util.Map;
 
 /**
  * @author hanhan.zhang
@@ -14,6 +19,7 @@ public class TaskSchedulerImpl implements TaskScheduler {
 
     public SparkContext sc;
     private SparkConf conf;
+    public int CPUS_PER_TASK;
     private int maxTaskFailures;
     private boolean isLocal;
 
@@ -23,6 +29,8 @@ public class TaskSchedulerImpl implements TaskScheduler {
     private SchedulableBuilder schedulableBuilder;
     private Pool rootPool;
 
+    public Map<Long, TaskSetManager> taskIdToTaskSetManager = Maps.newHashMap();
+
     public TaskSchedulerImpl(SparkContext sc, int maxTaskFailures) {
         this(sc, maxTaskFailures, false);
     }
@@ -30,6 +38,7 @@ public class TaskSchedulerImpl implements TaskScheduler {
     public TaskSchedulerImpl(SparkContext sc, int maxTaskFailures, boolean isLocal) {
         this.sc = sc;
         this.conf = this.sc.conf;
+        this.CPUS_PER_TASK = this.conf.getInt("spark.task.cpus", 1);
         this.maxTaskFailures = maxTaskFailures;
         this.isLocal = isLocal;
 
@@ -56,5 +65,15 @@ public class TaskSchedulerImpl implements TaskScheduler {
     @Override
     public void start() {
         this.backend.start();
+    }
+
+    /*****************************Spark Job Task运行状态变更******************************/
+    public void statusUpdate(long taskId, TaskState state, ByteBuffer value) {
+
+    }
+
+    /******************************Spark Job Task分发***********************************/
+    public List<TaskDescription> resourceOffers(List<WorkerOffer> offers) {
+        throw new UnsupportedOperationException("");
     }
 }

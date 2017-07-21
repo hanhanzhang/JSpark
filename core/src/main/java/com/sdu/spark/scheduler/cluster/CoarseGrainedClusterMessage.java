@@ -1,6 +1,8 @@
 package com.sdu.spark.scheduler.cluster;
 
 import com.sdu.spark.rpc.RpcEndPointRef;
+import com.sdu.spark.scheduler.TaskState;
+import com.sdu.spark.utils.SerializableBuffer;
 import lombok.AllArgsConstructor;
 
 import java.io.Serializable;
@@ -37,7 +39,7 @@ public interface CoarseGrainedClusterMessage extends Serializable {
 
     @AllArgsConstructor
     class LaunchTask implements CoarseGrainedClusterMessage {
-        public ByteBuffer taskData;
+        public SerializableBuffer taskData;
     }
 
     @AllArgsConstructor
@@ -59,4 +61,20 @@ public interface CoarseGrainedClusterMessage extends Serializable {
     class StopExecutor implements CoarseGrainedClusterMessage {}
 
     class Shutdown implements CoarseGrainedClusterMessage {}
+
+    class ReviveOffers implements CoarseGrainedClusterMessage {}
+
+    class StatusUpdate implements CoarseGrainedClusterMessage {
+        public String executorId;
+        public long taskId;
+        public TaskState state;
+        public SerializableBuffer data;
+
+        public StatusUpdate(String executorId, long taskId, TaskState state, ByteBuffer data) {
+            this.executorId = executorId;
+            this.taskId = taskId;
+            this.state = state;
+            this.data = new SerializableBuffer(data);
+        }
+    }
 }

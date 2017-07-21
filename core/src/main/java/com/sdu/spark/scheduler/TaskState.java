@@ -17,7 +17,7 @@ public enum TaskState {
         return state == LOST || state == FAILED;
     }
 
-    public boolean isFinished(TaskState state) {
+    public static boolean isFinished(TaskState state) {
         return FINISHED_STATES.contains(state);
     }
 
