@@ -1,6 +1,5 @@
 package com.sdu.spark.storage;
 
-import java.util.Collections;
 import java.util.List;
 
 /**
@@ -9,7 +8,7 @@ import java.util.List;
 public class BlockInfoManager {
 
     public List<BlockId> releaseAllLocksForTask(long taskId) {
-        return Collections.emptyList();
+        throw new UnsupportedOperationException("");
     }
 
 }

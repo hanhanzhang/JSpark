@@ -13,6 +13,10 @@ public class BlockManager {
 
     private BlockInfoManager blockInfoManager = new BlockInfoManager();
 
+    public BlockManagerMaster master;
+
+
+
     public void initialize(String appId) {
 
     }

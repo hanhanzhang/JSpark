@@ -1,6 +1,7 @@
 package com.sdu.spark;
 
 import com.google.common.collect.Maps;
+import com.sdu.spark.rpc.SparkConf;
 import com.sdu.spark.scheduler.MapStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,6 +17,11 @@ public class MapOutputTrackerWorker extends MapOutputTracker {
     private static final Logger LOGGER = LoggerFactory.getLogger(MapOutputTrackerWorker.class);
 
     private Map<Integer, List<MapStatus>> mapStatuses = Maps.newConcurrentMap();
+
+    public MapOutputTrackerWorker(SparkConf conf, Map<Integer, List<MapStatus>> mapStatuses) {
+        super(conf);
+        this.mapStatuses = mapStatuses;
+    }
 
     public void updateEpoch(long newEpoch) {
         synchronized (epochLock) {

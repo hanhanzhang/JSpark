@@ -7,6 +7,10 @@ import com.sdu.spark.serializer.Serializer;
 import com.sdu.spark.storage.BlockManager;
 import com.sdu.spark.rpc.RpcEnv;
 import com.sdu.spark.rpc.SparkConf;
+import org.apache.commons.lang3.BooleanUtils;
+import org.apache.commons.lang3.math.NumberUtils;
+
+import static com.sdu.spark.security.CryptoStreamUtils.createKey;
 
 /**
  * @author hanhan.zhang
@@ -35,6 +39,34 @@ public class SparkEnv {
 
     public void stop() {
 
+    }
+
+    public static SparkEnv createDriverEnv(SparkConf conf,
+                                           boolean isLocal,
+                                           LiveListenerBus listenerBus,
+                                           int numCores,
+                                           OutputCommitCoordinator mockOutputCommitCoordinator) {
+        assert conf.contains("spark.driver.host") : "Spark Driver host is not set !";
+        String bindAddress = conf.get("spark.driver.bindAddress");
+        String advertiseAddress = conf.get("spark.driver.host");
+        int port = NumberUtils.toInt(conf.get("spark.driver.port"));
+        byte[] ioEncryptionKey = null;
+        boolean isEncryption = BooleanUtils.toBoolean(conf.get("spark.io.encryption.enabled"));
+        if (isEncryption) {
+            ioEncryptionKey = createKey(conf);
+        }
+
+        return create(
+                conf,
+                "driver",
+                bindAddress,
+                advertiseAddress,
+                port,
+                isLocal,
+                numCores,
+                ioEncryptionKey,
+                listenerBus,
+                mockOutputCommitCoordinator);
     }
 
     public static SparkEnv createExecutorEnv(SparkConf conf,

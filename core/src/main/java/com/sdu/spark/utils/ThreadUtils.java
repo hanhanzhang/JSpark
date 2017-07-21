@@ -9,7 +9,7 @@ import java.util.concurrent.*;
  * */
 public class ThreadUtils {
 
-    private static ThreadFactory namedThreadFactory(String prefix, boolean daemon) {
+    public static ThreadFactory namedThreadFactory(String prefix, boolean daemon) {
         return new ThreadFactoryBuilder().setDaemon(daemon).setNameFormat(prefix).build();
     }
 

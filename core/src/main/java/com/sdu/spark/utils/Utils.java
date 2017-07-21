@@ -1,6 +1,7 @@
 package com.sdu.spark.utils;
 
 import com.google.common.collect.ImmutableMap;
+import com.sdu.spark.rpc.SparkConf;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.SystemUtils;
 import org.slf4j.Logger;
@@ -9,6 +10,10 @@ import org.slf4j.LoggerFactory;
 import java.io.*;
 import java.lang.management.GarbageCollectorMXBean;
 import java.lang.management.ManagementFactory;
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.math.MathContext;
+import java.math.RoundingMode;
 import java.net.InetAddress;
 import java.net.NetworkInterface;
 import java.net.URI;
@@ -199,6 +204,11 @@ public class Utils {
 
     }
 
+    public static boolean isLocalMaster(SparkConf conf) {
+        String master = conf.get("spark.master", "");
+        return master.equals("local") || master.startsWith("local[");
+    }
+
     public static String localHostName() {
         try {
             return findLocalInetAddress().getHostAddress();
@@ -215,5 +225,46 @@ public class Utils {
            return InetAddress.getLocalHost();
         }
     }
+
+    public static String bytesToString(long size) {
+        return bytesToString(BigInteger.valueOf(size));
+    }
+
+    private static String bytesToString(BigInteger size) {
+        long EB = 1L << 60;
+        long PB = 1L << 50;
+        long TB = 1L << 40;
+        long GB = 1L << 30;
+        long MB = 1L << 20;
+        long KB = 1L << 10;
+
+        if (size.compareTo(BigInteger.valueOf(1L << 11 * EB)) > 0) {
+            // The number is too large, show it in scientific notation.
+            return new BigDecimal(size, new MathContext(3, RoundingMode.HALF_UP)).toString() + " B";
+        } else {
+            if (size.compareTo(BigInteger.valueOf(2 * EB)) > 0) {
+                String value = new BigDecimal(size).divide(new BigDecimal(EB), 1, RoundingMode.HALF_UP).toString();
+                return String.format("%s.1f %s", value, "EB");
+            } else if (size.compareTo(BigInteger.valueOf(2 * PB)) > 0) {
+                String value = new BigDecimal(size).divide(new BigDecimal(PB), 1, RoundingMode.HALF_UP).toString();
+                return String.format("%s.1f %s", value, "PB");
+            } else if (size.compareTo(BigInteger.valueOf(2 * TB)) > 0) {
+                String value = new BigDecimal(size).divide(new BigDecimal(TB), 1, RoundingMode.HALF_UP).toString();
+                return String.format("%s.1f %s", value, "TB");
+            } else if (size.compareTo(BigInteger.valueOf(2 * GB)) > 0) {
+                String value = new BigDecimal(size).divide(new BigDecimal(GB), 1, RoundingMode.HALF_UP).toString();
+                return String.format("%s.1f %s", value, "GB");
+            } else if (size.compareTo(BigInteger.valueOf(2 * MB)) > 0) {
+                String value = new BigDecimal(size).divide(new BigDecimal(MB), 1, RoundingMode.HALF_UP).toString();
+                return String.format("%s.1f %s", value, "MB");
+            } else if (size.compareTo(BigInteger.valueOf(2 * KB)) > 0) {
+                String value = new BigDecimal(size).divide(new BigDecimal(KB), 1, RoundingMode.HALF_UP).toString();
+                return String.format("%s.1f %s", value, "KB");
+            } else {
+                return String.format("%s.1f %s", size.toString(), "B");
+            }
+        }
+    }
+
 
 }

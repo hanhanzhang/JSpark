@@ -133,7 +133,7 @@ public class Worker extends RpcEndPoint {
 
     @Override
     public void onStart() {
-        LOGGER.info("JSpark Worker节点启动: hostPort = {}, JVM = {} RAM", rpcEnv.address().hostPort(),
+        LOGGER.info("Spark Worker节点启动: hostPort = {}, JVM = {} RAM", rpcEnv.address().hostPort(),
                 cores, memory);
 //        createWorkDir();
         startRegisterWithMaster();

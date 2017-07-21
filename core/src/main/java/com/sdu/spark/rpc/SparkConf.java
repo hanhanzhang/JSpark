@@ -36,6 +36,10 @@ public class SparkConf implements Serializable {
         return settings.get(key);
     }
 
+    public boolean contains(String key) {
+        return settings.containsKey(key);
+    }
+
     public long getLong(String key, long defaultValue) {
         String value = settings.get(key);
         return NumberUtils.toLong(value, defaultValue);
