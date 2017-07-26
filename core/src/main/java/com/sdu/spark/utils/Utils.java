@@ -1,6 +1,7 @@
 package com.sdu.spark.utils;
 
 import com.google.common.collect.ImmutableMap;
+import com.sdu.spark.rpc.RpcCallContext;
 import com.sdu.spark.rpc.SparkConf;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.SystemUtils;
@@ -65,6 +66,15 @@ public class Utils {
         }
     }
 
+    public static void getFutureResult(Future<?> future, RpcCallContext context) {
+        Object response;
+        try {
+            response = future.get();
+            context.reply(response);
+        } catch (Exception e) {
+           context.sendFailure(e);
+        }
+    }
 
     public static int convertStringToInt(String text) {
         return Integer.parseInt(text);

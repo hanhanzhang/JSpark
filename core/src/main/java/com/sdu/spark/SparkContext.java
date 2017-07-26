@@ -32,7 +32,7 @@ public class SparkContext {
     public SparkConf conf;
     public SparkEnv env;
     public LiveListenerBus listenerBus;
-    private SchedulerBackend schedulerBackend;
+    public SchedulerBackend schedulerBackend;
     public TaskScheduler taskScheduler;
     private DAGScheduler dagScheduler;
     private RpcEndPointRef heartbeatReceiver;

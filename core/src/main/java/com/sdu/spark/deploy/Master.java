@@ -38,8 +38,6 @@ public class Master extends RpcEndPoint {
 
     public static final String ENDPOINT_NAME = "Master";
 
-    // RpcEnv
-    private RpcEnv rpcEnv;
     /**
      * RpcMaster配置
      * */
@@ -84,16 +82,11 @@ public class Master extends RpcEndPoint {
 
 
     public Master(SparkConf conf, RpcEnv rpcEnv, RpcAddress address) {
+        super(rpcEnv);
         this.conf = conf;
-        this.rpcEnv = rpcEnv;
         this.address = address;
         WORKER_TIMEOUT_MS = conf.getLong("spark.worker.timeout", 60) * 1000L;
         REAPER_ITERATIONS = conf.getInt("spark.dead.worker.persistence", 15);
-    }
-
-    @Override
-    public RpcEndPointRef self() {
-        return rpcEnv.endPointRef(this);
     }
 
     @Override

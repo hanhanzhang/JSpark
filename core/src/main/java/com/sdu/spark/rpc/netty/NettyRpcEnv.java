@@ -235,8 +235,9 @@ public class NettyRpcEnv implements RpcEnv {
     }
 
     @Override
-    public void stop(RpcEndPoint endPoint) {
-
+    public void stop(RpcEndPointRef endPoint) {
+        assert endPoint instanceof NettyRpcEndPointRef;
+        dispatcher.stop(endPoint);
     }
 
     @Override

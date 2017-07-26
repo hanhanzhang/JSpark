@@ -15,7 +15,6 @@ public class WorkerWatcher extends RpcEndPoint {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(WorkerWatcher.class);
 
-    private RpcEnv rpcEnv;
     private String workerUrl;
     private boolean isTesting;
 
@@ -33,16 +32,11 @@ public class WorkerWatcher extends RpcEndPoint {
     }
 
     public WorkerWatcher(RpcEnv rpcEnv, String workerUrl, boolean isTesting) {
-        this.rpcEnv = rpcEnv;
+        super(rpcEnv);
         this.workerUrl = workerUrl;
         this.isTesting = isTesting;
 
         this.expectedAddress = RpcAddress.fromURI(this.workerUrl);
-    }
-
-    @Override
-    public RpcEndPointRef self() {
-        return rpcEnv.endPointRef(this);
     }
 
     @Override

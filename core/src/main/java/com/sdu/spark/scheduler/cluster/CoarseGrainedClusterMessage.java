@@ -50,6 +50,11 @@ public interface CoarseGrainedClusterMessage extends Serializable {
         public String reason;
     }
 
+    @AllArgsConstructor
+    class KillExecutorsOnHost implements CoarseGrainedClusterMessage {
+        public String host;
+    }
+
     class RetrieveSparkAppConfig implements CoarseGrainedClusterMessage {}
 
     @AllArgsConstructor
@@ -60,9 +65,20 @@ public interface CoarseGrainedClusterMessage extends Serializable {
 
     class StopExecutor implements CoarseGrainedClusterMessage {}
 
+    class StopExecutors implements CoarseGrainedClusterMessage {}
+
     class Shutdown implements CoarseGrainedClusterMessage {}
 
     class ReviveOffers implements CoarseGrainedClusterMessage {}
+
+    class StopDriver implements CoarseGrainedClusterMessage {}
+
+    @AllArgsConstructor
+    class RemoveWorker implements CoarseGrainedClusterMessage {
+        public String workerId;
+        public String host;
+        public String message;
+    }
 
     class StatusUpdate implements CoarseGrainedClusterMessage {
         public String executorId;

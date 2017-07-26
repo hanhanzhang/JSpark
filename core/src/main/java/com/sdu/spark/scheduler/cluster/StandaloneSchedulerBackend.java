@@ -1,15 +1,32 @@
-package com.sdu.spark.scheduler;
+package com.sdu.spark.scheduler.cluster;
 
+import com.sdu.spark.deploy.client.StandaloneAppClient;
 import com.sdu.spark.deploy.client.StandaloneAppClientListener;
-import com.sdu.spark.scheduler.cluster.CoarseGrainedSchedulerBackend;
+import com.sdu.spark.scheduler.TaskSchedulerImpl;
+
+import java.util.List;
+import java.util.concurrent.Future;
 
 /**
  * @author hanhan.zhang
  * */
 public class StandaloneSchedulerBackend extends CoarseGrainedSchedulerBackend implements StandaloneAppClientListener {
 
+    // Spark Master交互客户端
+    private StandaloneAppClient client;
+
     public StandaloneSchedulerBackend(TaskSchedulerImpl scheduler) {
         super(scheduler);
+    }
+
+    @Override
+    public Future<Boolean> doRequestTotalExecutors(int requestedTotal) {
+        return null;
+    }
+
+    @Override
+    public Future<Boolean> doKillExecutors(List<String> executorIds) {
+        return null;
     }
 
     @Override

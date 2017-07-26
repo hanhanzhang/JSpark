@@ -79,20 +79,6 @@ public interface DeployMessage extends Serializable {
         public List<String> driverIds;
     }
 
-    /**
-     * 应用注册消息
-     * */
-    class RegisterApplication implements DeployMessage {
-
-    }
-
-    /**
-     * 移除应用消息
-     * */
-    @AllArgsConstructor
-    class UnregisterApplication implements DeployMessage {
-        public String appId;
-    }
 
     /**
      * Worker重连消息
@@ -114,14 +100,6 @@ public interface DeployMessage extends Serializable {
         public int exitStatus;
     }
 
-    @AllArgsConstructor
-    class ExecutorUpdated implements DeployMessage {
-        int id;
-        ExecutorState state;
-        String message;
-        int exitStatus;
-        boolean workerLost;
-    }
 
     /**
      * Driver变更消息
@@ -176,11 +154,6 @@ public interface DeployMessage extends Serializable {
     }
 
     @AllArgsConstructor
-    class ApplicationRemoved implements DeployMessage {
-       String message;
-    }
-
-    @AllArgsConstructor
     class ApplicationFinished implements DeployMessage {
         String appId;
     }
@@ -193,23 +166,6 @@ public interface DeployMessage extends Serializable {
         public String driverId;
     }
 
-    /**
-     * Executor消息
-     * */
-    @AllArgsConstructor
-    class RequestExecutors implements DeployMessage {
-        public String appId;
-        public int requestedTotal;
-    }
-
-    /**
-     * 杀死Executor消息
-     * */
-    @AllArgsConstructor
-    class KillExecutors implements DeployMessage {
-        public String appId;
-        public String[] executorIds;
-    }
 
     /**
      * 向工作节点发送KillExecutor消息
@@ -220,6 +176,39 @@ public interface DeployMessage extends Serializable {
         public int execId;
     }
 
+
+
+    /*******************************Spark App注册及资源申请(StandaloneAppClient)*****************************/
+    @AllArgsConstructor
+    class RegisterApplication implements DeployMessage {
+        public ApplicationDescription appDescription;
+        public RpcEndPointRef driver;
+    }
+
+    @AllArgsConstructor
+    class RegisteredApplication implements DeployMessage {
+        public String appId;
+        public RpcEndPointRef master;
+    }
+
+    @AllArgsConstructor
+    class UnregisterApplication implements DeployMessage {
+        public String appId;
+    }
+
+    @AllArgsConstructor
+    class ApplicationRemoved implements DeployMessage {
+        String message;
+    }
+
+    class StopAppClient implements DeployMessage {}
+
+    @AllArgsConstructor
+    class RequestExecutors implements DeployMessage {
+        public String appId;
+        public int requestedTotal;
+    }
+
     @AllArgsConstructor
     class ExecutorAdded implements DeployMessage {
         public int execId;
@@ -228,4 +217,33 @@ public interface DeployMessage extends Serializable {
         public int cores;
         public int memory;
     }
+
+    @AllArgsConstructor
+    class ExecutorUpdated implements DeployMessage {
+        int id;
+        ExecutorState state;
+        String message;
+        int exitStatus;
+        boolean workerLost;
+    }
+
+    @AllArgsConstructor
+    class KillExecutors implements DeployMessage {
+        public String appId;
+        public List<String> executorIds;
+    }
+
+    @AllArgsConstructor
+    class WorkerRemoved implements DeployMessage {
+        public String id;
+        public String host;
+        public String message;
+    }
+
+    @AllArgsConstructor
+    class MasterChanged implements DeployMessage {
+        public RpcEndPointRef master;
+        public String masterWebUiUrl;
+    }
+    /************************************************************************************************/
 }

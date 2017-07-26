@@ -28,13 +28,9 @@ public class HeartBeatReceiver extends RpcEndPoint {
     }
 
     public HeartBeatReceiver(SparkContext sc, Clock clock) {
+        super(sc.env.rpcEnv);
         this.sc = sc;
         this.clock = clock;
-    }
-
-    @Override
-    public RpcEndPointRef self() {
-        return sc.env.rpcEnv.endPointRef(this);
     }
 
     @Override

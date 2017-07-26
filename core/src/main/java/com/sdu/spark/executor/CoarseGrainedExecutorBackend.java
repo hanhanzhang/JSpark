@@ -37,7 +37,6 @@ public class CoarseGrainedExecutorBackend extends RpcEndPoint implements Executo
 
     private static final Logger LOGGER = LoggerFactory.getLogger(CoarseGrainedExecutorBackend.class);
 
-    public RpcEnv rpcEnv;
     public String driverUrl;
     public String executorId;
     public String hostname;
@@ -51,18 +50,13 @@ public class CoarseGrainedExecutorBackend extends RpcEndPoint implements Executo
 
     public CoarseGrainedExecutorBackend(RpcEnv rpcEnv, String driverUrl, String executorId, String hostname,
                                         int cores, SparkEnv env) {
-        this.rpcEnv = rpcEnv;
+        super(rpcEnv);
         this.driverUrl = driverUrl;
         this.executorId = executorId;
         this.hostname = hostname;
         this.cores = cores;
         this.env = env;
         this.ser = this.env.serializer.newInstance();
-    }
-
-    @Override
-    public RpcEndPointRef self() {
-        return rpcEnv.endPointRef(this);
     }
 
     @Override

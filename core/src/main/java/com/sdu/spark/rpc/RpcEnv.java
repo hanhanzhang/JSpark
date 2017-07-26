@@ -23,7 +23,7 @@ public interface RpcEnv {
     RpcEndPointRef setupEndpointRefByURI(String uri);
 
     // RpcEndPoint关闭
-    void stop(RpcEndPoint endPoint);
+    void stop(RpcEndPointRef endPoint);
 
     // RpcEnv关闭
     void awaitTermination();

@@ -61,8 +61,6 @@ public class Worker extends RpcEndPoint {
     // 工作目录
     private File sparkHome;
     private File workerDir;
-    // Worker RpcEnv
-    private RpcEnv rpcEnv;
     // 分配CPU核数
     private int cores;
     // 分配JVm内存数
@@ -81,8 +79,8 @@ public class Worker extends RpcEndPoint {
     private Future<?> registerMasterFuture;
 
     public Worker(SparkConf conf, RpcEnv rpcEnv, int cores, long memory, RpcAddress masterRpcAddress) {
+        super(rpcEnv);
         this.conf = conf;
-        this.rpcEnv = rpcEnv;
         this.cores = cores;
         this.memory = memory;
         this.masterRpcAddress = masterRpcAddress;
@@ -95,13 +93,8 @@ public class Worker extends RpcEndPoint {
     }
 
     public Worker(RpcEnv rpcEnv, RpcAddress masterRpcAddress) {
-        this.rpcEnv = rpcEnv;
+        super(rpcEnv);
         this.masterRpcAddress = masterRpcAddress;
-    }
-
-    @Override
-    public RpcEndPointRef self() {
-        return rpcEnv.endPointRef(this);
     }
 
     @Override

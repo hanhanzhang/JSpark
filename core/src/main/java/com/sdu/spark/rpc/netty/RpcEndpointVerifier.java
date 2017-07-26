@@ -17,18 +17,11 @@ public class RpcEndpointVerifier extends RpcEndPoint {
 
     public static final String NAME = "SparkEndPointVerifier";
 
-    private RpcEnv rpcEnv;
-
     private Dispatcher dispatcher;
 
     public RpcEndpointVerifier(RpcEnv rpcEnv, Dispatcher dispatcher) {
-        this.rpcEnv = rpcEnv;
+        super(rpcEnv);
         this.dispatcher = dispatcher;
-    }
-
-    @Override
-    public RpcEndPointRef self() {
-        return rpcEnv.setRpcEndPointRef(NAME, this);
     }
 
     @Override

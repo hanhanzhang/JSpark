@@ -155,6 +155,15 @@ public class Dispatcher {
         }
     }
 
+    public void stop(RpcEndPointRef rpcEndPointRef) {
+        synchronized (this) {
+            if (stopped) {
+                return;
+            }
+            unregisterRpcEndpoint(rpcEndPointRef.name());
+        }
+    }
+
     public void stop() {
         synchronized (this) {
             stopped = true;

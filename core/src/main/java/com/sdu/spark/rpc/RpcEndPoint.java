@@ -7,8 +7,17 @@ package com.sdu.spark.rpc;
  * */
 public abstract class RpcEndPoint {
 
+    public RpcEnv rpcEnv;
+
+    public RpcEndPoint(RpcEnv rpcEnv) {
+        this.rpcEnv = rpcEnv;
+    }
+
     // Rpc节点的引用节点
-    public abstract RpcEndPointRef self();
+    public RpcEndPointRef self() {
+        assert rpcEnv != null : "rpcEnv has not been initialized";
+        return rpcEnv.endPointRef(this);
+    }
 
     public void onStart() {}
 
@@ -25,4 +34,10 @@ public abstract class RpcEndPoint {
 
     // Rpc消息处理需做响应
     public void receiveAndReply(Object msg, RpcCallContext context) {}
+
+    public final void stop() {
+        if (self() != null) {
+            rpcEnv.stop(self());
+        }
+    }
 }

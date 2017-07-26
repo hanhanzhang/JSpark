@@ -76,7 +76,6 @@ public class LocalSchedulerBackend implements SchedulerBackend, ExecutorBackend 
 
     private class LocalEndpoint extends RpcEndPoint {
 
-        RpcEnv rpcEnv;
         TaskSchedulerImpl scheduler;
         LocalSchedulerBackend executorBackend;
         String localExecutorId = SparkContext.DRIVER_IDENTIFIER;
@@ -85,15 +84,10 @@ public class LocalSchedulerBackend implements SchedulerBackend, ExecutorBackend 
 
         public LocalEndpoint(RpcEnv rpcEnv, TaskSchedulerImpl scheduler,
                              LocalSchedulerBackend executorBackend, int totalCores) {
-            this.rpcEnv = rpcEnv;
+            super(rpcEnv);
             this.scheduler = scheduler;
             this.executorBackend = executorBackend;
             this.totalCores = totalCores;
-        }
-
-        @Override
-        public RpcEndPointRef self() {
-            return rpcEnv.endPointRef(this);
         }
     }
 }

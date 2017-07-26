@@ -1,13 +1,16 @@
 package com.sdu.spark.scheduler;
 
 import com.google.common.collect.Maps;
+import com.sdu.spark.ExecutorAllocationClient;
 import com.sdu.spark.SparkContext;
 import com.sdu.spark.rpc.SparkConf;
 import com.sdu.spark.scheduler.SchedulableBuilder.*;
 
 import java.nio.ByteBuffer;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * @author hanhan.zhang
@@ -24,12 +27,20 @@ public class TaskSchedulerImpl implements TaskScheduler {
     private boolean isLocal;
 
 
-    private SchedulerBackend backend;
+
     private SchedulingMode schedulingMode;
+    public Map<Long, TaskSetManager> taskIdToTaskSetManager = Maps.newHashMap();
     private SchedulableBuilder schedulableBuilder;
     private Pool rootPool;
 
-    public Map<Long, TaskSetManager> taskIdToTaskSetManager = Maps.newHashMap();
+    /*****************************Spark Executor资源**********************************/
+    private SchedulerBackend backend;
+    // Lazily initializing blackListTrackOpt to avoid getting empty ExecutorAllocationClient,
+    // because ExecutorAllocationClient is created after this TaskSchedulerImpl.
+    private BlacklistTracker blacklistTrackerOpt;
+
+
+    public Map<String, Set<String>> hostToExecutors = Maps.newHashMap();
 
     public TaskSchedulerImpl(SparkContext sc, int maxTaskFailures) {
         this(sc, maxTaskFailures, false);
@@ -65,6 +76,18 @@ public class TaskSchedulerImpl implements TaskScheduler {
     @Override
     public void start() {
         this.backend.start();
+
+        this.blacklistTrackerOpt = maybeCreateBlacklistTracker(sc);
+    }
+
+    @Override
+    public void executorLost(String executorId, String reason) {
+        throw new UnsupportedOperationException("");
+    }
+
+    @Override
+    public void workerRemoved(String workerId, String host, String message) {
+
     }
 
     /*****************************Spark Job Task运行状态变更******************************/
@@ -75,5 +98,31 @@ public class TaskSchedulerImpl implements TaskScheduler {
     /******************************Spark Job Task分发***********************************/
     public List<TaskDescription> resourceOffers(List<WorkerOffer> offers) {
         throw new UnsupportedOperationException("");
+    }
+
+    /******************************Spark Executor运行状态********************************/
+    public boolean isExecutorBusy(String executorId) {
+        throw new UnsupportedOperationException("");
+    }
+
+    /**
+     * Get a snapshot of the currently blacklisted nodes for the entire application.  This is
+     * thread-safe -- it can be called without a lock on the TaskScheduler.
+     */
+    public Set<String> nodeBlacklist() {
+        if (blacklistTrackerOpt != null) {
+            return blacklistTrackerOpt.nodeBlacklist.get();
+        }
+        return Collections.emptySet();
+    }
+
+
+    private BlacklistTracker maybeCreateBlacklistTracker(SparkContext sc) {
+        if (BlacklistTracker.isBlacklistEnabled(sc.conf)) {
+            if (sc.schedulerBackend instanceof ExecutorAllocationClient) {
+                return new BlacklistTracker(sc, (ExecutorAllocationClient) sc.schedulerBackend);
+            }
+        }
+        return null;
     }
 }
