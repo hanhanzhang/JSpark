@@ -2,6 +2,7 @@ package com.sdu.spark.deploy.client;
 
 import com.sdu.spark.deploy.ApplicationDescription;
 import com.sdu.spark.deploy.DeployMessage.*;
+import com.sdu.spark.deploy.ExecutorState;
 import com.sdu.spark.deploy.Master;
 import com.sdu.spark.rpc.*;
 import com.sdu.spark.utils.DefaultFuture;
@@ -16,7 +17,6 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static com.sdu.spark.utils.ThreadUtils.newDaemonCachedThreadPool;
 import static com.sdu.spark.utils.ThreadUtils.newDaemonSingleThreadScheduledExecutor;
-import static com.sdu.spark.utils.Utils.getFutureResult;
 
 /**
  * {@link StandaloneAppClient}职责:
@@ -131,17 +131,39 @@ public class StandaloneAppClient {
         @Override
         public void receive(Object msg) {
             if (msg instanceof RegisteredApplication) {
-
+                RegisteredApplication registeredApplication = (RegisteredApplication) msg;
+                appId.set(registeredApplication.appId);
+                master = registeredApplication.master;
+                registered.set(true);
+                listener.connected(registeredApplication.appId);
             } else if (msg instanceof ApplicationRemoved) {
-
+                ApplicationRemoved applicationRemoved = (ApplicationRemoved) msg;
+                markDead(String.format("Master removed our application: %s", applicationRemoved.message));
+                stop();
             } else if (msg instanceof ExecutorAdded) {
-
+                ExecutorAdded executorAdded = (ExecutorAdded) msg;
+                String fullId = appId + "/" + executorAdded.execId;
+                LOGGER.info("Master在工作节点Worker[workerId = {}, host = {}]启动Executor[fullId = {}, cores = {}]",
+                            executorAdded.workerId, executorAdded.host, fullId, executorAdded.cores);
+                listener.executorAdded(fullId, executorAdded.workerId, executorAdded.host, executorAdded.cores, executorAdded.memory);
             } else if (msg instanceof ExecutorUpdated) {
-
+                ExecutorUpdated executor = (ExecutorUpdated) msg;
+                String fullId = appId + "/" + executor.id;
+                LOGGER.info("Executor[fullId = {}]状态更新: state = {}, message = {}",
+                        fullId, executor.state, executor.message);
+                if (ExecutorState.isFinished(executor.state)) {
+                    listener.executorRemove(fullId, executor.message, executor.exitStatus, executor.workerLost);
+                }
             } else if (msg instanceof WorkerRemoved) {
-
+                WorkerRemoved workerRemoved = (WorkerRemoved) msg;
+                LOGGER.info("Master移除工作节点Worker[workerId = {}]: {}", workerRemoved.id, workerRemoved.message);
+                listener.workerRemoved(workerRemoved.id, workerRemoved.host, workerRemoved.message);
             } else if (msg instanceof MasterChanged) {
-
+                MasterChanged masterChanged = (MasterChanged) msg;
+                LOGGER.info("Master地址发生变更, 新地址: {}", masterChanged.master.address().toSparkURL());
+                master = masterChanged.master;
+                alreadyDisconnected = false;
+                master.send(new MasterChangeAcknowledged(appId.get()));
             }
         }
 

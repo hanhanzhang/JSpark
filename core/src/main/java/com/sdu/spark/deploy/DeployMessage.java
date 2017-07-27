@@ -110,12 +110,6 @@ public interface DeployMessage extends Serializable {
         public DriverState state;
         public Exception exception;
     }
-
-    @AllArgsConstructor
-    class MasterChangeAcknowledged implements DeployMessage {
-        public String appId;
-    }
-
     /**
      * 注册Driver信息
      * */
@@ -198,7 +192,7 @@ public interface DeployMessage extends Serializable {
 
     @AllArgsConstructor
     class ApplicationRemoved implements DeployMessage {
-        String message;
+        public String message;
     }
 
     class StopAppClient implements DeployMessage {}
@@ -220,11 +214,11 @@ public interface DeployMessage extends Serializable {
 
     @AllArgsConstructor
     class ExecutorUpdated implements DeployMessage {
-        int id;
-        ExecutorState state;
-        String message;
-        int exitStatus;
-        boolean workerLost;
+        public int id;
+        public ExecutorState state;
+        public String message;
+        public int exitStatus;
+        public boolean workerLost;
     }
 
     @AllArgsConstructor
@@ -244,6 +238,11 @@ public interface DeployMessage extends Serializable {
     class MasterChanged implements DeployMessage {
         public RpcEndPointRef master;
         public String masterWebUiUrl;
+    }
+
+    @AllArgsConstructor
+    class MasterChangeAcknowledged implements DeployMessage {
+        public String appId;
     }
     /************************************************************************************************/
 }
