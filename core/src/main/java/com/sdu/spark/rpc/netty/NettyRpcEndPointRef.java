@@ -62,9 +62,9 @@ public class NettyRpcEndPointRef extends RpcEndPointRef {
     }
 
     @Override
-    public Future<?> ask(Object message) {
+    public <T> Future<T> ask(Object message) {
         assert rpcEnv != null;
-        return rpcEnv.ask(new RequestMessage(rpcEnv.address(), this, message));
+        return (Future<T>) rpcEnv.ask(new RequestMessage(rpcEnv.address(), this, message));
     }
 
     @Override

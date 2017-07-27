@@ -15,15 +15,6 @@ import java.util.Properties;
  * */
 public interface CoarseGrainedClusterMessage extends Serializable {
 
-    @AllArgsConstructor
-    class RegisterExecutor implements CoarseGrainedClusterMessage {
-        public String executorId;
-        public RpcEndPointRef executorRef;
-        public String hostname;
-        public int cores;
-        public Map<String, String> logUrls;
-    }
-
     class RegisteredExecutor implements CoarseGrainedClusterMessage, RegisterExecutorResponse {}
 
     @AllArgsConstructor
@@ -32,29 +23,9 @@ public interface CoarseGrainedClusterMessage extends Serializable {
     }
 
     @AllArgsConstructor
-    class RemoveExecutor implements CoarseGrainedClusterMessage {
-        public String executorId;
-        public String reason;
-    }
-
-    @AllArgsConstructor
     class LaunchTask implements CoarseGrainedClusterMessage {
         public SerializableBuffer taskData;
     }
-
-    @AllArgsConstructor
-    class KillTask implements CoarseGrainedClusterMessage {
-        public long taskId;
-        public String executorId;
-        public boolean interruptThread;
-        public String reason;
-    }
-
-    @AllArgsConstructor
-    class KillExecutorsOnHost implements CoarseGrainedClusterMessage {
-        public String host;
-    }
-
     class RetrieveSparkAppConfig implements CoarseGrainedClusterMessage {}
 
     @AllArgsConstructor
@@ -65,20 +36,14 @@ public interface CoarseGrainedClusterMessage extends Serializable {
 
     class StopExecutor implements CoarseGrainedClusterMessage {}
 
-    class StopExecutors implements CoarseGrainedClusterMessage {}
 
     class Shutdown implements CoarseGrainedClusterMessage {}
 
-    class ReviveOffers implements CoarseGrainedClusterMessage {}
-
     class StopDriver implements CoarseGrainedClusterMessage {}
 
-    @AllArgsConstructor
-    class RemoveWorker implements CoarseGrainedClusterMessage {
-        public String workerId;
-        public String host;
-        public String message;
-    }
+
+    /*********************Spark Driver Message(CoarseGrainedSchedulerBackend.DriverEndPoint)*****************/
+    class ReviveOffers implements CoarseGrainedClusterMessage {}
 
     class StatusUpdate implements CoarseGrainedClusterMessage {
         public String executorId;
@@ -93,4 +58,42 @@ public interface CoarseGrainedClusterMessage extends Serializable {
             this.data = new SerializableBuffer(data);
         }
     }
+
+    @AllArgsConstructor
+    class RegisterExecutor implements CoarseGrainedClusterMessage {
+        public String executorId;
+        public RpcEndPointRef executorRef;
+        public String hostname;
+        public int cores;
+        public Map<String, String> logUrls;
+    }
+
+    @AllArgsConstructor
+    class RemoveExecutor implements CoarseGrainedClusterMessage {
+        public String executorId;
+        public String reason;
+    }
+
+    @AllArgsConstructor
+    class KillExecutorsOnHost implements CoarseGrainedClusterMessage {
+        public String host;
+    }
+
+    class StopExecutors implements CoarseGrainedClusterMessage {}
+
+    @AllArgsConstructor
+    class KillTask implements CoarseGrainedClusterMessage {
+        public long taskId;
+        public String executorId;
+        public boolean interruptThread;
+        public String reason;
+    }
+
+    @AllArgsConstructor
+    class RemoveWorker implements CoarseGrainedClusterMessage {
+        public String workerId;
+        public String host;
+        public String message;
+    }
+
 }

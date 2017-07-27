@@ -23,6 +23,6 @@ public abstract class RpcEndPointRef implements Serializable {
     public abstract void send(Object message);
 
     // 发送双向消息[需要消息响应]
-    public abstract Future<?> ask(Object message);
+    public abstract <T> Future<T> ask(Object message);
     public abstract Object askSync(Object message, long timeout) throws TimeoutException, InterruptedException, ExecutionException;
 }

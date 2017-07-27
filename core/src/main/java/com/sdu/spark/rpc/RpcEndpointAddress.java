@@ -67,4 +67,8 @@ public class RpcEndpointAddress implements Serializable {
             throw new RuntimeException(e);
         }
     }
+
+    public static RpcEndpointAddress apply(String host, int port, String name) {
+        return new RpcEndpointAddress(host, port, name);
+    }
 }

@@ -105,6 +105,10 @@ public class TaskSchedulerImpl implements TaskScheduler {
         throw new UnsupportedOperationException("");
     }
 
+    public void error(String message) {
+        throw new UnsupportedOperationException("");
+    }
+
     /**
      * Get a snapshot of the currently blacklisted nodes for the entire application.  This is
      * thread-safe -- it can be called without a lock on the TaskScheduler.

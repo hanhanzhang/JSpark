@@ -12,7 +12,6 @@ import java.util.Map;
  * */
 @AllArgsConstructor
 public class Command implements Serializable {
-
     public String mainClass;
     public String[] arguments;
     public Map<String, String> environment;

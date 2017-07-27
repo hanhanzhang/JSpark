@@ -201,7 +201,7 @@ public class CoarseGrainedExecutorBackend extends RpcEndPoint implements Executo
             for (String arg : args) {
                 String []p = arg.split(" ");
                 switch (p[0]) {
-                    case "--driver":
+                    case "--driver-url":
                         driverUrl = p[1];
                         break;
                     case "--executor":

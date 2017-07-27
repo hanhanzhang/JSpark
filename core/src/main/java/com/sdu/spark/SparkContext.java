@@ -39,7 +39,7 @@ public class SparkContext {
     private List<String> jars;
     private int executorMemory;
 
-    private Map<String, String> executorEnvs = Maps.newHashMap();
+    public Map<String, String> executorEnvs = Maps.newHashMap();
 
     public SparkContext(SparkConf conf) {
         this.conf = conf;
@@ -91,14 +91,21 @@ public class SparkContext {
 
     }
 
-    private String appName() {
+    public String appName() {
         return this.conf.get("spark.app.name");
+    }
+    public int executorMemory() {
+        return this.conf.getInt("spark.executor.memory", 1024);
     }
     private String master() {
         return this.conf.get("spark.master");
     }
     private String deployMode() {
         return this.conf.get("spark.submit.deployMode");
+    }
+
+    public void stopInNewThread() {
+        throw new UnsupportedOperationException("");
     }
 
 

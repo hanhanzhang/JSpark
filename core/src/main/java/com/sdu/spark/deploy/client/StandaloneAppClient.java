@@ -6,7 +6,6 @@ import com.sdu.spark.deploy.ExecutorState;
 import com.sdu.spark.deploy.Master;
 import com.sdu.spark.rpc.*;
 import com.sdu.spark.utils.DefaultFuture;
-import com.sdu.spark.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -17,6 +16,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static com.sdu.spark.utils.ThreadUtils.newDaemonCachedThreadPool;
 import static com.sdu.spark.utils.ThreadUtils.newDaemonSingleThreadScheduledExecutor;
+import static com.sdu.spark.utils.Utils.getFutureResult;
 
 /**
  * {@link StandaloneAppClient}职责:
@@ -81,7 +81,7 @@ public class StandaloneAppClient {
     }
 
     /*****************************Spark Master申请Executor**************************/
-    public Future<?> requestTotalExecutors(int requestedTotal) {
+    public Future<Boolean> requestTotalExecutors(int requestedTotal) {
         if (endpoint.get() != null && appId.get() != null) {
             return endpoint.get().ask(new RequestExecutors(appId.get(), requestedTotal));
         } else {
@@ -92,7 +92,7 @@ public class StandaloneAppClient {
 
 
     /******************************Spark Master关闭Executor**************************/
-    public Future<?> killExecutors(List<String> executorIds) {
+    public Future<Boolean> killExecutors(List<String> executorIds) {
         if (endpoint.get() != null && appId.get() != null) {
             return endpoint.get().ask(new KillExecutors(appId.get(), executorIds));
         } else {
@@ -237,7 +237,7 @@ public class StandaloneAppClient {
             // Ask a message and create a thread to reply with the result.  Allow thread to be
             // interrupted during shutdown, otherwise context must be notified of NonFatal errors.
             Future<?> future = endpointRef.ask(message);
-            Utils.getFutureResult(future, context);
+            getFutureResult(future, context);
         }
 
         private void markDisconnected() {

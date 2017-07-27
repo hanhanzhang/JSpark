@@ -40,6 +40,10 @@ import static com.sdu.spark.utils.Utils.getFutureResult;
  *
  * 2: Executor资源管理
  *
+ *  1': 向Spark Master申请Executor资源
+ *
+ *  2': 请求Spark Master关闭Executor
+ *
  * @author hanhan.zhang
  * */
 public abstract class CoarseGrainedSchedulerBackend implements ExecutorAllocationClient, SchedulerBackend {
@@ -48,14 +52,14 @@ public abstract class CoarseGrainedSchedulerBackend implements ExecutorAllocatio
 
     public static String ENDPOINT_NAME = "CoarseGrainedScheduler";
 
-    private SparkConf conf;
+    protected SparkConf conf;
     private RpcEnv rpcEnv;
     private LiveListenerBus listenerBus;
     private int maxRpcMessageSize;
 
 
     /*******************************Spark Job分配Executor资源管理******************************/
-    private TaskSchedulerImpl scheduler;
+    protected TaskSchedulerImpl scheduler;
     // Spark Job分配CPU核数
     private AtomicInteger totalCoreCount = new AtomicInteger(0);
     // Spark Job分配Executor
