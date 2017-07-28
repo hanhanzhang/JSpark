@@ -4,18 +4,17 @@ import com.google.common.collect.Maps;
 import com.sdu.spark.rpc.RpcEndPointRef;
 import com.sdu.spark.rpc.SparkConf;
 import com.sdu.spark.scheduler.*;
-import com.sdu.spark.scheduler.local.LocalSchedulerBackend;
+import com.sdu.spark.scheduler.cluster.StandaloneSchedulerBackend;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import static com.sdu.spark.SparkApp.*;
 
 import java.util.List;
 import java.util.Map;
 
-import static com.sdu.spark.SparkMasterRegex.*;
-
+import static com.sdu.spark.SparkApp.TaskSchedulerIsSet;
+import static com.sdu.spark.SparkMasterRegex.SPARK_REGEX;
 import static com.sdu.spark.utils.Utils.getFutureResult;
 import static com.sdu.spark.utils.Utils.isLocalMaster;
 
@@ -114,40 +113,19 @@ public class SparkContext {
         return SparkEnv.createDriverEnv(conf, isLocal, listenerBus, cores, null);
     }
 
+    /**
+     * 仅仅实现Standalone模式
+     *
+     * todo: Spark Cluster(local, standalone, mesos, yarn)
+     * */
     private Pair<TaskScheduler, SchedulerBackend> createTaskScheduler(SparkContext sc, String master, String deployMode) {
-        Pair<TaskScheduler, SchedulerBackend> tuple = null;
-        // Task执行失败重试次数
-        int MAX_LOCAL_TASK_FAILURES = 1;
-        if (master.equals("local")) {
-            TaskSchedulerImpl scheduler = new TaskSchedulerImpl(sc, MAX_LOCAL_TASK_FAILURES, true);
-            LocalSchedulerBackend schedulerBackend = new LocalSchedulerBackend(conf, scheduler, 1);
-            scheduler.initialize(schedulerBackend);
-
-            tuple = new ImmutablePair<>(scheduler, schedulerBackend);
-        } else if (LOCAL_N_REGEX(master)) {
-            int cpuCount = LOCAL_N_REGEX_THREAD(master);
-
-            TaskSchedulerImpl scheduler = new TaskSchedulerImpl(sc, MAX_LOCAL_TASK_FAILURES, true);
-            LocalSchedulerBackend schedulerBackend = new LocalSchedulerBackend(conf, scheduler, cpuCount);
-            scheduler.initialize(schedulerBackend);
-
-            tuple = new ImmutablePair<>(scheduler, schedulerBackend);
-        } else if (LOCAL_N_FAILURES_REGEX(master)) {
-            int[] r = LOCAL_N_FAILURES_REGEX_R(master);
-            int cpuCount = r[0];
-            int maxFailures = r[1];
-
-            TaskSchedulerImpl scheduler = new TaskSchedulerImpl(sc, maxFailures, true);
-            LocalSchedulerBackend schedulerBackend = new LocalSchedulerBackend(conf, scheduler, cpuCount);
-            scheduler.initialize(schedulerBackend);
-
-            tuple = new ImmutablePair<>(scheduler, schedulerBackend);
-        } else if (SPARK_REGEX(master)) {
-
-        } else if (LOCAL_CLUSTER_REGEX(master)) {
-
+        if (SPARK_REGEX(master)) {
+            TaskSchedulerImpl scheduler = new TaskSchedulerImpl(sc);
+            SchedulerBackend backend = new StandaloneSchedulerBackend(scheduler, sc, master);
+            scheduler.initialize(backend);
+            return new ImmutablePair<>(scheduler, backend);
         }
-        return tuple;
+        throw new UnsupportedOperationException("Unsupported spark cluster : " + master);
     }
 
 }

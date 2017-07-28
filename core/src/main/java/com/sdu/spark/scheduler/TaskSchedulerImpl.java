@@ -5,6 +5,7 @@ import com.sdu.spark.ExecutorAllocationClient;
 import com.sdu.spark.SparkContext;
 import com.sdu.spark.rpc.SparkConf;
 import com.sdu.spark.scheduler.SchedulableBuilder.*;
+import com.sdu.spark.storage.BlockManagerId;
 
 import java.nio.ByteBuffer;
 import java.util.Collections;
@@ -42,6 +43,10 @@ public class TaskSchedulerImpl implements TaskScheduler {
 
     public Map<String, Set<String>> hostToExecutors = Maps.newHashMap();
 
+    public TaskSchedulerImpl(SparkContext sc) {
+        this(sc, sc.conf.getInt("spark.task.maxFailures", 1));
+    }
+
     public TaskSchedulerImpl(SparkContext sc, int maxTaskFailures) {
         this(sc, maxTaskFailures, false);
     }
@@ -74,10 +79,60 @@ public class TaskSchedulerImpl implements TaskScheduler {
     }
 
     @Override
+    public Pool rootPool() {
+        return null;
+    }
+
+    @Override
+    public SchedulingMode schedulingMode() {
+        return null;
+    }
+
+    @Override
     public void start() {
         this.backend.start();
 
         this.blacklistTrackerOpt = maybeCreateBlacklistTracker(sc);
+    }
+
+    @Override
+    public void postStartHook() {
+
+    }
+
+    @Override
+    public void stop() {
+
+    }
+
+    @Override
+    public void submitTasks(TaskSet taskSet) {
+
+    }
+
+    @Override
+    public void cancelTasks(int stageId, boolean interruptThread) {
+
+    }
+
+    @Override
+    public boolean killTaskAttempt(int taskId, boolean interruptThread, String reason) {
+        return false;
+    }
+
+    @Override
+    public void setDAGScheduler(DAGScheduler dagScheduler) {
+
+    }
+
+    @Override
+    public void defaultParallelism() {
+
+    }
+
+    @Override
+    public boolean executorHeartbeatReceived(String execId, BlockManagerId blockManagerId) {
+        return false;
     }
 
     @Override
@@ -88,6 +143,11 @@ public class TaskSchedulerImpl implements TaskScheduler {
     @Override
     public void workerRemoved(String workerId, String host, String message) {
 
+    }
+
+    @Override
+    public String applicationAttemptId() {
+        return null;
     }
 
     /*****************************Spark Job Task运行状态变更******************************/
