@@ -11,13 +11,13 @@ import java.util.Properties;
  * @author hanhan.zhang
  * */
 public abstract class Task<T> {
-    public int stageId;
-    public int stageAttemptId;
-    public int partitionId;
+    private int stageId;
+    private int stageAttemptId;
+    private int partitionId;
     public transient Properties localProperties = new Properties();
-    public int jobId;
+    private int jobId;
     public String appId;
-    public String appAttemptId;
+    private String appAttemptId;
 
     public TaskMemoryManager taskMemoryManager;
 

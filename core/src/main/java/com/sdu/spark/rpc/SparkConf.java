@@ -50,6 +50,11 @@ public class SparkConf implements Serializable {
         return NumberUtils.toInt(value, defaultValue);
     }
 
+    public double getDouble(String key, double defaultValue) {
+        String value = settings.get(key);
+        return NumberUtils.toDouble(value, defaultValue);
+    }
+
     public boolean getBoolean(String key, boolean defaultValue) {
         String value = settings.get(key);
         if (Strings.isNullOrEmpty(value)) {

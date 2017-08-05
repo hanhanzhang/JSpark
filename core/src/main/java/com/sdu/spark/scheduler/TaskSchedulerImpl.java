@@ -6,12 +6,11 @@ import com.sdu.spark.SparkContext;
 import com.sdu.spark.rpc.SparkConf;
 import com.sdu.spark.scheduler.SchedulableBuilder.*;
 import com.sdu.spark.storage.BlockManagerId;
+import org.apache.commons.lang3.StringUtils;
 
 import java.nio.ByteBuffer;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * @author hanhan.zhang
@@ -24,24 +23,39 @@ public class TaskSchedulerImpl implements TaskScheduler {
     public SparkContext sc;
     private SparkConf conf;
     public int CPUS_PER_TASK;
-    private int maxTaskFailures;
     private boolean isLocal;
 
 
 
     private SchedulingMode schedulingMode;
-    public Map<Long, TaskSetManager> taskIdToTaskSetManager = Maps.newHashMap();
     private SchedulableBuilder schedulableBuilder;
     private Pool rootPool;
 
-    /*****************************Spark Executor资源**********************************/
+    private Timer starvationTimer = new Timer(true);
+
+    /********************************Spark Task***********************************/
+    // key = stateId, value = [key = , value = ]
+    private Map<Integer, Map<Integer, TaskSetManager>> taskSetsByStageIdAndAttempt = Maps.newHashMap();
+    public Map<Long, TaskSetManager> taskIdToTaskSetManager = Maps.newHashMap();
+    private Map<Long, String> taskIdToExecutorId = Maps.newHashMap();
+    private Map<String, Set<String>> executorIdToRunningTaskIds = Maps.newHashMap();
+    private volatile boolean hasReceivedTask = false;
+    private volatile boolean hasLaunchedTask = false;
+    private AtomicLong nextTaskId = new AtomicLong(0);
+    // Spark Task失败重试次数
+    private int maxTaskFailures;
+    private DAGScheduler dagScheduler = null;
+    private long STARVATION_TIMEOUT_MS;
+
+
+    /*****************************Spark Executor**********************************/
+    public Map<String, Set<String>> hostToExecutors = Maps.newHashMap();
+    private Map<String, String> executorIdToHost = Maps.newHashMap();
     private SchedulerBackend backend;
     // Lazily initializing blackListTrackOpt to avoid getting empty ExecutorAllocationClient,
     // because ExecutorAllocationClient is created after this TaskSchedulerImpl.
     private BlacklistTracker blacklistTrackerOpt;
 
-
-    public Map<String, Set<String>> hostToExecutors = Maps.newHashMap();
 
     public TaskSchedulerImpl(SparkContext sc) {
         this(sc, sc.conf.getInt("spark.task.maxFailures", 1));
@@ -55,6 +69,7 @@ public class TaskSchedulerImpl implements TaskScheduler {
         this.sc = sc;
         this.conf = this.sc.conf;
         this.CPUS_PER_TASK = this.conf.getInt("spark.task.cpus", 1);
+        this.STARVATION_TIMEOUT_MS = conf.getTimeAsMs("spark.starvation.timeout", "15s");
         this.maxTaskFailures = maxTaskFailures;
         this.isLocal = isLocal;
 
@@ -79,34 +94,99 @@ public class TaskSchedulerImpl implements TaskScheduler {
     }
 
     @Override
-    public Pool rootPool() {
-        return null;
-    }
-
-    @Override
-    public SchedulingMode schedulingMode() {
-        return null;
-    }
-
-    @Override
     public void start() {
         this.backend.start();
-
         this.blacklistTrackerOpt = maybeCreateBlacklistTracker(sc);
     }
 
     @Override
     public void postStartHook() {
+        waitBackendReady();
+    }
+    private void waitBackendReady() {
+        if (backend.isReady()) {
+            return;
+        }
 
+        while (!backend.isReady()) {
+            if (sc.stopped.get()) {
+                throw new IllegalStateException("Spark context stopped while waiting for backend");
+            }
+            synchronized (this) {
+                try {
+                    this.wait(100);
+                } catch (InterruptedException e) {
+                    // ignore
+                }
+            }
+        }
+    }
+
+    /*********************************Spark Submit Task*********************************/
+    @Override
+    public void submitTasks(TaskSet taskSet) {
+        synchronized (this) {
+            TaskSetManager manager = createTaskSetManager(taskSet, maxTaskFailures);
+            int stage = taskSet.stageId;
+            Map<Integer, TaskSetManager> stageTaskSets =  taskSetsByStageIdAndAttempt.get(stage);
+            if (stageTaskSets == null) {
+                stageTaskSets = Maps.newHashMap();
+                taskSetsByStageIdAndAttempt.put(stage, stageTaskSets);
+            }
+            stageTaskSets.put(taskSet.stageAttemptId, manager);
+
+            boolean conflictingTaskSet = false;
+            for (Map.Entry<Integer, TaskSetManager> entry : stageTaskSets.entrySet()) {
+                TaskSetManager ts = entry.getValue();
+                if (ts.taskSet != taskSet && ts.isZombie) {
+                    conflictingTaskSet = true;
+                    break;
+                }
+            }
+            if (conflictingTaskSet) {
+                throw new IllegalStateException(String.format("Stage[id = %s]超过两个TaskSet: %s", stage,
+                                                StringUtils.join(stageTaskSets.values(), '\n')));
+            }
+
+            schedulableBuilder.addTaskSetManager(manager, manager.taskSet.properties);
+            if (!isLocal && !hasReceivedTask) {
+                starvationTimer.scheduleAtFixedRate(new TimerTask() {
+                    @Override
+                    public void run() {
+                        if (!hasLaunchedTask) {
+
+                        } else {
+                            this.cancel();
+                        }
+                    }
+                }, STARVATION_TIMEOUT_MS, STARVATION_TIMEOUT_MS);
+            }
+            hasReceivedTask = true;
+        }
+        backend.reviveOffers();
+
+    }
+    private TaskSetManager createTaskSetManager(TaskSet taskSet, int maxTaskFailures) {
+        return new TaskSetManager(this, taskSet, maxTaskFailures, blacklistTrackerOpt);
+    }
+
+    @Override
+    public Pool rootPool() {
+        return rootPool;
+    }
+
+    @Override
+    public void setDAGScheduler(DAGScheduler dagScheduler) {
+        this.dagScheduler = dagScheduler;
+    }
+
+    @Override
+    public SchedulingMode schedulingMode() {
+        return schedulingMode;
     }
 
     @Override
     public void stop() {
-
-    }
-
-    @Override
-    public void submitTasks(TaskSet taskSet) {
 
     }
 
@@ -118,11 +198,6 @@ public class TaskSchedulerImpl implements TaskScheduler {
     @Override
     public boolean killTaskAttempt(int taskId, boolean interruptThread, String reason) {
         return false;
-    }
-
-    @Override
-    public void setDAGScheduler(DAGScheduler dagScheduler) {
-
     }
 
     @Override
@@ -188,5 +263,9 @@ public class TaskSchedulerImpl implements TaskScheduler {
             }
         }
         return null;
+    }
+
+    private long newTaskId() {
+        return nextTaskId.getAndIncrement();
     }
 }

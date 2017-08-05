@@ -1,5 +1,6 @@
 package com.sdu.spark.storage;
 
+import com.sdu.spark.rdd.RDD;
 import com.sdu.spark.rdd.RDDOperationScope;
 
 import java.util.List;
@@ -41,6 +42,10 @@ public class RDDInfo implements Comparable<RDDInfo>{
 
     public boolean isCached() {
         return (memSize + diskSize > 0) && numCachedPartitions > 0;
+    }
+
+    public static RDDInfo fromRDD(RDD<?> rdd) {
+        throw new UnsupportedOperationException("");
     }
 
     @Override

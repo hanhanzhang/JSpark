@@ -9,6 +9,8 @@ public interface SchedulerBackend {
 
     void stop();
 
+    boolean isReady();
+
     void reviveOffers();
 
     void killTask(long taskId, String executorId, boolean interruptThread, String reason);

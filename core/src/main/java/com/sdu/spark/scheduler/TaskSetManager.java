@@ -13,8 +13,11 @@ public class TaskSetManager implements Schedulable {
     public BlacklistTracker blacklistTracker;
     public Clock clock;
 
-    public TaskSetManager(TaskSchedulerImpl sched, TaskSet taskSet, int maxTaskFailures) {
-        this(sched, taskSet, maxTaskFailures, null, new Clock.SystemClock());
+    public boolean isZombie = false;
+
+    public TaskSetManager(TaskSchedulerImpl sched, TaskSet taskSet, int maxTaskFailures,
+                          BlacklistTracker blacklistTracker) {
+        this(sched, taskSet, maxTaskFailures, blacklistTracker, new Clock.SystemClock());
     }
 
     public TaskSetManager(TaskSchedulerImpl sched, TaskSet taskSet, int maxTaskFailures,

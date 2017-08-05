@@ -174,6 +174,11 @@ public class StandaloneSchedulerBackend extends CoarseGrainedSchedulerBackend im
         }
     }
 
+    @Override
+    public boolean sufficientResourcesRegistered() {
+        return totalCoreCount.get() >= maxCores * minRegisteredRatio;
+    }
+
     private void stop(State finalState) {
         if (stopping.compareAndSet(false, true)) {
             try {

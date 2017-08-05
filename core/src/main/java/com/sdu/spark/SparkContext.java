@@ -1,17 +1,23 @@
 package com.sdu.spark;
 
 import com.google.common.collect.Maps;
+import com.sdu.spark.rdd.RDD;
+import com.sdu.spark.rdd.Transaction;
 import com.sdu.spark.rpc.RpcEndPointRef;
 import com.sdu.spark.rpc.SparkConf;
 import com.sdu.spark.scheduler.*;
 import com.sdu.spark.scheduler.cluster.StandaloneSchedulerBackend;
+import com.sdu.spark.utils.CallSite;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static com.sdu.spark.SparkApp.TaskSchedulerIsSet;
 import static com.sdu.spark.SparkMasterRegex.SPARK_REGEX;
@@ -19,7 +25,50 @@ import static com.sdu.spark.utils.Utils.getFutureResult;
 import static com.sdu.spark.utils.Utils.isLocalMaster;
 
 /**
- * SparkContext
+ * {@link SparkContext}职责:
+ *
+ * 1: 创建{@link HeartBeatReceiver}
+ *
+ *   todo
+ *
+ * 2: 初始化{@link DAGScheduler}
+ *
+ *   DAGScheduler根据是否是宽依赖划分Stage, Stage可分为两类: ShuffleMapStage和ResultStage
+ *
+ *
+ *
+ * 3: 初始化{@link SchedulerBackend}
+ *
+ *   SchedulerBackend负责创建Cluster Master的客】、户端(注册SparkApp, 申请Executor资源等)
+ *
+ *   SchedulerBackend负责启动DriverEndPoint负责监听Executor运行结果
+ *
+ * 4: 初始化{@link TaskScheduler}
+ *
+ *   todo
+ *
+ * Note:
+ *
+ *  1：Spark概念
+ *
+ *    1': Job
+ *
+ *      Spark Transaction Action触发Job生成
+ *
+ *    2': Stage
+ *
+ *      Stage是Job的子集, 以宽依赖划分Stage(shuffle操作划分Stage)
+ *
+ *    3': Task
+ *
+ *      Task是Stage的子集, 以并行度(partition)来衡量[partition = task]
+ *
+ *  2: Spark调度
+ *
+ *    1': State调度[DAGScheduler]
+ *
+ *    2': Task调度[TaskScheduler]
+ *
  *
  * @author hanhan.zhang
  * */
@@ -27,6 +76,7 @@ public class SparkContext {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(SparkContext.class);
     public static final String DRIVER_IDENTIFIER = "driver";
+    public AtomicBoolean stopped = new AtomicBoolean(false);
 
     public SparkConf conf;
     public SparkEnv env;
@@ -37,6 +87,8 @@ public class SparkContext {
     private RpcEndPointRef heartbeatReceiver;
     private List<String> jars;
     private int executorMemory;
+    private AtomicInteger nextRddId = new AtomicInteger(0);
+
 
     public Map<String, String> executorEnvs = Maps.newHashMap();
 
@@ -75,8 +127,8 @@ public class SparkContext {
                                                          new HeartBeatReceiver(this));
 
         Pair<TaskScheduler, SchedulerBackend> tuple = createTaskScheduler(this, master, deployMode());
-        taskScheduler = tuple.getKey();
-        schedulerBackend = tuple.getValue();
+        taskScheduler = tuple.getLeft();
+        schedulerBackend = tuple.getRight();
         dagScheduler = new DAGScheduler(this);
         boolean isSet = getFutureResult(heartbeatReceiver.ask(new TaskSchedulerIsSet()));
         if (isSet) {
@@ -126,6 +178,23 @@ public class SparkContext {
             return new ImmutablePair<>(scheduler, backend);
         }
         throw new UnsupportedOperationException("Unsupported spark cluster : " + master);
+    }
+
+
+    /**************************Spark Transaction Action触发Job提交***************************/
+    public <T, U> void runJob(RDD<T> rdd,
+                              Transaction<Pair<TaskContext, Iterator<T>>, Void> func,
+                              List<Integer> partitions,
+                              Transaction<Pair<Integer, U>, Void> resultHandler) {
+
+    }
+
+    public CallSite getCallSite() {
+        throw new UnsupportedOperationException("");
+    }
+
+    public int newRddId(){
+        return nextRddId.getAndIncrement();
     }
 
 }

@@ -56,12 +56,15 @@ public abstract class CoarseGrainedSchedulerBackend implements ExecutorAllocatio
     private RpcEnv rpcEnv;
     private LiveListenerBus listenerBus;
     private int maxRpcMessageSize;
+    private long createTime = System.currentTimeMillis();
+    private long maxRegisteredWaitingTimeMs;
 
 
     /*******************************Spark Job分配Executor资源管理******************************/
     protected TaskSchedulerImpl scheduler;
     // Spark Job分配CPU核数
-    private AtomicInteger totalCoreCount = new AtomicInteger(0);
+    protected AtomicInteger totalCoreCount = new AtomicInteger(0);
+    protected double minRegisteredRatio;
     // Spark Job分配Executor
     private int requestedTotalExecutors = 0;
     // Spark Job等待分配Executor
@@ -84,6 +87,8 @@ public abstract class CoarseGrainedSchedulerBackend implements ExecutorAllocatio
         this.rpcEnv = this.scheduler.sc.env.rpcEnv;
         this.listenerBus = this.scheduler.sc.listenerBus;
         this.maxRpcMessageSize = maxMessageSizeBytes(conf);
+        this.maxRegisteredWaitingTimeMs = conf.getTimeAsMs("spark.scheduler.maxRegisteredResourcesWaitingTime", "30");
+        this.minRegisteredRatio = Math.min(1, conf.getDouble("spark.scheduler.minRegisteredResourcesRatio", 0));
     }
 
     private RpcEndPoint createDriverEndPoint() {
@@ -323,6 +328,17 @@ public abstract class CoarseGrainedSchedulerBackend implements ExecutorAllocatio
         this.driverEndpoint = rpcEnv.setRpcEndPointRef(ENDPOINT_NAME, createDriverEndPoint());
     }
 
+    @Override
+    public boolean isReady() {
+        if (sufficientResourcesRegistered()) {
+            return true;
+        }
+        if ((System.currentTimeMillis() - createTime) >- maxRegisteredWaitingTimeMs) {
+            return true;
+        }
+        return false;
+    }
+
     private boolean stopExecutors() {
         if (driverEndpoint != null) {
             LOGGER.info("关闭全部Executor");
@@ -473,4 +489,6 @@ public abstract class CoarseGrainedSchedulerBackend implements ExecutorAllocatio
     public abstract Future<Boolean> doRequestTotalExecutors(int requestedTotal);
 
     public abstract Future<Boolean> doKillExecutors(List<String> executorIds);
+
+    public abstract boolean sufficientResourcesRegistered();
 }
