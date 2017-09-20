@@ -34,5 +34,4 @@ proguard/
 *.ipr
 *.iws
 .idea/
-/pom.xml
 src/test/
