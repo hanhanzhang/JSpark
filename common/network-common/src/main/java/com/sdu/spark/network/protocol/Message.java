@@ -23,6 +23,7 @@ public interface Message extends Encodable {
     enum Type implements Encodable {
         ChunkFetchRequest(0), ChunkFetchSuccess(1), ChunkFetchFailure(2),
         RpcRequest(3), RpcResponse(4), RpcFailure(5),
+        StreamRequest(6), StreamResponse(7), StreamFailure(8),
         OneWayMessage(9), User(-1);
 
         private final byte id;

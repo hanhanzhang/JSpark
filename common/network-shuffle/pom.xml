@@ -6,22 +6,17 @@
         <groupId>com.sdu.spark</groupId>
         <artifactId>spark-java</artifactId>
         <version>1.0-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
-    <artifactId>common</artifactId>
+    <artifactId>network-shuffle</artifactId>
 
     <dependencies>
         <dependency>
-            <groupId>io.netty</groupId>
-            <artifactId>netty-all</artifactId>
-        </dependency>
-
-        <!-- Apache加密库 -->
-        <dependency>
-            <groupId>org.apache.commons</groupId>
-            <artifactId>commons-crypto</artifactId>
-            <version>1.0.0</version>
+            <groupId>com.sdu.spark</groupId>
+            <artifactId>network-common</artifactId>
+            <version>1.0-SNAPSHOT</version>
         </dependency>
     </dependencies>
 
