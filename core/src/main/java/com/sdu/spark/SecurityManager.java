@@ -38,4 +38,5 @@ public class SecurityManager implements SecretKeyHolder {
     public String getSecretKey() {
         return secretKey;
     }
+
 }

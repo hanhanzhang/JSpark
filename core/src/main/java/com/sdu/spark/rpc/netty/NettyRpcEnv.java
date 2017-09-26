@@ -11,6 +11,7 @@ import com.sdu.spark.network.crypto.AuthServerBootstrap;
 import com.sdu.spark.network.server.StreamManager;
 import com.sdu.spark.network.server.TransportServer;
 import com.sdu.spark.network.server.TransportServerBootstrap;
+import com.sdu.spark.network.utils.ConfigProvider;
 import com.sdu.spark.network.utils.IOModel;
 import com.sdu.spark.network.utils.TransportConf;
 import com.sdu.spark.rpc.*;
@@ -274,7 +275,22 @@ public class NettyRpcEnv implements RpcEnv {
 
 
     private TransportConf fromSparkConf(SparkConf conf) {
-        return new TransportConf(IOModel.NIO.name(), Collections.emptyMap());
+        return new TransportConf(IOModel.NIO.name(), new ConfigProvider() {
+            @Override
+            public String get(String name) {
+                return conf.get(name);
+            }
+
+            @Override
+            public String get(String name, String defaultValue) {
+                return conf.get(name, defaultValue);
+            }
+
+            @Override
+            public Map<String, String> getAll() {
+                return conf.getAll();
+            }
+        });
     }
 
     private List<TransportClientBootstrap> createClientBootstraps() {

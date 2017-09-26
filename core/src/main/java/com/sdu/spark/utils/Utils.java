@@ -5,6 +5,7 @@ import com.sdu.spark.rpc.RpcCallContext;
 import com.sdu.spark.rpc.SparkConf;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.SystemUtils;
+import org.apache.logging.log4j.util.Strings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -21,10 +22,7 @@ import java.net.URI;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
-import java.util.Arrays;
-import java.util.Enumeration;
-import java.util.List;
-import java.util.Locale;
+import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -41,6 +39,7 @@ public class Utils {
 
     private static boolean isWindows = SystemUtils.IS_OS_WINDOWS;
     private static boolean isMac = SystemUtils.IS_OS_MAC;
+    private static int MAX_DIR_CREATION_ATTEMPTS = 10;
 
     private static final ImmutableMap<String, TimeUnit> timeSuffixes = ImmutableMap.<String, TimeUnit> builder()
                                                                                     .put("us", TimeUnit.MICROSECONDS)
@@ -276,5 +275,80 @@ public class Utils {
         }
     }
 
+    private static boolean isRunningInYarnContainer(SparkConf conf) {
+        // These environment variables are set by YARN.
+        return conf.getenv("CONTAINER_ID") != null;
+    }
 
+    private static String getYarnLocalDirs(SparkConf conf) {
+        String localDirs = conf.getenv("LOCAL_DIRS");
+
+        if (Strings.isEmpty(localDirs)) {
+            throw new RuntimeException("Yarn Local dirs can't be empty");
+        }
+        return localDirs;
+    }
+
+    public static String[] getConfiguredLocalDirs(SparkConf conf) {
+        boolean shuffleServiceEnabled = conf.getBoolean("spark.shuffle.service.enabled", false);
+        if (isRunningInYarnContainer(conf)) {
+            // If we are in yarn mode, systems can have different disk layouts so we must set it
+            // to what Yarn on this system said was available. Note this assumes that Yarn has
+            // created the directories already, and that they are secured so that only the
+            // user has access to them.
+            return getYarnLocalDirs(conf).split(",");
+        } else if (conf.getenv("SPARK_EXECUTOR_DIRS") != null) {
+            return conf.getenv("SPARK_EXECUTOR_DIRS").split(File.pathSeparator);
+        } else if (conf.getenv("SPARK_LOCAL_DIRS") != null) {
+            return conf.getenv("SPARK_LOCAL_DIRS").split(",");
+        } else if (conf.getenv("MESOS_DIRECTORY") != null && !shuffleServiceEnabled) {
+            // Mesos already creates a directory per Mesos task. Spark should use that directory
+            // instead so all temporary files are automatically cleaned up when the Mesos task ends.
+            // Note that we don't want this if the shuffle service is enabled because we want to
+            // continue to serve shuffle files after the executors that wrote them have already exited.
+            return new String[]{conf.getenv("MESOS_DIRECTORY")};
+        } else {
+            if (conf.getenv("MESOS_DIRECTORY") != null && shuffleServiceEnabled) {
+                LOGGER.info("MESOS_DIRECTORY available but not using provided Mesos sandbox because " +
+                        "spark.shuffle.service.enabled is enabled.");
+            }
+            // In non-Yarn mode (or for the driver in yarn-client mode), we cannot trust the user
+            // configuration to point to a secure directory. So create a subdirectory with restricted
+            // permissions under each listed directory.
+            return conf.get("spark.local.dir", System.getProperty("java.io.tmpdir")).split(",");
+        }
+    }
+
+    public static File createDirectory(String root, String namePrefix) throws IOException {
+        int attempts = 0;
+        int maxAttempts = MAX_DIR_CREATION_ATTEMPTS;
+        File dir = null;
+        while (dir == null) {
+            attempts += 1;
+            if (attempts > maxAttempts) {
+                throw new IOException("Failed to create a temp directory (under " + root + ") after " +
+                        maxAttempts + " attempts!");
+            }
+            try {
+                dir = new File(root, namePrefix + "-" + UUID.randomUUID().toString());
+                if (dir.exists() || !dir.mkdirs()) {
+                    dir = null;
+                }
+            } catch(SecurityException e) {
+                dir = null;
+            }
+        }
+
+        return dir.getCanonicalFile();
+    }
+
+    public static int nonNegativeHash(Object obj) {
+
+        // Required ?
+        if (obj == null) return 0;
+
+        int hash = obj.hashCode();
+        // math.abs fails for Int.MinValue
+        return Integer.MIN_VALUE != hash ? Math.abs(hash) : 0;
+    }
 }

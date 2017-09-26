@@ -2,6 +2,7 @@ package com.sdu.spark.rpc;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
+import com.sdu.spark.network.utils.JavaUtils;
 import org.apache.commons.lang3.math.NumberUtils;
 
 import java.io.Serializable;
@@ -81,5 +82,17 @@ public class SparkConf implements Serializable {
 
     private static boolean isSparkPortConf(String name) {
         return (name.startsWith("spark.") && name.endsWith(".port")) || name.startsWith("spark.port.");
+    }
+
+    public Map<String, String> getAll() {
+        return Maps.newLinkedHashMap(settings);
+    }
+
+    public String getenv(String name) {
+        return System.getenv(name);
+    }
+
+    public long getSizeAsBytes(String key, String defaultValue) {
+        return JavaUtils.byteStringAsBytes(get(key, defaultValue));
     }
 }

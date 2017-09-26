@@ -32,7 +32,8 @@ public class NettyManagedBuffer extends ManagedBuffer {
     }
 
     @Override
-    public void release() {
+    public ManagedBuffer release() {
         buf.release();
+        return this;
     }
 }

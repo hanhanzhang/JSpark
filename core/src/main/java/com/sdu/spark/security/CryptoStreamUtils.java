@@ -3,7 +3,11 @@ package com.sdu.spark.security;
 import com.sdu.spark.rpc.SparkConf;
 
 import javax.crypto.KeyGenerator;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.channels.WritableByteChannel;
 import java.security.NoSuchAlgorithmException;
+import java.util.Properties;
 
 /**
  * @author hanhan.zhang

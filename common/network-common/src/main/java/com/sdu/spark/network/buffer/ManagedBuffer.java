@@ -19,6 +19,6 @@ public abstract class ManagedBuffer {
 
     public abstract ByteBuffer nioByteBuffer() throws IOException;
 
-    public abstract void release();
+    public abstract ManagedBuffer release();
 
 }

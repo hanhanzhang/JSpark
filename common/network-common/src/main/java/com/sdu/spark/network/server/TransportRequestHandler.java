@@ -18,7 +18,13 @@ import java.nio.ByteBuffer;
 import static com.sdu.spark.network.utils.NettyUtils.getRemoteAddress;
 
 /**
- * {@link RpcRequest}消息处理
+ * {@link RpcRequest}消息处理, 三类消息:
+ *
+ *  1: {@link RpcRequest}
+ *
+ *  2: {@link ChunkFetchRequest}
+ *  
+ *  3: {@link StreamRequest}
  *
  * @author hanhan.zhang
  * */
@@ -33,6 +39,7 @@ public class TransportRequestHandler extends MessageHandler<RequestMessage> {
 
     // 数据块请求
     private StreamManager streamManager;
+    // 允许最大传输chunk数
     private long maxChunksBeingTransferred;
 
     public TransportRequestHandler(Channel channel, TransportClient reverseClient,

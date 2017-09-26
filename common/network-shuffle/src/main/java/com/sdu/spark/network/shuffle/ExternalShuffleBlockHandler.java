@@ -11,6 +11,7 @@ import java.nio.ByteBuffer;
  * @author hanhan.zhang
  * */
 public class ExternalShuffleBlockHandler extends RpcHandler {
+
     public void receive(TransportClient client, ByteBuffer message, RpcResponseCallback callback) {
 
     }

@@ -32,7 +32,7 @@ public class NioManagerBuffer extends ManagedBuffer {
     }
 
     @Override
-    public void release() {
-
+    public ManagedBuffer release() {
+        return this;
     }
 }
