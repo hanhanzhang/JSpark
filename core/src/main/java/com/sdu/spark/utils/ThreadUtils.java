@@ -13,6 +13,11 @@ public class ThreadUtils {
         return new ThreadFactoryBuilder().setDaemon(daemon).setNameFormat(prefix).build();
     }
 
+    public static ThreadPoolExecutor newDaemonFixedThreadPool(int nThreads, String prefix) {
+        ThreadFactory threadFactory = namedThreadFactory(prefix, true);
+        return (ThreadPoolExecutor) Executors.newFixedThreadPool(nThreads, threadFactory);
+    }
+
     public static ThreadPoolExecutor newDaemonCachedThreadPool(String prefix, int maxThreadNumber, int keepAliveSeconds) {
         ThreadFactory threadFactory = namedThreadFactory(prefix, true);
         ThreadPoolExecutor executor = new ThreadPoolExecutor(maxThreadNumber, maxThreadNumber, keepAliveSeconds,

@@ -48,7 +48,7 @@ public class NettyRpcEnv implements RpcEnv {
     public static volatile TransportClient currentClient;
 
     private String host;
-    private SparkConf conf;
+    public SparkConf conf;
 
     /**********************************Spark RpcEnv消息路由************************************/
     // 发送消息信箱[key = 接收地址, value = 发送信箱]

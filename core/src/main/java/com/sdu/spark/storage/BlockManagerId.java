@@ -56,6 +56,29 @@ public class BlockManagerId implements Externalizable {
         }
     }
 
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+
+        BlockManagerId that = (BlockManagerId) o;
+
+        if (port != that.port) return false;
+        if (!executorId.equals(that.executorId)) return false;
+        if (!host.equals(that.host)) return false;
+        return topologyInfo != null ? topologyInfo.equals(that.topologyInfo) : that.topologyInfo == null;
+
+    }
+
+    @Override
+    public int hashCode() {
+        int result = executorId.hashCode();
+        result = 31 * result + host.hashCode();
+        result = 31 * result + port;
+        result = 31 * result + (topologyInfo != null ? topologyInfo.hashCode() : 0);
+        return result;
+    }
+
     public static BlockManagerId apply(String execId, String host, int port, String topologyInfo) {
         return getCachedBlockManagerId(new BlockManagerId(execId, host, port, topologyInfo));
     }

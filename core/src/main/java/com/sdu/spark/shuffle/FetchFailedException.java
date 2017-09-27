@@ -5,7 +5,7 @@ import com.sdu.spark.storage.BlockManagerId;
 /**
  * @author hanhan.zhang
  * */
-public class FetchFailedException extends Exception {
+public class FetchFailedException extends RuntimeException {
 
     public BlockManagerId bmAddress;
     public int shuffleId;
@@ -27,5 +27,12 @@ public class FetchFailedException extends Exception {
         this.reduceId = reduceId;
         this.message = message;
         this.cause = cause;
+    }
+
+    public static class MetadataFetchFailedException extends FetchFailedException {
+
+        public MetadataFetchFailedException(int shuffleId, int reduceId, String message) {
+            super(null, shuffleId, -1, reduceId, message, null);
+        }
     }
 }

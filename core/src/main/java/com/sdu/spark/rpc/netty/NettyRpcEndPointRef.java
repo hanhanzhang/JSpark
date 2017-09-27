@@ -4,6 +4,8 @@ import com.sdu.spark.network.client.TransportClient;
 import com.sdu.spark.rpc.RpcAddress;
 import com.sdu.spark.rpc.RpcEndPointRef;
 import com.sdu.spark.rpc.RpcEndpointAddress;
+import com.sdu.spark.rpc.SparkConf;
+import com.sdu.spark.utils.RpcUtils;
 
 import java.io.IOException;
 import java.io.ObjectInputStream;
@@ -12,6 +14,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+
+import static com.sdu.spark.utils.RpcUtils.getRpcAskTimeout;
 
 /**
  * Note:
@@ -39,11 +43,16 @@ public class NettyRpcEndPointRef extends RpcEndPointRef {
 
     public transient volatile NettyRpcEnv rpcEnv;
 
+    private final long defaultAskTimeout;
 
     public NettyRpcEndPointRef(RpcEndpointAddress address, NettyRpcEnv rpcEnv) {
         this.endpointAddress = address;
         this.rpcEnv = rpcEnv;
+
+        this.defaultAskTimeout = getRpcAskTimeout(rpcEnv.conf);
     }
+
+
 
     @Override
     public String name() {
@@ -65,6 +74,11 @@ public class NettyRpcEndPointRef extends RpcEndPointRef {
     public <T> Future<T> ask(Object message) {
         assert rpcEnv != null;
         return (Future<T>) rpcEnv.ask(new RequestMessage(rpcEnv.address(), this, message));
+    }
+
+    @Override
+    public Object askSync(Object message) throws TimeoutException, InterruptedException, ExecutionException {
+        return askSync(message, defaultAskTimeout);
     }
 
     @Override

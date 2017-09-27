@@ -9,9 +9,10 @@ import org.apache.commons.lang3.tuple.Pair;
 public class ShuffleDependency<K, V, C> extends Dependency<Pair<K, V>> {
 
     public int shuffleId;
+    public Partitioner partitioner;
 
     @Override
     public RDD<Pair<K, V>> rdd() {
-        return null;
+        throw new UnsupportedOperationException("");
     }
 }
