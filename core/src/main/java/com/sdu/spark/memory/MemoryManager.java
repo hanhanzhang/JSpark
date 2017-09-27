@@ -112,6 +112,13 @@ public abstract class MemoryManager {
         this.offHeapStorageMemoryPool.setMemoryStore(memoryStore);
     }
 
+    /**
+     * Total available off heap memory for storage, in bytes. This amount can vary over time,
+     * depending on the MemoryManager implementation.
+     *
+     * Note:
+     *  {@link UnifiedMemoryManager} Storage Memory amount can vary over time
+     * */
     public abstract long maxOnHeapStorageMemory();
     public abstract long maxOffHeapStorageMemory();
 

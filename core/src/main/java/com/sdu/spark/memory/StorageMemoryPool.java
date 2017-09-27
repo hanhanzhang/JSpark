@@ -6,6 +6,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
+ * 用来缓存Task数据、在Spark集群中传输内部数据
+ *
  * @author hanhan.zhang
  * */
 public class StorageMemoryPool extends MemoryPool {
@@ -59,7 +61,7 @@ public class StorageMemoryPool extends MemoryPool {
         }
     }
 
-    private boolean acquireMemory(BlockId blockId, long numBytesToAcquire, long numBytesToFree) {
+    public boolean acquireMemory(BlockId blockId, long numBytesToAcquire, long numBytesToFree) {
         synchronized (lock) {
             assert(numBytesToAcquire >= 0);
             assert(numBytesToFree >= 0);

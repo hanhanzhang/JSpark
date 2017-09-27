@@ -7,6 +7,10 @@ import org.slf4j.LoggerFactory;
 import java.util.Map;
 
 /**
+ * Execution内存:
+ *
+ *  用于满足Shuffle、Join、Sort、Aggregation计算过程中对内存的需求
+ *
  * @author hanhan.zhang
  * */
 public class ExecutionMemoryPool extends MemoryPool {
