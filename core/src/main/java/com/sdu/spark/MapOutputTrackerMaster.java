@@ -14,7 +14,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Collections;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentMap;
@@ -247,7 +246,15 @@ public class MapOutputTrackerMaster extends MapOutputTracker {
 
     @Override
     public void stop() {
-
+        try {
+            mapOutputRequests.offer(PoisonPill);
+            threadpool.shutdown();
+            sendTracker(new MapOutputTrackerMessage.StopMapOutputTracker());
+            trackerEndpoint = null;
+            shuffleStatuses.clear();
+        } catch (Exception e) {
+            // ignore
+        }
     }
 
     public void incrementEpoch() {

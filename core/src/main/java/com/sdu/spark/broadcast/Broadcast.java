@@ -13,4 +13,8 @@ public class Broadcast<T> implements Serializable {
     public void destroy(boolean blocking) {
 
     }
+
+    public T value() {
+        throw new UnsupportedOperationException("");
+    }
 }

@@ -105,14 +105,12 @@ public class NettyBlockTransferService extends BlockTransferService {
     @Override
     public void fetchBlocks(String host, int port, String execId, String[] blockIds, BlockFetchingListener listener, TempShuffleFileManager tempShuffleFileManager) {
         try {
-            RetryingBlockFetcher.BlockFetchStarter blockFetchStarter = new RetryingBlockFetcher.BlockFetchStarter() {
-                @Override
-                public void createAndStart(String[] blockIds, BlockFetchingListener blockFetchingListener) throws IOException, InterruptedException {
-                    TransportClient client = clientFactory.createClient(host, port);
-                    new OneForOneBlockFetcher(client, appId, execId, blockIds, blockFetchingListener,
-                            transportConf, tempShuffleFileManager).start();
-                }
+            RetryingBlockFetcher.BlockFetchStarter blockFetchStarter = (fetchBlockIds, blockFetchingListener) -> {
+                TransportClient client = clientFactory.createClient(host, port);
+                new OneForOneBlockFetcher(client, appId, execId, blockIds, blockFetchingListener,
+                                            transportConf, tempShuffleFileManager).start();
             };
+
 
             if (transportConf.maxIORetries() > 0) {
                 // RetryingBlockFetcher.start()

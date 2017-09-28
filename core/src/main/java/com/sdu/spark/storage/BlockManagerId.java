@@ -1,6 +1,7 @@
 package com.sdu.spark.storage;
 
 import com.google.common.collect.Maps;
+import com.sdu.spark.SparkContext;
 
 import java.io.Externalizable;
 import java.io.IOException;
@@ -54,6 +55,15 @@ public class BlockManagerId implements Externalizable {
         } else {
             topologyInfo = null;
         }
+    }
+
+    public boolean isDriver() {
+        return executorId.equals(SparkContext.DRIVER_IDENTIFIER) ||
+                executorId.equals(SparkContext.LEGACY_DRIVER_IDENTIFIER);
+    }
+
+    public String hostPort() {
+        return String.format("%s:%d", host, port);
     }
 
     @Override

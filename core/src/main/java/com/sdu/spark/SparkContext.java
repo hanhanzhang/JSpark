@@ -76,6 +76,7 @@ public class SparkContext {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(SparkContext.class);
     public static final String DRIVER_IDENTIFIER = "driver";
+    public static final String LEGACY_DRIVER_IDENTIFIER = "<driver>";
     public AtomicBoolean stopped = new AtomicBoolean(false);
 
     public SparkConf conf;

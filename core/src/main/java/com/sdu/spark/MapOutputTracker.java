@@ -6,7 +6,7 @@ import com.sdu.spark.broadcast.BroadcastManager;
 import com.sdu.spark.rpc.RpcEndPointRef;
 import com.sdu.spark.rpc.SparkConf;
 import com.sdu.spark.scheduler.MapStatus;
-import com.sdu.spark.shuffle.FetchFailedException.*;
+import com.sdu.spark.shuffle.FetchFailedException.MetadataFetchFailedException;
 import com.sdu.spark.storage.BlockId;
 import com.sdu.spark.storage.BlockId.ShuffleBlockId;
 import com.sdu.spark.storage.BlockManagerId;
@@ -15,10 +15,9 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.ObjectOutputStream;
+import java.io.*;
 import java.util.Map;
+import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
 /**
@@ -34,16 +33,14 @@ public abstract class MapOutputTracker {
     public static final int DIRECT = 0;
     public static final int BROADCAST = 1;
 
-    /** Set to the MapOutputTrackerMasterEndpoint living on the driver. */
-    protected RpcEndPointRef trackerEndpoint;
+    /**SparkEnv初始化trackerEndpoint*/
+    public RpcEndPointRef trackerEndpoint;
 
     /**
-     * The driver-side counter is incremented every time that a map output is lost. This value is sent
-     * to executors as part of tasks, where executors compare the new epoch number to the highest
-     * epoch number that they received in the past. If the new epoch number is higher then executors
-     * will clear their local caches of map output statuses and will re-fetch (possibly updated)
-     * statuses from the driver.
-     */
+     * 当Shuffle的结果输出失效时, Driver会更新epoch值并将此值作为Task一部分发送给Executor, Executor根据
+     * 持有epoch值与new epoch做比较, 若是new epoch值比Executor持有epoch值大, 则清空持有epoch对应的Shuffle
+     * 的结果输出
+     * */
     protected long epoch = 0L;
     protected Object epochLock = new Object();
 
@@ -108,6 +105,37 @@ public abstract class MapOutputTracker {
         }
 
         return ImmutablePair.of(arr, null);
+    }
+
+    private static Object deserializeObject(byte[] arr, int off, int len) throws IOException, ClassNotFoundException {
+        ObjectInputStream objIn = null;
+        try {
+            objIn = new ObjectInputStream(new GZIPInputStream(new ByteArrayInputStream(arr, off, len)));
+            return objIn.readObject();
+        } finally {
+            if (objIn != null) {
+                objIn.close();
+            }
+        }
+    }
+
+    public static MapStatus[] deserializeMapStatuses(byte[] bytes) {
+        assert (bytes.length > 0);
+        int type = bytes[0];
+        try {
+            switch (type) {
+                case DIRECT:
+                    return (MapStatus[]) deserializeObject(bytes, 1, bytes.length - 1);
+                case BROADCAST:
+                    Broadcast<byte[]> broadcast = (Broadcast<byte[]>) deserializeObject(bytes, 1, bytes.length -1);
+                    byte[] broadcastValue = broadcast.value();
+                    return (MapStatus[]) deserializeObject(broadcastValue, 1, broadcastValue.length -1);
+                default:
+                    throw new UnsupportedOperationException("Unsupported map status type : " + type);
+            }
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     public static Map<BlockManagerId, Pair<BlockId, Long>> convertMapStatuses(int shuffleId, int startPartition,

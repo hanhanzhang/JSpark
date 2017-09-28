@@ -11,7 +11,7 @@ import java.io.IOException;
 import java.util.List;
 
 /**
- * {@link MapOutputTrackerMaster}辅助类, 记录ShuffleMapStage状态(一对一关系)
+ * {@link MapOutputTrackerMaster}辅助类, 记录ShuffleMapStage运行状态(每个ShuffleMapStage对应一个ShuffleStatus)
  *
  * @author hanhan.zhang 
  * */
@@ -90,6 +90,7 @@ public class ShuffleStatus {
 
     /**
      * {@link #mapStatuses}序列化, 发送到Reduce端
+     *
      * */
     public synchronized byte[] serializedMapStatus(BroadcastManager broadcastManager,
                                                    boolean isLocal, int minBroadcastSize) {

@@ -48,4 +48,14 @@ public enum  StorageLevel implements Externalizable {
     public void readExternal(ObjectInput in) throws IOException, ClassNotFoundException {
 
     }
+
+    public boolean isValid() {
+       return (useMemory || useDisk) && (replication > 0);
+    }
+
+    public static StorageLevel apply(ObjectInput in) {
+        throw new UnsupportedOperationException("");
+    }
+
 }
+

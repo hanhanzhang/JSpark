@@ -1,7 +1,14 @@
 package com.sdu.spark.storage;
 
+import com.sdu.spark.MapOutputTracker;
+import com.sdu.spark.memory.MemoryManager;
 import com.sdu.spark.network.BlockDataManager;
+import com.sdu.spark.network.BlockTransferService;
 import com.sdu.spark.network.buffer.ManagedBuffer;
+import com.sdu.spark.rpc.RpcEnv;
+import com.sdu.spark.rpc.SparkConf;
+import com.sdu.spark.serializer.SerializerManager;
+import com.sdu.spark.shuffle.ShuffleManager;
 import com.sdu.spark.utils.ChunkedByteBuffer;
 
 import java.util.List;
@@ -11,12 +18,35 @@ import java.util.List;
  * */
 public class BlockManager implements BlockDataManager {
 
-    public BlockManagerId blockManagerId;
+    private String executorId;
+    private RpcEnv rpcEnv;
+    private BlockManagerMaster master;
+    private SerializerManager serializerManager;
+    private SparkConf conf;
+    private MemoryManager memoryManager;
+    private MapOutputTracker mapOutputTracker;
+    private ShuffleManager shuffleManager;
+    private BlockTransferService blockTransferService;
+    private SecurityManager securityManager;
+    private int numUsableCores;
 
-    private BlockInfoManager blockInfoManager = new BlockInfoManager();
-
-    public BlockManagerMaster master;
-
+    public BlockManager(String executorId, RpcEnv rpcEnv, BlockManagerMaster master,
+                        SerializerManager serializerManager, SparkConf conf, MemoryManager memoryManager,
+                        MapOutputTracker mapOutputTracker, ShuffleManager shuffleManager,
+                        BlockTransferService blockTransferService, SecurityManager securityManager,
+                        int numUsableCores) {
+        this.executorId = executorId;
+        this.rpcEnv = rpcEnv;
+        this.master = master;
+        this.serializerManager = serializerManager;
+        this.conf = conf;
+        this.memoryManager = memoryManager;
+        this.mapOutputTracker = mapOutputTracker;
+        this.shuffleManager = shuffleManager;
+        this.blockTransferService = blockTransferService;
+        this.securityManager = securityManager;
+        this.numUsableCores = numUsableCores;
+    }
 
 
     public void initialize(String appId) {
@@ -28,7 +58,7 @@ public class BlockManager implements BlockDataManager {
     }
 
     public List<BlockId> releaseAllLocksForTask(long taskId) {
-        return blockInfoManager.releaseAllLocksForTask(taskId);
+        throw new UnsupportedOperationException("");
     }
 
     public boolean putBytes(BlockId blockId, ChunkedByteBuffer bytes, StorageLevel level) {
