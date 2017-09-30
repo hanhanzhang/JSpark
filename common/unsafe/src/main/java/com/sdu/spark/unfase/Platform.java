@@ -25,6 +25,36 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
 
+/**
+ *
+ * Java不能直接访问操作系统底层, 而是通过本地方法访问. {@link Unsafe}提供了硬件级别原子操作:
+ *
+ * 1: 申请/释放内存
+ *
+ *    {@link Unsafe#allocateMemory(long)}           ==> 申请内存
+ *
+ *    {@link Unsafe#reallocateMemory(long, long)}   ==> 申请内存
+ *
+ *    {@link Unsafe#freeMemory(long)}               ==> 释放内存
+ *
+ * 2: 元素寻址
+ *
+ *   1: Object元素寻址
+ *
+ *    {@link Unsafe#staticFieldOffset(Field)}       ==> 获取Field的内存偏移地址
+ *
+ *    {@link Unsafe#getLong(Object, long)}          ==> 获取对象中offset偏移地址对应的long型field值
+ *
+ *   2：Object数组寻址
+ *
+ *    {@link Unsafe#arrayBaseOffset(Class)}         ==> 获取数组第一个元素的偏移地址
+ *
+ * 3: 线程挂起/恢复
+ *
+ * 4: CAS操作
+ *
+ *
+ * */
 public final class Platform {
 
   private static final Unsafe _UNSAFE;
