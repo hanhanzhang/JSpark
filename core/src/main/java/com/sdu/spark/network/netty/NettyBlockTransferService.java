@@ -1,6 +1,7 @@
 package com.sdu.spark.network.netty;
 
 import com.google.common.collect.Lists;
+import com.google.common.util.concurrent.SettableFuture;
 import com.sdu.spark.SecurityManager;
 import com.sdu.spark.network.BlockDataManager;
 import com.sdu.spark.network.BlockTransferService;

@@ -6,7 +6,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * 用来缓存Task数据、在Spark集群中传输内部数据
+ * Block存储内存池, 有两个主要方法:
+ *
+ * 1: {@link StorageMemoryPool#acquireMemory(BlockId, long, long)}
+ *
+ *  申请存储空间, Storage存储空间不足时, {@link MemoryStore}会清除Block
+ *
+ * 2: {@link StorageMemoryPool#freeSpaceToShrinkPool(long)}
+ *
+ *  Execution存储内存不足时, {@link UnifiedMemoryManager}会收缩Storage存储内存
  *
  * @author hanhan.zhang
  * */
@@ -61,6 +69,10 @@ public class StorageMemoryPool extends MemoryPool {
         }
     }
 
+    /**
+     * @param numBytesToAcquire: 申请的存储空间
+     * @param numBytesToFree : Storage内存需扩容内存空间(也就是说, numBytesToAcquire已超过空闲内存, Storage内存池需扩容)
+     * */
     public boolean acquireMemory(BlockId blockId, long numBytesToAcquire, long numBytesToFree) {
         synchronized (lock) {
             assert(numBytesToAcquire >= 0);

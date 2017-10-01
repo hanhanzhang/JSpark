@@ -16,10 +16,10 @@ public class BlockInfo {
     public static final long NON_TASK_WRITER = -1024;
 
     public StorageLevel storageLevel;
-    public boolean tellListener;
+    public boolean tellMaster;
 
     // Block's size
-    private long size;
+    public long size;
     // The number of times that this block has been locked for reading.
     public int readerCount;
     /**
@@ -32,9 +32,9 @@ public class BlockInfo {
      * */
     public long writerTask = NO_WRITER;
 
-    public BlockInfo(StorageLevel storageLevel, boolean tellListener) {
+    public BlockInfo(StorageLevel storageLevel, boolean tellMaster) {
         this.storageLevel = storageLevel;
-        this.tellListener = tellListener;
+        this.tellMaster = tellMaster;
         checkInvariants();
     }
 

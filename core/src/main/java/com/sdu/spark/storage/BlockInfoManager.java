@@ -8,6 +8,7 @@ import com.sdu.spark.SparkException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -164,6 +165,9 @@ public class BlockInfoManager {
      * See SPARK-18406 for more discussion of this issue.
      */
     public synchronized void unlock(BlockId blockId, long taskId) {
+        if (taskId < 0) {
+            taskId = currentTaskAttemptId();
+        }
         LOGGER.trace("Task {} releasing lock for {}", taskId, blockId);
         BlockInfo blockInfo = get(blockId);
         if (blockInfo == null) {
@@ -275,5 +279,9 @@ public class BlockInfoManager {
         readLocksByTask.clear();
         writeLocksByTask.clear();
         notifyAll();
+    }
+
+    public Set<Map.Entry<BlockId, BlockInfo>> entries() {
+        return infos.entrySet();
     }
 }

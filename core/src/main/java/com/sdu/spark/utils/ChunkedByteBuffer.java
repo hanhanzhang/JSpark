@@ -20,7 +20,7 @@ import java.util.Iterator;
  * */
 public class ChunkedByteBuffer {
 
-    private ByteBuffer[] chunks;
+    public ByteBuffer[] chunks;
     // 释放内存
     private boolean disposed = false;
 

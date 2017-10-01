@@ -1,14 +1,18 @@
 package com.sdu.spark.network.buffer;
 
+import com.google.common.io.ByteStreams;
 import com.sdu.spark.network.utils.JavaUtils;
+import com.sdu.spark.network.utils.LimitedInputStream;
 import com.sdu.spark.network.utils.TransportConf;
 import io.netty.channel.DefaultFileRegion;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
+import java.nio.file.Files;
 import java.nio.file.StandardOpenOption;
 
 /**
@@ -81,5 +85,36 @@ public class FileSegmentManagedBuffer extends ManagedBuffer {
     @Override
     public ManagedBuffer release() {
         return this;
+    }
+
+    @Override
+    public ManagedBuffer retain() {
+        return this;
+    }
+
+    @Override
+    public InputStream createInputStream() throws IOException {
+        InputStream is = null;
+        try {
+            is = Files.newInputStream(file.toPath());
+            ByteStreams.skipFully(is, offset);
+            return new LimitedInputStream(is, length);
+        } catch (IOException e) {
+            try {
+                if (is != null) {
+                    long size = file.length();
+                    throw new IOException("Error in reading " + this + " (actual file length " + size + ")",
+                            e);
+                }
+            } catch (IOException ignored) {
+                // ignore
+            } finally {
+                JavaUtils.closeQuietly(is);
+            }
+            throw new IOException("Error in opening " + this, e);
+        } catch (RuntimeException e) {
+            JavaUtils.closeQuietly(is);
+            throw e;
+        }
     }
 }

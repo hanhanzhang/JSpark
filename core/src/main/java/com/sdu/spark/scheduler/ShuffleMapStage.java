@@ -7,6 +7,7 @@ import com.sdu.spark.ShuffleDependency;
 import com.sdu.spark.rdd.RDD;
 import com.sdu.spark.utils.CallSite;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 
@@ -30,7 +31,7 @@ public class ShuffleMapStage extends Stage {
 
     @Override
     public List<Integer> findMissingPartitions() {
-        return mapOutputTrackerMaster.findMissingPartitions(shuffleDep.shuffleId);
+        return Arrays.asList(mapOutputTrackerMaster.findMissingPartitions(shuffleDep.shuffleId));
     }
 
     @Override

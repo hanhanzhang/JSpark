@@ -1,5 +1,7 @@
 package com.sdu.spark.storage;
 
+import com.sdu.spark.memory.MemoryMode;
+
 import java.io.Externalizable;
 import java.io.IOException;
 import java.io.ObjectInput;
@@ -49,6 +51,12 @@ public enum  StorageLevel implements Externalizable {
 
     }
 
+    public MemoryMode memoryMode() {
+        if (useOffHeap)
+            return MemoryMode.OFF_HEAP;
+        return MemoryMode.ON_HEAP;
+    }
+
     public boolean isValid() {
        return (useMemory || useDisk) && (replication > 0);
     }
@@ -56,6 +64,12 @@ public enum  StorageLevel implements Externalizable {
     public static StorageLevel apply(ObjectInput in) {
         throw new UnsupportedOperationException("");
     }
+
+    public static StorageLevel apply(boolean useDisk, boolean useMemory, boolean useOffHeap,
+                                     boolean deserialized, int replication) {
+        throw new UnsupportedOperationException("");
+    }
+
 
 }
 

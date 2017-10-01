@@ -164,6 +164,7 @@ public class BlockManagerInfo {
             return memorySize + diskSize > 0;
         }
 
+        // 标识BlockStatus待删除
         static BlockStatus empty() {
             return new BlockStatus(StorageLevel.NONE, 0L, 0L);
         }

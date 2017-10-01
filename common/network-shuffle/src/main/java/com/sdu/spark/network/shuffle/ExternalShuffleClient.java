@@ -8,11 +8,14 @@ import com.sdu.spark.network.client.TransportClientFactory;
 import com.sdu.spark.network.crypto.AuthClientBootstrap;
 import com.sdu.spark.network.sasl.SecretKeyHolder;
 import com.sdu.spark.network.server.NoOpRpcHandler;
+import com.sdu.spark.network.shuffle.protocol.ExecutorShuffleInfo;
+import com.sdu.spark.network.shuffle.protocol.RegisterExecutor;
 import com.sdu.spark.network.utils.TransportConf;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.List;
 
 /**
@@ -89,5 +92,17 @@ public class ExternalShuffleClient implements ShuffleClient {
 
     protected void checkInit() {
         assert appId != null : "Called before init()";
+    }
+
+    public void registerWithShuffleServer(
+            String host,
+            int port,
+            String execId,
+            ExecutorShuffleInfo executorInfo) throws IOException, InterruptedException {
+        checkInit();
+        try (TransportClient client = clientFactory.createUnmanagedClient(host, port)) {
+            ByteBuffer registerMessage = new RegisterExecutor(appId, execId, executorInfo).toByteBuffer();
+            client.sendRpcSync(registerMessage, registrationTimeoutMs);
+        }
     }
 }

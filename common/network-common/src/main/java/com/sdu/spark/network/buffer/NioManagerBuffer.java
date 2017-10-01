@@ -1,8 +1,10 @@
 package com.sdu.spark.network.buffer;
 
+import io.netty.buffer.ByteBufInputStream;
 import io.netty.buffer.Unpooled;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 
 /**
@@ -34,5 +36,15 @@ public class NioManagerBuffer extends ManagedBuffer {
     @Override
     public ManagedBuffer release() {
         return this;
+    }
+
+    @Override
+    public ManagedBuffer retain() {
+        return this;
+    }
+
+    @Override
+    public InputStream createInputStream() throws IOException {
+        return new ByteBufInputStream(Unpooled.wrappedBuffer(buf));
     }
 }

@@ -1,8 +1,10 @@
 package com.sdu.spark.network.buffer;
 
 import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufInputStream;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 
 /**
@@ -35,5 +37,16 @@ public class NettyManagedBuffer extends ManagedBuffer {
     public ManagedBuffer release() {
         buf.release();
         return this;
+    }
+
+    @Override
+    public ManagedBuffer retain() {
+        buf.retain();
+        return this;
+    }
+
+    @Override
+    public InputStream createInputStream() throws IOException {
+        return new ByteBufInputStream(buf);
     }
 }

@@ -116,6 +116,15 @@ public class TransportClientFactory implements Closeable {
         }
     }
 
+    /**
+     * 不需要创建连接池
+     * */
+    public TransportClient createUnmanagedClient(String remoteHost, int remotePort)
+            throws IOException, InterruptedException {
+        final InetSocketAddress address = new InetSocketAddress(remoteHost, remotePort);
+        return createClient(address);
+    }
+
     private TransportClient createClient(InetSocketAddress address) {
         LOGGER.debug("Creating new connection to {}", address);
 

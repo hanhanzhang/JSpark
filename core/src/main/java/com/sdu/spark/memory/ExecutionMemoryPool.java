@@ -7,9 +7,7 @@ import org.slf4j.LoggerFactory;
 import java.util.Map;
 
 /**
- * Execution内存:
- *
- *  用于满足Shuffle、Join、Sort、Aggregation计算过程中对内存的需求
+ * Task计算内存池(记录内存使用信息, Task内存分配信息)
  *
  * @author hanhan.zhang
  * */
@@ -20,7 +18,7 @@ public class ExecutionMemoryPool extends MemoryPool {
     private MemoryMode memoryMode;
     private String poolname;
 
-    // key = taskId, value = 分配内在数
+    // Task内存分配信息 ==> key = taskId, value = 分配内存数
     private Map<Long, Long> memoryForTask;
 
     public ExecutionMemoryPool(Object lock, MemoryMode memoryMode) {
@@ -142,6 +140,9 @@ public class ExecutionMemoryPool extends MemoryPool {
     }
 
     public interface ExecutionMemoryCalculate {
+        /**
+         * @param additionalSpaceNeeded : Execution内存扩容量
+         * */
         void maybeGrowPool(long additionalSpaceNeeded);
         long computeMaxPoolSize();
     }

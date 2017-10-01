@@ -5,12 +5,16 @@ import com.sdu.spark.memory.MemoryManager;
 import com.sdu.spark.memory.MemoryMode;
 import com.sdu.spark.rpc.SparkConf;
 import com.sdu.spark.serializer.SerializerManager;
+import com.sdu.spark.storage.BlockData;
 import com.sdu.spark.storage.BlockId;
 import com.sdu.spark.storage.BlockInfoManager;
 import com.sdu.spark.utils.ChunkedByteBuffer;
+import com.sdu.spark.utils.colleciton.Either;
+import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.ByteBuffer;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -30,13 +34,13 @@ public class MemoryStore {
     private static final Logger LOGGER = LoggerFactory.getLogger(MemoryStore.class);
 
     public SparkConf conf;
-    public BlockInfoManager blockInfoManager;
-    public SerializerManager serializerManager;
-    public MemoryManager memoryManager;
-    public BlockEvictionHandler blockEvictionHandler;
+    private BlockInfoManager blockInfoManager;
+    private SerializerManager serializerManager;
+    private MemoryManager memoryManager;
+    private BlockEvictionHandler blockEvictionHandler;
 
     // key = BlockId, value = 存储空间(jvm内存或直接内存)
-    private Map<BlockId, MemoryEntry> entries;
+    private final Map<BlockId, MemoryEntry> entries;
     // key = taskId, value = 存储的jvm空间大小
     private Map<Long, Long> onHeapUnrollMemoryMap;
     // key = taskId, value = 存储的堆外空间大小
@@ -110,20 +114,20 @@ public class MemoryStore {
         }
     }
 
-    private boolean contains(BlockId blockId) {
+    public boolean contains(BlockId blockId) {
         synchronized (entries) {
             return entries.containsKey(blockId);
         }
     }
 
-    public boolean putBytes(BlockId blockId, long size, MemoryMode memoryMode, BlockToBytes blockToBytes) {
+    public boolean putBytes(BlockId blockId, long size, MemoryMode memoryMode, ChunkedByteBufferAllocator allocator) {
         checkArgument(contains(blockId), String.format("Block %s is already present in the MemoryStore", blockId));
 
         if (memoryManager.acquireStorageMemory(blockId, size, memoryMode)) {
             // 存储空间申请成功
-            ChunkedByteBuffer chunkedByteBuffer = blockToBytes.toBytes();
-            assert chunkedByteBuffer.size() == size;
-            SerializedMemoryEntry memoryEntry = new SerializedMemoryEntry(chunkedByteBuffer, memoryMode);
+            ChunkedByteBuffer buffer = allocator.toChunkedByteBuffer((int) size);
+            assert buffer.size() == size;
+            SerializedMemoryEntry memoryEntry = new SerializedMemoryEntry(buffer, memoryMode);
             synchronized (entries) {
                 entries.put(blockId, memoryEntry);
             }
@@ -134,6 +138,12 @@ public class MemoryStore {
 
         return false;
     }
+
+    public Pair<PartiallyUnrolledIterator<?>, Long> putIteratorAsValues(BlockId blockId, Iterator<?> values) {
+        throw new UnsupportedOperationException("");
+    }
+
+
 
     public ChunkedByteBuffer getBytes(BlockId blockId) {
         MemoryEntry entry;
@@ -197,7 +207,63 @@ public class MemoryStore {
         throw new UnsupportedOperationException("");
     }
 
-    public interface BlockToBytes {
-        ChunkedByteBuffer toBytes();
+    public void releaseUnrollMemoryForThisTask(MemoryMode memoryMode, long memory) {
+
+    }
+
+    public interface ChunkedByteBufferAllocator {
+        ChunkedByteBuffer toChunkedByteBuffer(int size);
+    }
+
+    public class PartiallyUnrolledIterator<T> implements Iterator<T> {
+
+        private MemoryStore memoryStore;
+        private MemoryMode memoryMode;
+        private long unrollMemory;
+        private Iterator<T> unrolled;
+        private Iterator<T> rest;
+
+        public PartiallyUnrolledIterator(MemoryStore memoryStore, MemoryMode memoryMode, long unrollMemory,
+                                         Iterator<T> unrolled, Iterator<T> rest) {
+            this.memoryStore = memoryStore;
+            this.memoryMode = memoryMode;
+            this.unrollMemory = unrollMemory;
+            this.unrolled = unrolled;
+            this.rest = rest;
+        }
+
+        @Override
+        public boolean hasNext() {
+            if (unrolled == null) {
+                return rest.hasNext();
+            } else if (!unrolled.hasNext()) {
+                releaseUnrollMemory();
+                return rest.hasNext();
+            } else {
+                return true;
+            }
+        }
+
+        @Override
+        public T next() {
+            if (unrolled == null || !unrolled.hasNext()) {
+                return rest.next();
+            } else {
+                return unrolled.next();
+            }
+        }
+
+        private void releaseUnrollMemory() {
+            memoryStore.releaseUnrollMemoryForThisTask(memoryMode, unrollMemory);
+            // SPARK-17503: Garbage collects the unrolling memory before the life end of
+            // PartiallyUnrolledIterator.
+            unrolled = null;
+        }
+
+        public void close() {
+            if (unrolled != null) {
+
+            }
+        }
     }
 }

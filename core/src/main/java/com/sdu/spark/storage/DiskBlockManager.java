@@ -32,9 +32,9 @@ public class DiskBlockManager {
     public SparkConf conf;
     public boolean deleteFilesOnStop;
 
-    private File[] localDirs;
+    public File[] localDirs;
     private File[][] subDirs;
-    private int subDirsPerLocalDir;
+    public int subDirsPerLocalDir;
 
     // TODO: ShutdownHook
     

@@ -9,6 +9,10 @@ public class SparkException extends RuntimeException {
         super(message);
     }
 
+    public SparkException(Throwable cause) {
+        super(cause);
+    }
+
     public SparkException(String message, Throwable cause) {
         super(message, cause);
     }

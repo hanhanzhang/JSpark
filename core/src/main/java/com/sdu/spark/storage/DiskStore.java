@@ -2,6 +2,7 @@ package com.sdu.spark.storage;
 
 import com.google.common.collect.Maps;
 import com.sdu.spark.SecurityManager;
+import com.sdu.spark.SparkException;
 import com.sdu.spark.network.utils.JavaUtils;
 import com.sdu.spark.rpc.SparkConf;
 import com.sdu.spark.utils.ChunkedByteBuffer;
@@ -39,8 +40,13 @@ public class DiskStore {
         this.blockSizes = Maps.newConcurrentMap();
     }
 
-    private boolean contains(BlockId blockId) throws IOException {
-        return diskManager.containsBlock(blockId);
+    public boolean contains(BlockId blockId) {
+        try {
+            return diskManager.containsBlock(blockId);
+        } catch (IOException e) {
+            throw  new SparkException(e);
+        }
+
     }
 
     public void put(BlockId blockId, DiskBlockDataWriter blockWriter) throws IOException {
@@ -78,39 +84,48 @@ public class DiskStore {
                     finishTime - startTime);
     }
 
-    public void putBytes(BlockId blockId, ChunkedByteBuffer bytes) throws IOException {
-        put(blockId, channel -> {
-            try {
-                bytes.writeFully(channel);
-            } catch (IOException e) {
-                throw new RuntimeException(e);
-            }
-        });
+    public void putBytes(BlockId blockId, ChunkedByteBuffer bytes) {
+        try {
+            put(blockId, channel -> {
+                try {
+                    bytes.writeFully(channel);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+            });
+        } catch (IOException e) {
+            throw new SparkException("dist store block " + blockId + " failure", e);
+        }
     }
 
-    private long getSize(BlockId blockId) {
+    public long getSize(BlockId blockId) {
         return blockSizes.get(blockId.name());
     }
 
-    public BlockData getBytes(BlockId blockId) throws IOException {
-        File file = diskManager.getFile(blockId);
-        long blockSize = getSize(blockId);
-
-        // TODO: 安全验证
-        FileChannel channel = new FileInputStream(file).getChannel();
+    public BlockData getBytes(BlockId blockId) {
         try {
-            if (blockSize < minMemoryMapBytes) {
-                ByteBuffer buf = ByteBuffer.allocate((int) blockSize);
-                JavaUtils.readFully(channel, buf);
-                buf.flip();
-                return new BlockData.ByteBufferBlockData(new ChunkedByteBuffer(buf), true);
-            } else {
-                ByteBuffer buffer = channel.map(FileChannel.MapMode.READ_ONLY, 0, file.length());
-                return new BlockData.ByteBufferBlockData(new ChunkedByteBuffer(buffer), true);
+            File file = diskManager.getFile(blockId);
+            long blockSize = getSize(blockId);
+
+            // TODO: 安全验证
+            FileChannel channel = new FileInputStream(file).getChannel();
+            try {
+                if (blockSize < minMemoryMapBytes) {
+                    ByteBuffer buf = ByteBuffer.allocate((int) blockSize);
+                    JavaUtils.readFully(channel, buf);
+                    buf.flip();
+                    return new BlockData.ByteBufferBlockData(new ChunkedByteBuffer(buf), true);
+                } else {
+                    ByteBuffer buffer = channel.map(FileChannel.MapMode.READ_ONLY, 0, file.length());
+                    return new BlockData.ByteBufferBlockData(new ChunkedByteBuffer(buffer), true);
+                }
+            } finally {
+                channel.close();
             }
-        } finally {
-            channel.close();
+        } catch (IOException e) {
+            throw new SparkException("Got block " + blockId + " data failure", e);
         }
+
     }
 
     private WritableByteChannel openForWrite(File file) throws FileNotFoundException {
@@ -118,17 +133,21 @@ public class DiskStore {
         return new FileOutputStream(file).getChannel();
     }
 
-    public boolean remove(BlockId blockId) throws IOException {
-        blockSizes.remove(blockId.name());
-        File file = diskManager.getFile(blockId);
-        if (file.exists()) {
-            boolean ret = file.delete();
-            if (!ret) {
-                LOGGER.error("Error deleting {}", file.getPath());
+    public boolean remove(BlockId blockId)  {
+        try {
+            blockSizes.remove(blockId.name());
+            File file = diskManager.getFile(blockId);
+            if (file.exists()) {
+                boolean ret = file.delete();
+                if (!ret) {
+                    LOGGER.error("Error deleting {}", file.getPath());
+                }
+                return ret;
             }
-            return ret;
+            return false;
+        } catch (IOException e) {
+            throw new SparkException("disk remove blockId " + blockId + " failure", e);
         }
-        return false;
     }
 
     private class CountingWritableChannel implements WritableByteChannel {

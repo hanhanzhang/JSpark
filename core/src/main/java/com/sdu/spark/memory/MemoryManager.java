@@ -1,44 +1,44 @@
 package com.sdu.spark.memory;
 
-import com.google.common.base.Preconditions;
 import com.sdu.spark.rpc.SparkConf;
 import com.sdu.spark.storage.BlockId;
 import com.sdu.spark.storage.memory.MemoryStore;
 import com.sdu.spark.unfase.Platform;
 import com.sdu.spark.unfase.array.ByteArrayMethods;
 import com.sdu.spark.unfase.memory.MemoryAllocator;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+
+import static com.google.common.base.Preconditions.checkArgument;
 
 /**
- * todo: 操作系统内存页管理
+ * {@link MemoryManager}负责Execution和Storage内存申请、及Execution内存动态扩容
  *
- * todo: 内存分配
+ * todo: 操作系统内存页管理
  *
  * @author hanhan.zhang
  * */
 public abstract class MemoryManager {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(MemoryManager.class);
-
     public SparkConf conf;
-    public int numCores;
-    // jvm数据存储量
-    public long onHeapStorageMemory;
-    // jvm数据计算存储量
-    public long onHeapExecutionMemory;
-    // 直接内存存储量
-    public long maxOffHeapMemory;
-    public long offHeapStorageMemory;
+    int numCores;
+    // Storage内存存储量
+    long onHeapStorageMemory;
+    // Execution计算内存存储量
+    long onHeapExecutionMemory;
 
-    protected StorageMemoryPool onHeapStorageMemoryPool = new StorageMemoryPool(this, MemoryMode.ON_HEAP);
-    protected StorageMemoryPool offHeapStorageMemoryPool = new StorageMemoryPool(this, MemoryMode.OFF_HEAP);
-    protected ExecutionMemoryPool onHeapExecutionMemoryPool = new ExecutionMemoryPool(this, MemoryMode.ON_HEAP);
-    protected ExecutionMemoryPool offHeapExecutionMemoryPool = new ExecutionMemoryPool(this, MemoryMode.OFF_HEAP);
+    // 最大非堆内存存储量
+    long maxOffHeapMemory;
+    // 非堆Storage内存存储量
+    long offHeapStorageMemory;
 
-    protected MemoryMode tungstenMemoryMode;
-    protected long pageSizeBytes;
-    protected MemoryAllocator tungstenMemoryAllocator;
+    final StorageMemoryPool onHeapStorageMemoryPool = new StorageMemoryPool(this, MemoryMode.ON_HEAP);
+    final StorageMemoryPool offHeapStorageMemoryPool = new StorageMemoryPool(this, MemoryMode.OFF_HEAP);
+    final ExecutionMemoryPool onHeapExecutionMemoryPool = new ExecutionMemoryPool(this, MemoryMode.ON_HEAP);
+    final ExecutionMemoryPool offHeapExecutionMemoryPool = new ExecutionMemoryPool(this, MemoryMode.OFF_HEAP);
+
+    MemoryMode tungstenMemoryMode;
+    long pageSizeBytes;
+    // 分配分配
+    MemoryAllocator tungstenMemoryAllocator;
 
     public MemoryManager(SparkConf conf, int numCores, long onHeapStorageMemory, long onHeapExecutionMemory) {
         this.conf = conf;
@@ -66,10 +66,10 @@ public abstract class MemoryManager {
 
     private MemoryMode memoryMode(SparkConf conf) {
         if (conf.getBoolean("spark.memory.offHeap.enabled", false)) {
-            Preconditions.checkArgument(conf.getSizeAsBytes("spark.memory.offHeap.size", "0") > 0,
+            checkArgument(conf.getSizeAsBytes("spark.memory.offHeap.size", "0") > 0,
                     "spark.memory.offHeap.size must be > 0 when spark.memory.offHeap.enabled == true");
 
-            Preconditions.checkArgument(Platform.unaligned(),
+            checkArgument(Platform.unaligned(),
                     "No support for unaligned Unsafe. Set spark.memory.offHeap.enabled to false.");
             return MemoryMode.OFF_HEAP;
         }
@@ -77,7 +77,7 @@ public abstract class MemoryManager {
     }
 
     private long calculatePageSize(SparkConf conf) {
-        long minPageSize = 1 * 1024 * 1024L;   // 1MB
+        long minPageSize = 1024 * 1024L;   // 1MB
         long maxPageSize = 64 * minPageSize;  // 64MB
         int cores = numCores > 0 ? numCores : Runtime.getRuntime().availableProcessors();
         // Because of rounding to next power of 2, we may have safetyFactor as 8 in worst case
@@ -108,8 +108,8 @@ public abstract class MemoryManager {
     }
 
     public final void setMemoryStore(MemoryStore memoryStore) {
-        this.onHeapStorageMemoryPool.setMemoryStore(memoryStore);
-        this.offHeapStorageMemoryPool.setMemoryStore(memoryStore);
+        onHeapStorageMemoryPool.setMemoryStore(memoryStore);
+        offHeapStorageMemoryPool.setMemoryStore(memoryStore);
     }
 
     /**

@@ -1,6 +1,8 @@
 package com.sdu.spark.network.client;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Throwables;
+import com.google.common.util.concurrent.SettableFuture;
 import com.sdu.spark.network.buffer.NioManagerBuffer;
 import com.sdu.spark.network.protocol.*;
 import io.netty.channel.Channel;
@@ -11,6 +13,7 @@ import java.io.Closeable;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 import static com.sdu.spark.network.utils.NettyUtils.getRemoteAddress;
@@ -43,6 +46,34 @@ public class TransportClient implements Closeable {
      * */
     public void send(ByteBuffer message) {
         channel.writeAndFlush(new OneWayMessage(new NioManagerBuffer(message)));
+    }
+
+    public ByteBuffer sendRpcSync(ByteBuffer message, long timeoutMs) {
+        final SettableFuture<ByteBuffer> result = SettableFuture.create();
+
+        sendRpc(message, new RpcResponseCallback() {
+            @Override
+            public void onSuccess(ByteBuffer response) {
+                ByteBuffer copy = ByteBuffer.allocate(response.remaining());
+                copy.put(response);
+                // flip "copy" to make it readable
+                copy.flip();
+                result.set(copy);
+            }
+
+            @Override
+            public void onFailure(Throwable e) {
+                result.setException(e);
+            }
+        });
+
+        try {
+            return result.get(timeoutMs, TimeUnit.MILLISECONDS);
+        } catch (ExecutionException e) {
+            throw Throwables.propagate(e.getCause());
+        } catch (Exception e) {
+            throw Throwables.propagate(e);
+        }
     }
 
     /**

@@ -104,7 +104,7 @@ public class Executor {
         try {
             HeartbeatResponse response = (HeartbeatResponse) heartbeatReceiverRef.askSync(message, conf.getTimeAsMs("spark.executor.heartbeatInterval", "10s"));
             if (response.registerBlockManager) {
-                env.blockManager.reRegister();
+                env.blockManager.reregister();
             }
         } catch (Exception e) {
             heartbeatFailures += 1;

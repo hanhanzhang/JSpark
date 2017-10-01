@@ -3,13 +3,18 @@ package com.sdu.spark.memory;
 import com.google.common.base.Preconditions;
 
 /**
- * JVM数据存储及数据计算存储内存池
+ * {@link MemoryPool}维护内存使用信息, MemoryPool有两种实现:
+ *
+ * 1: {@link ExecutionMemoryPool}  ==> Task计算内存
+ *
+ * 2: {@link StorageMemoryPool}    ==> Block存储内存
  *
  * @author hanhan.zhang
  * */
 public abstract class MemoryPool {
 
-    protected Object lock;
+    final Object lock;
+    // 内存池容量
     private long poolSize;
 
     public MemoryPool(Object lock) {
