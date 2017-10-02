@@ -156,7 +156,12 @@ public class CoarseGrainedExecutorBackend extends RpcEndPoint implements Executo
     private static void run(String driverUrl, String executorId, String hostname, int cores, String appId, String workerUrl) {
         // create RpcEnv
         SparkConf conf = new SparkConf();
-        RpcEnv rpcEnv = RpcEnv.create(hostname, -1, conf, new SecurityManager(conf), true);
+        RpcEnv rpcEnv = RpcEnv.create("driverPropsFetcher",
+                                      hostname,
+                                      -1,
+                                      conf,
+                                      new SecurityManager(conf),
+                                      true);
 
         RpcEndPointRef driverRef = rpcEnv.setupEndpointRefByURI(driverUrl);
         try {

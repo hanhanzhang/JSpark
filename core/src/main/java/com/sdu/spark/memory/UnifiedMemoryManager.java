@@ -26,6 +26,10 @@ public class UnifiedMemoryManager extends MemoryManager {
     private long maxHeapMemory;
     private long onHeapStorageRegionSize;
 
+    public UnifiedMemoryManager(SparkConf conf, int numCores) {
+        this(conf, numCores, getMaxExecutionMemory(conf), getMaxStorageMemory(conf));
+    }
+
     public UnifiedMemoryManager(SparkConf conf, int numCores,
                                 long maxHeapMemory, long onHeapStorageRegionSize) {
         super(conf, numCores, maxHeapMemory, maxHeapMemory - onHeapStorageRegionSize);

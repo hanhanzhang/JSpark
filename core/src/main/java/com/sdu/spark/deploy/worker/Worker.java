@@ -2,14 +2,11 @@ package com.sdu.spark.deploy.worker;
 
 import com.google.common.collect.Maps;
 import com.sdu.spark.SecurityManager;
+import com.sdu.spark.deploy.DeployMessage.*;
 import com.sdu.spark.deploy.ExecutorState;
 import com.sdu.spark.deploy.Master;
+import com.sdu.spark.deploy.WorkerLocalMessage.RegisterWithMaster;
 import com.sdu.spark.rpc.*;
-import com.sdu.spark.deploy.WorkerLocalMessage.*;
-import com.sdu.spark.deploy.DeployMessage.*;
-import com.sdu.spark.rpc.netty.NettyRpcEndPointRef;
-import com.sdu.spark.rpc.netty.NettyRpcEnv;
-import com.sdu.spark.utils.ThreadUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -20,6 +17,8 @@ import java.util.Map;
 import java.util.concurrent.*;
 
 import static com.sdu.spark.network.utils.NettyUtils.getIpV4;
+import static com.sdu.spark.utils.ThreadUtils.newDaemonCachedThreadPool;
+import static com.sdu.spark.utils.ThreadUtils.newDaemonSingleThreadScheduledExecutor;
 import static com.sdu.spark.utils.Utils.convertStringToInt;
 
 /**
@@ -31,6 +30,7 @@ public class Worker extends RpcEndPoint {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(Worker.class);
 
+    public static final String SYSTEM_NAME = "sparkWorker";
     public static final String ENDPOINT_NAME = "Worker";
 
     private SparkConf conf;
@@ -85,8 +85,8 @@ public class Worker extends RpcEndPoint {
         this.memory = memory;
         this.masterRpcAddress = masterRpcAddress;
         this.sparkHome = new File(System.getenv().getOrDefault("SPARK_HOME", "."));
-        scheduleMessageThread = ThreadUtils.newDaemonSingleThreadScheduledExecutor("worker-schedule-message");
-        registerExecutorService = ThreadUtils.newDaemonCachedThreadPool("worker-register-thread", 1, 60);
+        scheduleMessageThread = newDaemonSingleThreadScheduledExecutor("worker-schedule-message");
+        registerExecutorService = newDaemonCachedThreadPool("worker-register-thread", 1, 60);
         // 防止数据丢包及网络延迟导致Master节点接收不到心跳
         HEARTBEAT_MILLIS = this.conf.getLong("spark.worker.timeout", 60L) * 1000L / 4L;
         this.workerId = generateWorkId();
@@ -320,7 +320,11 @@ public class Worker extends RpcEndPoint {
 
         SecurityManager securityManager = new SecurityManager(conf);
         // 启动RpcEnv
-        RpcEnv rpcEnv = RpcEnv.create(args[0], convertStringToInt(args[1]), conf, securityManager);
+        RpcEnv rpcEnv = RpcEnv.create(SYSTEM_NAME,
+                                      args[0],
+                                      convertStringToInt(args[1]),
+                                      conf,
+                                      securityManager);
 
         Worker worker = new Worker(conf, rpcEnv, cpu, memory, masterAddress);
 

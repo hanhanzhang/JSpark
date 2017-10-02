@@ -16,8 +16,6 @@ public class StaticMemoryManager extends MemoryManager {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(StaticMemoryManager.class);
 
-    private static int MIN_MEMORY_BYTES = 32 * 1024 * 1024;
-
     // Max number of bytes worth of blocks to evict when unrolling
     private long maxUnrollMemory;
 
@@ -90,33 +88,5 @@ public class StaticMemoryManager extends MemoryManager {
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
         }
-    }
-
-    private static long getMaxStorageMemory(SparkConf conf) {
-        long systemMaxMemory = conf.getLong("spark.testing.memory", Runtime.getRuntime().maxMemory());
-        double memoryFraction = conf.getDouble("spark.storage.memoryFraction", 0.6);
-        double safetyFraction = conf.getDouble("spark.storage.safetyFraction", 0.9);
-        return (long) (systemMaxMemory * memoryFraction * safetyFraction);
-    }
-
-    private static long getMaxExecutionMemory(SparkConf conf) {
-        long systemMaxMemory = conf.getLong("spark.testing.memory", Runtime.getRuntime().maxMemory());
-
-        if (systemMaxMemory < MIN_MEMORY_BYTES) {
-            throw new IllegalArgumentException(String.format("System memory %s must " +
-                    "be at least %s. Please increase heap size using the --driver-memory " +
-                    "option or spark.driver.memory in Spark configuration.", systemMaxMemory, MIN_MEMORY_BYTES));
-        }
-        if (conf.contains("spark.executor.memory")) {
-            long executorMemory = conf.getSizeAsBytes("spark.executor.memory", "0");
-            if (executorMemory < MIN_MEMORY_BYTES) {
-                throw new IllegalArgumentException(String.format("Executor memory %s must be at least " +
-                        "%s. Please increase executor memory using the " +
-                        "--executor-memory option or spark.executor.memory in Spark configuration.", executorMemory, MIN_MEMORY_BYTES));
-            }
-        }
-        double memoryFraction = conf.getDouble("spark.shuffle.memoryFraction", 0.2);
-        double safetyFraction = conf.getDouble("spark.shuffle.safetyFraction", 0.8);
-        return (long) (systemMaxMemory * memoryFraction * safetyFraction);
     }
 }

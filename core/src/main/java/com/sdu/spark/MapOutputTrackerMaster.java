@@ -6,6 +6,7 @@ import com.sdu.spark.broadcast.BroadcastManager;
 import com.sdu.spark.rpc.RpcCallContext;
 import com.sdu.spark.rpc.SparkConf;
 import com.sdu.spark.scheduler.MapStatus;
+import com.sdu.spark.serializer.Serializer;
 import com.sdu.spark.storage.BlockId;
 import com.sdu.spark.storage.BlockManagerId;
 import com.sdu.spark.utils.ThreadUtils;

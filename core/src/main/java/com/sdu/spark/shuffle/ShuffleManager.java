@@ -5,4 +5,5 @@ package com.sdu.spark.shuffle;
  * */
 public interface ShuffleManager {
 
+    void stop();
 }

@@ -33,7 +33,11 @@ public abstract class MapOutputTracker {
     public static final int DIRECT = 0;
     public static final int BROADCAST = 1;
 
-    /**SparkEnv初始化trackerEndpoint*/
+    /**
+     * Driver: MapOutputTrackerMasterEndPoint节点引用
+     *
+     * Executor: Driver RpcEnv MapOutputTrackerMasterEndPoint节点引用
+     * */
     public RpcEndPointRef trackerEndpoint;
 
     /**

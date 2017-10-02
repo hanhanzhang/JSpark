@@ -36,6 +36,7 @@ public class Master extends RpcEndPoint {
 
     public static final Logger LOGGER = LoggerFactory.getLogger(Master.class);
 
+    public static final String SYSTEM_NAME = "sparkMaster";
     public static final String ENDPOINT_NAME = "Master";
 
     /**
@@ -483,7 +484,13 @@ public class Master extends RpcEndPoint {
         SecurityManager securityManager = new SecurityManager(conf);
 
         // 启动RpcEnv
-        RpcEnv rpcEnv = RpcEnv.create(args[0], convertStringToInt(args[1]), conf, securityManager);
+        RpcEnv rpcEnv = RpcEnv.create(
+                SYSTEM_NAME,
+                args[0],
+                convertStringToInt(args[1]),
+                conf,
+                securityManager
+        );
 
         // 向RpcEnv注册Master节点
         Master master = new Master(conf, rpcEnv, rpcEnv.address());

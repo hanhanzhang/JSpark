@@ -9,9 +9,9 @@ public interface SaslEncryptionBackend {
     /** Disposes of resources used by the backend. */
     void dispose();
 
-    /** Encrypt data. */
+    /**数据加密*/
     byte[] wrap(byte[] data, int offset, int len) throws SaslException;
 
-    /** Decrypt data. */
+    /**数据解密*/
     byte[] unwrap(byte[] data, int offset, int len) throws SaslException;
 }

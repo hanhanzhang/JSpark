@@ -14,15 +14,26 @@ public class SecurityManager implements SecretKeyHolder {
     public static final String SPARK_AUTH_SECRET_CONF = "spark.authenticate.secret";
 
     private SparkConf conf;
+    private byte[] ioEncryptionKey;
 
     private String secretKey;
 
     public SecurityManager(SparkConf conf) {
+        this(conf, null);
+    }
+
+    public SecurityManager(SparkConf conf, byte[] ioEncryptionKey) {
         this.conf = conf;
+        this.ioEncryptionKey = ioEncryptionKey;
     }
 
     public boolean isAuthenticationEnabled() {
         return conf.getBoolean("spark.authenticate", false);
+    }
+
+    public boolean isEncryptionEnabled() {
+        return conf.getBoolean("spark.network.crypto.enabled", false) ||
+                conf.getBoolean("spark.authenticate.enableSaslEncryption", false);
     }
 
     @Override

@@ -27,4 +27,9 @@ public class BroadcastManager {
     public <T> Broadcast<T> newBroadcast(T value, boolean isLocal) {
         return broadcastFactory.newBroadcast(value, isLocal, nextBroadcastId.getAndIncrement());
     }
+
+    public void stop() {
+
+    }
 }
+

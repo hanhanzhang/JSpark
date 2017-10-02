@@ -410,6 +410,10 @@ public class BlockManager implements BlockDataManager, BlockEvictionHandler {
         return doPutBytes(blockId, bytes, level, tellMaster, true);
     }
 
+    public void stop() {
+        throw new UnsupportedOperationException("");
+    }
+
     private boolean doPutBytes(BlockId blockId, ChunkedByteBuffer bytes, StorageLevel level,
                                boolean tellMaster, boolean keepReadLock) {
         return doPut(blockId, level, tellMaster, keepReadLock, blockInfo -> {

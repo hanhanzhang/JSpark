@@ -31,13 +31,56 @@ public interface RpcEnv {
 
 
     /********************************Spark RpcEnv*************************************/
-    static RpcEnv create(String host, int port, SparkConf conf, SecurityManager securityManager) {
-       return create(host, port, conf, securityManager, false);
+    static RpcEnv create(String name,
+                         String host,
+                         int port,
+                         SparkConf conf,
+                         SecurityManager securityManager, boolean clientModel) {
+        return create(
+                name,
+                host,
+                host,
+                port,
+                conf,
+                securityManager,
+                0,
+                clientModel);
     }
 
-    static RpcEnv create(String host, int port, SparkConf conf,
-                                SecurityManager securityManager, boolean clientModel) {
-        RpcEnvConfig rpcEnvConf = new RpcEnvConfig(conf, host, port, securityManager, clientModel);
+    static RpcEnv create(String name,
+                         String host,
+                         int port,
+                         SparkConf conf,
+                         SecurityManager securityManager) {
+       return create(
+               name,
+               host,
+               host,
+               port,
+               conf,
+               securityManager,
+               0,
+               false);
+    }
+
+    static RpcEnv create(String name,
+                         String bindAddress,
+                         String advertiseAddress,
+                         int port,
+                         SparkConf conf,
+                         SecurityManager securityManager,
+                         int numUsableCores,
+                         boolean clientModel) {
+        RpcEnvConfig rpcEnvConf = new RpcEnvConfig(
+                conf,
+                name,
+                bindAddress,
+                advertiseAddress,
+                port,
+                securityManager,
+                numUsableCores,
+                clientModel
+        );
         return new NettyRpcEnvFactory().create(rpcEnvConf);
     }
 }

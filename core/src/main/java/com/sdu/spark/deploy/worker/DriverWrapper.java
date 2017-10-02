@@ -36,7 +36,11 @@ public class DriverWrapper {
         }
 
         SparkConf conf = new SparkConf();
-        RpcEnv rpcEnv = RpcEnv.create(localHostName(), 0, conf, new SecurityManager(conf));
+        RpcEnv rpcEnv = RpcEnv.create("Driver",
+                                      localHostName(),
+                                      0,
+                                      conf,
+                                      new SecurityManager(conf));
         rpcEnv.setRpcEndPointRef("workerWatcher", new WorkerWatcher(rpcEnv, workerUrl));
 
         // Delegate to supplied main class

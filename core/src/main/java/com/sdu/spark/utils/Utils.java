@@ -1,6 +1,7 @@
 package com.sdu.spark.utils;
 
 import com.google.common.collect.ImmutableMap;
+import com.sdu.spark.SparkException;
 import com.sdu.spark.rpc.RpcCallContext;
 import com.sdu.spark.rpc.SparkConf;
 import org.apache.commons.lang3.StringUtils;
@@ -17,12 +18,15 @@ import java.math.BigInteger;
 import java.math.MathContext;
 import java.math.RoundingMode;
 import java.net.InetAddress;
-import java.net.NetworkInterface;
 import java.net.URI;
-import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
-import java.util.*;
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Locale;
+import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -50,6 +54,8 @@ public class Utils {
                                                                                     .put("h", TimeUnit.HOURS)
                                                                                     .put("d", TimeUnit.DAYS)
                                                                                     .build();
+
+    private static volatile String[] localRootDirs = null;
 
     public static <T> T getFutureResult(Future<?> future) {
         try {
@@ -280,6 +286,60 @@ public class Utils {
         return conf.getenv("CONTAINER_ID") != null;
     }
 
+    private static String[] getOrCreateLocalRootDirs(SparkConf conf) {
+        if (localRootDirs == null) {
+            synchronized (Utils.class) {
+                if (localRootDirs == null) {
+                    localRootDirs = getOrCreateLocalRootDirsImpl(conf);
+                }
+            }
+
+        }
+        return localRootDirs;
+    }
+
+    private static String[] getOrCreateLocalRootDirsImpl(SparkConf conf) {
+        String[] localDirs = getConfiguredLocalDirs(conf);
+        String[] localDirPaths = new String[localDirs.length];
+        for (int i = 0; i < localDirs.length; ++i) {
+            try {
+                File rootDir = new File(localDirs[i]);
+                if (rootDir.exists() || rootDir.mkdirs()) {
+                    File dir = createTempDir(localDirs[i]);
+                    chmod700(dir);
+                    localDirPaths[i] = dir.getAbsolutePath();
+                } else {
+                    LOGGER.error("Failed to create dir in {}. Ignoring this directory.", localDirs[i]);
+                    localDirPaths[i] = null;
+                }
+            } catch (IOException e) {
+                LOGGER.error("Failed to create local root dir in {}. Ignoring this directory.", localDirs[i]);
+                localDirPaths[i] = null;
+            }
+        }
+        return localDirPaths;
+    }
+
+    private static boolean chmod700(File file) {
+        return file.setReadable(false, false) &&
+                file.setReadable(true, true) &&
+                file.setWritable(false, false) &&
+                file.setWritable(true, true) &&
+                file.setExecutable(false, false) &&
+                file.setExecutable(true, true);
+    }
+
+    private static File createTempDir(String namePrefix) throws IOException {
+        return createTempDir(System.getProperty("java.io.tmpdir"), namePrefix);
+    }
+
+    public static File createTempDir(String root, String namePrefix) throws IOException {
+        File dir = createDirectory(root, namePrefix);
+//        ShutdownHookManager.registerShutdownDeleteDir(dir)
+        return dir;
+    }
+
+
     private static String getYarnLocalDirs(SparkConf conf) {
         String localDirs = conf.getenv("LOCAL_DIRS");
 
@@ -350,5 +410,61 @@ public class Utils {
         int hash = obj.hashCode();
         // math.abs fails for Int.MinValue
         return Integer.MIN_VALUE != hash ? Math.abs(hash) : 0;
+    }
+
+    public static String getLocalDir(SparkConf conf) {
+        String[] localRootDirs = getOrCreateLocalRootDirs(conf);
+        String localDir = localRootDirs[0];
+        if (StringUtils.isEmpty(localDir)) {
+            String[] configuredLocalDirs = getConfiguredLocalDirs(conf);
+            throw new SparkException("Failed to get a temp directory under " + StringUtils.join(configuredLocalDirs, ","));
+        }
+        return localDir;
+    }
+
+    public static void deleteRecursively(File file) throws IOException {
+        if (file != null) {
+            try {
+                if (file.isDirectory() && !isSymlink(file)) {
+                    IOException savedIOException = null;
+                    File[] childFiles = listFilesSafely(file);
+                    for (int i = 0; i < childFiles.length; ++i) {
+                        try {
+                            deleteRecursively(file);
+                        } catch (IOException e) {
+                            savedIOException = e;
+                        }
+                    }
+                    if (savedIOException != null) {
+                        throw savedIOException;
+                    }
+//                    ShutdownHookManager.removeShutdownDeleteDir(file)
+                }
+            } finally {
+                if (file.delete()) {
+                    LOGGER.trace("{} has been deleted", file.getAbsoluteFile());
+                } else {
+                    if (file.exists()) {
+                        throw new IOException("Failed to delete: " + file.getAbsolutePath());
+                    }
+                }
+            }
+        }
+    }
+
+    private static boolean isSymlink(File file){
+        return Files.isSymbolicLink(Paths.get(file.toURI()));
+    }
+
+    private static File[] listFilesSafely(File file) throws IOException {
+        if (file.exists()) {
+            File[] files = file.listFiles();
+            if (files == null) {
+                throw new IOException("Failed to list files for dir: " + file);
+            }
+            return files;
+        } else {
+            return new File[0];
+        }
     }
 }
