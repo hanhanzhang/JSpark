@@ -176,9 +176,9 @@ public abstract class CoarseGrainedSchedulerBackend implements ExecutorAllocatio
         }
 
         @Override
-        public void onDisconnect(RpcAddress rpcAddress) {
-            String executorId = addressToExecutorId.get(rpcAddress);
-            String reason = String.format("RpcAddress(host = %s, port = %d)断开连接", rpcAddress.host, rpcAddress.port);
+        public void onDisconnect(RpcAddress remoteAddress) {
+            String executorId = addressToExecutorId.get(remoteAddress);
+            String reason = String.format("RpcAddress(host = %s, port = %d)断开连接", remoteAddress.host, remoteAddress.port);
             removeExecutor(executorId, reason);
         }
 

@@ -73,6 +73,8 @@ public class Index {
             } else if (message instanceof OneWayMessage) {
                 OneWayMessage msg = (OneWayMessage) message;
                 endPoint.receive(msg.getContent());
+            } else if (message instanceof RemoteProcessConnectionError) {
+                RemoteProcessConnectionError connectionError = (RemoteProcessConnectionError) message;
             }
             message = messageBox.poll();
             if (message == null) {

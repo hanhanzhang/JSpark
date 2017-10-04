@@ -192,8 +192,8 @@ public class StandaloneAppClient {
         }
 
         @Override
-        public void onDisconnect(RpcAddress rpcAddress) {
-            if (master.address().equals(rpcAddress)) {
+        public void onDisconnect(RpcAddress remoteAddress) {
+            if (master.address().equals(remoteAddress)) {
                 markDisconnected();
             }
         }

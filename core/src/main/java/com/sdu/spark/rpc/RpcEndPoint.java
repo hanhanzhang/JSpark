@@ -25,9 +25,11 @@ public abstract class RpcEndPoint {
 
     public void onStop() {}
 
-    public void onConnect(RpcAddress rpcAddress) {}
+    public void onConnect(RpcAddress remoteAddress) {}
 
-    public void onDisconnect(RpcAddress rpcAddress) {}
+    public void onDisconnect(RpcAddress remoteAddress) {}
+
+    public void onNetworkError(Throwable e, RpcAddress remoteAddress) {};
 
     // Rpc消息处理但不响应
     public void receive(Object msg) {}
