@@ -9,20 +9,23 @@ import com.sdu.spark.scheduler.TaskState;
 import com.sdu.spark.scheduler.cluster.CoarseGrainedClusterMessage.*;
 import com.sdu.spark.scheduler.cluster.CoarseGrainedClusterMessage.Shutdown;
 import com.sdu.spark.serializer.SerializerInstance;
+import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.math.NumberUtils;
-import org.apache.logging.log4j.util.Strings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.net.URL;
 import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.Iterator;
+import java.util.Map;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.sdu.spark.utils.Utils.getFutureResult;
+import static com.sdu.spark.utils.Utils.isLocalMaster;
 
 /**
  * {@link CoarseGrainedExecutorBackend}两个重要属性:
@@ -41,53 +44,72 @@ public class CoarseGrainedExecutorBackend extends RpcEndPoint implements Executo
     public String executorId;
     public String hostname;
     public int cores;
+    private URL[] userClassPath;
     public SparkEnv env;
     private AtomicBoolean stopping = new AtomicBoolean(false);
 
     private Executor executor;
-    private RpcEndPointRef driver;
+    private volatile RpcEndPointRef driver;
     private SerializerInstance ser;
 
     public CoarseGrainedExecutorBackend(RpcEnv rpcEnv, String driverUrl, String executorId, String hostname,
-                                        int cores, SparkEnv env) {
+                                        int cores, URL[] userClassPath, SparkEnv env) {
         super(rpcEnv);
         this.driverUrl = driverUrl;
         this.executorId = executorId;
         this.hostname = hostname;
         this.cores = cores;
+        this.userClassPath = userClassPath;
         this.env = env;
         this.ser = this.env.serializer.newInstance();
     }
 
     @Override
     public void onStart() {
-        LOGGER.info("ExecutorBackend(execId = {})尝试连接Driver(address = {})", executorId, driverUrl);
+        LOGGER.info("Executor(host = {}, id = {})尝试连接Driver(address = {})",
+                     hostname, executorId, driverUrl);
+
         driver = this.rpcEnv.setupEndpointRefByURI(driverUrl);
         if (driver == null) {
-            String reason = String.format("ExecutorBackend(execId = %s)无法连接Driver(address = %s)", executorId, driverUrl);
+            String reason = String.format("Executor(host = %s, id = %s)连接Driver(address = %s)失败",
+                                           hostname, executorId, driverUrl);
             exitExecutor(1, reason, null, false);
         }
-        LOGGER.info("ExecutorBackend(execId = {})尝试向Driver(address = {})注册Executor", executorId, driver.address());
-        Future<?> future = driver.ask(new RegisterExecutor(executorId, self(), hostname, cores, Collections.emptyMap()));
+
+        LOGGER.info("Executor(host= {}, id = {})尝试向Driver(address = {})注册Executor",
+                     hostname, executorId, driver.address());
+        Future<?> future = driver.ask(new RegisterExecutor(
+                executorId,
+                self(),
+                hostname,
+                cores,
+                extractLogUrls()
+        ));
         boolean success = getFutureResult(future);
-        if (success) {
-            LOGGER.info("ExecutorBackend(execId = {})向Driver(address = {})注册Executor成功", executorId, driver.address());
-        } else {
-            LOGGER.info("ExecutorBackend(execId = {})向Driver(address = {})注册Executor失败", executorId, driver.address());
-        }
+        LOGGER.info("Executor(host = {}, id = {})向Driver(address = {})注册Executor{}",
+                hostname, executorId, driver.address(), success ? "成功" : "失败");
+    }
+    
+    private Map<String, String> extractLogUrls() {
+        // TODO: 日志上报地址
+        return Collections.emptyMap();
     }
 
     @Override
     public void receive(Object msg) {
         if (msg instanceof RegisteredExecutor) {
             LOGGER.info("Driver注册Executor(execId = {})成功", executorId);
-            executor = new Executor(executorId, env, false);
+            try {
+                executor = new Executor(executorId, hostname, env, userClassPath);
+            } catch (Exception e) {
+                exitExecutor(1, "启动Executor异常: " + e.getMessage(), e);
+            }
         } else if (msg instanceof RegisterExecutorFailed) {
             RegisterExecutorFailed executorFailed = (RegisterExecutorFailed) msg;
             exitExecutor(1, String.format("Executor注册失败: %s", executorFailed.message), null);
         } else if (msg instanceof LaunchTask) {
             if (executor == null) {
-                exitExecutor(1, "接收到LaunchTask命令但由于Executor=NULL而退出", null);
+                exitExecutor(1, "接收到LaunchTask指令但由于Executor=NULL而退出", null);
             } else {
                 LaunchTask task = (LaunchTask) msg;
                 try {
@@ -128,8 +150,24 @@ public class CoarseGrainedExecutorBackend extends RpcEndPoint implements Executo
     }
 
     @Override
-    public void statusUpdate(long taskId, TaskState state, ByteBuffer data) {
+    public void onDisconnect(RpcAddress remoteAddress) {
+        if (stopping.get()) {
+            LOGGER.info("由于Driver(address = {})关闭断开连接", remoteAddress.hostPort());
+        } else if (driver != null && driver.address().equals(remoteAddress)){
+            exitExecutor(1, String.format("失去与Driver %s 连接, Executor退出", remoteAddress), null);
+        } else {
+            LOGGER.error("未知Driver(address = {})断开连接", remoteAddress.hostPort());
+        }
+    }
 
+    @Override
+    public void statusUpdate(long taskId, TaskState state, ByteBuffer data) {
+        StatusUpdate msg = new StatusUpdate(executorId, taskId, state, data);
+        if (driver == null) {
+            LOGGER.info("由于尚未连接Driver丢弃消息: {}", msg);
+            return;
+        }
+        driver.send(msg);
     }
 
     private void exitExecutor(int code, String reason, Throwable throwable) {
@@ -153,8 +191,14 @@ public class CoarseGrainedExecutorBackend extends RpcEndPoint implements Executo
         System.exit(code);
     }
 
-    private static void run(String driverUrl, String executorId, String hostname, int cores, String appId, String workerUrl) {
-        // create RpcEnv
+    private static void run(String driverUrl,
+                            String executorId,
+                            String hostname,
+                            int cores,
+                            String appId,
+                            String workerUrl,
+                            URL[] userClassPath) {
+        // step1: Driver地址、 配置信息
         SparkConf conf = new SparkConf();
         RpcEnv rpcEnv = RpcEnv.create("driverPropsFetcher",
                                       hostname,
@@ -185,9 +229,15 @@ public class CoarseGrainedExecutorBackend extends RpcEndPoint implements Executo
             SparkEnv env = SparkEnv.createExecutorEnv(
                     driverConf, executorId, hostname, cores, cfg.ioEncryptionKey, false);
 
-            env.rpcEnv.setRpcEndPointRef("Executor", new CoarseGrainedExecutorBackend(env.rpcEnv, driverUrl,
-                                                                                      executorId, hostname,
-                                                                                      cores, env));
+            env.rpcEnv.setRpcEndPointRef("Executor", new CoarseGrainedExecutorBackend(
+                    env.rpcEnv,
+                    driverUrl,
+                    executorId,
+                    hostname,
+                    cores,
+                    userClassPath,
+                    env
+            ));
             if (StringUtils.isNotEmpty(workerUrl)) {
                 env.rpcEnv.setRpcEndPointRef("WorkerWatcher", new WorkerWatcher(env.rpcEnv, workerUrl));
             }
@@ -201,6 +251,7 @@ public class CoarseGrainedExecutorBackend extends RpcEndPoint implements Executo
 
     public static void main(String[] args) {
         String driverUrl = null, executorId = null, hostname = null, appId = null, workerUrl = null;
+        URL[] userClasspathUrl = null;
         int cores = 0;
         if (args != null && args.length > 0) {
             for (String arg : args) {
@@ -224,10 +275,21 @@ public class CoarseGrainedExecutorBackend extends RpcEndPoint implements Executo
                     case "--worker-url":
                         workerUrl = p[1];
                         break;
+                    case "--user-class-path":
+                        String[] userClassPath = StringUtils.split(p[1], ";");
+                        userClasspathUrl = new URL[userClassPath.length];
+                        for (int i = 0; i < userClassPath.length; ++i) {
+                            try {
+                                userClasspathUrl[i] = new URL(userClassPath[i]);
+                            } catch (Exception e) {
+                                System.exit(-1);
+                            }
+                        }
+                        break;
                 }
             }
 
-            run(driverUrl, executorId, hostname, cores, appId, workerUrl);
+            run(driverUrl, executorId, hostname, cores, appId, workerUrl, userClasspathUrl);
         }
     }
 }

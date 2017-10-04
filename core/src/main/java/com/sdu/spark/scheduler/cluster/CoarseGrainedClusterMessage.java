@@ -1,9 +1,9 @@
 package com.sdu.spark.scheduler.cluster;
 
+import com.google.common.base.MoreObjects;
 import com.sdu.spark.rpc.RpcEndPointRef;
 import com.sdu.spark.scheduler.TaskState;
 import com.sdu.spark.utils.SerializableBuffer;
-import lombok.AllArgsConstructor;
 
 import java.io.Serializable;
 import java.nio.ByteBuffer;
@@ -17,21 +17,31 @@ public interface CoarseGrainedClusterMessage extends Serializable {
 
     class RegisteredExecutor implements CoarseGrainedClusterMessage, RegisterExecutorResponse {}
 
-    @AllArgsConstructor
     class RegisterExecutorFailed implements CoarseGrainedClusterMessage, RegisterExecutorResponse {
         public String message;
+
+        public RegisterExecutorFailed(String message) {
+            this.message = message;
+        }
     }
 
-    @AllArgsConstructor
     class LaunchTask implements CoarseGrainedClusterMessage {
         public SerializableBuffer taskData;
+
+        public LaunchTask(SerializableBuffer taskData) {
+            this.taskData = taskData;
+        }
     }
     class RetrieveSparkAppConfig implements CoarseGrainedClusterMessage {}
 
-    @AllArgsConstructor
     class SparkAppConfig implements CoarseGrainedClusterMessage {
         public Properties sparkProperties;
         public byte[] ioEncryptionKey;
+
+        public SparkAppConfig(Properties sparkProperties, byte[] ioEncryptionKey) {
+            this.sparkProperties = sparkProperties;
+            this.ioEncryptionKey = ioEncryptionKey;
+        }
     }
 
     class StopExecutor implements CoarseGrainedClusterMessage {}
@@ -57,43 +67,78 @@ public interface CoarseGrainedClusterMessage extends Serializable {
             this.state = state;
             this.data = new SerializableBuffer(data);
         }
+
+        @Override
+        public String toString() {
+           return MoreObjects.toStringHelper(this)
+                   .add("execId", executorId)
+                   .add("taskId", taskId)
+                   .add("state", state.name())
+                   .toString();
+        }
     }
 
-    @AllArgsConstructor
     class RegisterExecutor implements CoarseGrainedClusterMessage {
         public String executorId;
         public RpcEndPointRef executorRef;
         public String hostname;
         public int cores;
         public Map<String, String> logUrls;
+
+        public RegisterExecutor(String executorId, RpcEndPointRef executorRef, String hostname,
+                                int cores, Map<String, String> logUrls) {
+            this.executorId = executorId;
+            this.executorRef = executorRef;
+            this.hostname = hostname;
+            this.cores = cores;
+            this.logUrls = logUrls;
+        }
     }
 
-    @AllArgsConstructor
     class RemoveExecutor implements CoarseGrainedClusterMessage {
         public String executorId;
         public String reason;
+
+        public RemoveExecutor(String executorId, String reason) {
+            this.executorId = executorId;
+            this.reason = reason;
+        }
     }
 
-    @AllArgsConstructor
     class KillExecutorsOnHost implements CoarseGrainedClusterMessage {
         public String host;
+
+        public KillExecutorsOnHost(String host) {
+            this.host = host;
+        }
     }
 
     class StopExecutors implements CoarseGrainedClusterMessage {}
 
-    @AllArgsConstructor
     class KillTask implements CoarseGrainedClusterMessage {
         public long taskId;
         public String executorId;
         public boolean interruptThread;
         public String reason;
+
+        public KillTask(long taskId, String executorId, boolean interruptThread, String reason) {
+            this.taskId = taskId;
+            this.executorId = executorId;
+            this.interruptThread = interruptThread;
+            this.reason = reason;
+        }
     }
 
-    @AllArgsConstructor
     class RemoveWorker implements CoarseGrainedClusterMessage {
         public String workerId;
         public String host;
         public String message;
+
+        public RemoveWorker(String workerId, String host, String message) {
+            this.workerId = workerId;
+            this.host = host;
+            this.message = message;
+        }
     }
 
 }

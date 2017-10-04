@@ -17,12 +17,14 @@ import com.sdu.spark.storage.BlockId;
 import com.sdu.spark.storage.BlockId.TaskResultBlockId;
 import com.sdu.spark.storage.StorageLevel;
 import com.sdu.spark.utils.ChunkedByteBuffer;
+import com.sdu.spark.utils.SparkUncaughtExceptionHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadMXBean;
+import java.net.URL;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Map;
@@ -39,7 +41,7 @@ import static com.sdu.spark.utils.ThreadUtils.newDaemonSingleThreadScheduledExec
 import static com.sdu.spark.utils.Utils.computeTotalGcTime;
 
 /**
- * Spark Task
+ * {@link Executor}Spark Task执行器,
  *
  * @author hanhan.zhang
  * */
@@ -50,8 +52,10 @@ public class Executor {
     /****************************Spark运行环境*******************************/
     private boolean isLocal;
     private String executorId;
+    private String executorHostname;
     private SparkEnv env;
     private SparkConf conf;
+    private URL[] userClassPath;
 
     /****************************Spark Task*********************************/
     // 任务线程
@@ -72,15 +76,24 @@ public class Executor {
     // to send the result back.
     private int maxDirectResultSize;
 
+    /*************************Spark Thread Exception Handler****************/
+    private Thread.UncaughtExceptionHandler uncaughtExceptionHandler;
 
     private static ThreadLocal<Properties> taskDeserializationProps = new ThreadLocal<>();
 
+    public Executor(String executorId, String executorHostname, SparkEnv env, URL[] userClassPath) {
+        this(executorId, executorHostname, env, false, userClassPath, new SparkUncaughtExceptionHandler());
+    }
 
-    public Executor(String executorId, SparkEnv env, boolean isLocal) {
+    public Executor(String executorId, String executorHostname, SparkEnv env, boolean isLocal,
+                    URL[] userClassPath, Thread.UncaughtExceptionHandler uncaughtExceptionHandler) {
         this.executorId = executorId;
+        this.executorHostname = executorHostname;
         this.env = env;
         this.conf = env.conf;
         this.isLocal = isLocal;
+        this.userClassPath = userClassPath;
+        this.uncaughtExceptionHandler = uncaughtExceptionHandler;
         HEARTBEAT_MAX_FAILURES = conf.getInt("spark.executor.heartbeat.maxFailures", 60);
         maxResultSize = conf.getInt("spark.driver.maxResultSize", 1024);
         maxDirectResultSize = conf.getInt("spark.task.maxDirectResultSize", 10240);
