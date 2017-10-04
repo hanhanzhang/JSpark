@@ -150,4 +150,13 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
     public void updateTimeOfLastRequest() {
         timeOfLastRequestNs.set(System.nanoTime());
     }
+
+    public long getTimeOfLastRequestNs() {
+        return timeOfLastRequestNs.get();
+    }
+
+    public int numOutstandingRequests() {
+        return outstandingFetches.size() + outstandingRpcCalls.size() + streamCallbacks.size() +
+                (streamActive ? 1 : 0);
+    }
 }

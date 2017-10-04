@@ -6,6 +6,8 @@ import org.apache.commons.lang3.math.NumberUtils;
 
 import java.util.Map;
 
+import static com.sdu.spark.network.utils.JavaUtils.timeStringAsSec;
+
 /**
  * @author hanhan.zhang
  * */
@@ -98,7 +100,7 @@ public class TransportConf {
     }
 
     public int ioRetryWaitTimeMs() {
-        return (int) JavaUtils.timeStringAsSec(conf.get(SPARK_NETWORK_IO_RETRYWAIT_KEY, "5s")) * 1000;
+        return (int) timeStringAsSec(conf.get(SPARK_NETWORK_IO_RETRYWAIT_KEY, "5s")) * 1000;
     }
 
     public int memoryMapBytes() {
@@ -120,5 +122,11 @@ public class TransportConf {
     public long maxChunksBeingTransferred() {
         String maxChunksBeingTransferred = conf.get("spark.shuffle.maxChunksBeingTransferred");
         return NumberUtils.toLong(maxChunksBeingTransferred, Long.MAX_VALUE);
+    }
+
+    public int connectionTimeoutMs() {
+        long defaultNetworkTimeoutS = timeStringAsSec(conf.get("spark.network.timeout", "120s"));
+        long defaultTimeoutMs = timeStringAsSec(conf.get("io.connectionTimeout", defaultNetworkTimeoutS + "s")) * 1000;
+        return (int) defaultTimeoutMs;
     }
 }

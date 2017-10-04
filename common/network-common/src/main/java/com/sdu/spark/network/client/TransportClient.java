@@ -31,14 +31,16 @@ public class TransportClient implements Closeable {
 
     private TransportResponseHandler responseHandler;
     private String clientId;
+    private volatile boolean timeout;
 
     public TransportClient(Channel channel, TransportResponseHandler responseHandler) {
         this.channel = channel;
         this.responseHandler = responseHandler;
+        this.timeout = false;
     }
 
     public boolean isActive() {
-        return channel.isOpen() && channel.isActive();
+        return !timeout && channel.isOpen() && channel.isActive();
     }
 
     /**
@@ -175,7 +177,11 @@ public class TransportClient implements Closeable {
     }
 
     public void removeRpcRequest(long requestId) {
+        responseHandler.removeRpcRequest(requestId);
+    }
 
+    public void timeOut() {
+        this.timeout = true;
     }
 
     @Override
