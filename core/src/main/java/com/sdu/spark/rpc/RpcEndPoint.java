@@ -15,7 +15,7 @@ public abstract class RpcEndPoint {
 
     // Rpc节点的引用节点
     public RpcEndPointRef self() {
-        assert rpcEnv != null : "rpcEnv has not been initialized";
+        assert rpcEnv != null : "nettyEnv has not been initialized";
         return rpcEnv.endPointRef(this);
     }
 

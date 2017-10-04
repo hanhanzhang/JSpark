@@ -4,8 +4,6 @@ import com.sdu.spark.network.client.TransportClient;
 import com.sdu.spark.rpc.RpcAddress;
 import com.sdu.spark.rpc.RpcEndPointRef;
 import com.sdu.spark.rpc.RpcEndpointAddress;
-import com.sdu.spark.rpc.SparkConf;
-import com.sdu.spark.utils.RpcUtils;
 
 import java.io.IOException;
 import java.io.ObjectInputStream;
@@ -41,15 +39,15 @@ public class NettyRpcEndPointRef extends RpcEndPointRef {
     // RpcEndPoint节点客户端
     public transient volatile TransportClient client;
 
-    public transient volatile NettyRpcEnv rpcEnv;
+    public transient volatile NettyRpcEnv nettyEnv;
 
     private final long defaultAskTimeout;
 
-    public NettyRpcEndPointRef(RpcEndpointAddress address, NettyRpcEnv rpcEnv) {
+    public NettyRpcEndPointRef(RpcEndpointAddress address, NettyRpcEnv nettyEnv) {
         this.endpointAddress = address;
-        this.rpcEnv = rpcEnv;
+        this.nettyEnv = nettyEnv;
 
-        this.defaultAskTimeout = getRpcAskTimeout(rpcEnv.conf);
+        this.defaultAskTimeout = getRpcAskTimeout(nettyEnv.conf);
     }
 
 
@@ -66,14 +64,14 @@ public class NettyRpcEndPointRef extends RpcEndPointRef {
 
     @Override
     public void send(Object message) {
-        assert rpcEnv != null;
-        rpcEnv.send(new RequestMessage(rpcEnv.address(), this, message));
+        assert nettyEnv != null;
+        nettyEnv.send(new RequestMessage(nettyEnv.address(), this, message));
     }
 
     @Override
     public <T> Future<T> ask(Object message) {
-        assert rpcEnv != null;
-        return (Future<T>) rpcEnv.ask(new RequestMessage(rpcEnv.address(), this, message));
+        assert nettyEnv != null;
+        return (Future<T>) nettyEnv.ask(new RequestMessage(nettyEnv.address(), this, message));
     }
 
     @Override
@@ -89,7 +87,7 @@ public class NettyRpcEndPointRef extends RpcEndPointRef {
     /***************************************自定义序列化***************************************/
     private void readObject(ObjectInputStream in) throws IOException, ClassNotFoundException {
         in.defaultReadObject();
-        this.rpcEnv = NettyRpcEnv.currentEnv;
+        this.nettyEnv = NettyRpcEnv.currentEnv;
         this.client = NettyRpcEnv.currentClient;
     }
     private void writeObject(ObjectOutputStream out) throws IOException {

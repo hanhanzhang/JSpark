@@ -1,5 +1,6 @@
 package com.sdu.spark.network.client;
 
+import com.google.common.base.Throwables;
 import com.sdu.spark.network.TransportContext;
 import com.sdu.spark.network.server.TransportChannelHandler;
 import com.sdu.spark.network.utils.IOModel;
@@ -125,7 +126,7 @@ public class TransportClientFactory implements Closeable {
         return createClient(address);
     }
 
-    private TransportClient createClient(InetSocketAddress address) {
+    private TransportClient createClient(InetSocketAddress address) throws IOException, InterruptedException {
         LOGGER.debug("Creating new connection to {}", address);
 
         Bootstrap bootstrap = new Bootstrap();
@@ -152,15 +153,10 @@ public class TransportClientFactory implements Closeable {
         long preConnect = System.nanoTime();
         ChannelFuture cf = bootstrap.connect(address);
 
-        try {
-            if (!cf.await(1000L)) {
-                throw new RuntimeException(String.format("Connecting to %s timed out (%s ms)", address, 1000));
-            } else if (cf.cause() != null) {
-                throw new RuntimeException(String.format("Failed to connect to %s", address), cf.cause());
-            }
-        } catch (InterruptedException e) {
-            // Ignore
-            e.printStackTrace();
+        if (!cf.await(1000L)) {
+            throw new IOException(String.format("Connecting to %s timed out (%s ms)", address, 1000));
+        } else if (cf.cause() != null) {
+            throw new IOException(String.format("Failed to connect to %s", address), cf.cause());
         }
 
 
@@ -178,11 +174,8 @@ public class TransportClientFactory implements Closeable {
         } catch (Exception e) { // catch non-RuntimeExceptions too as bootstrap may be written in Scala
             long bootstrapTimeMs = (System.nanoTime() - preBootstrap) / 1000000;
             LOGGER.error("Exception while bootstrapping client after " + bootstrapTimeMs + " ms", e);
-            try {
-                client.close();
-            } catch (IOException e1) {
-                //
-            }
+            client.close();
+            throw Throwables.propagate(e);
         }
         long postBootstrap = System.nanoTime();
 

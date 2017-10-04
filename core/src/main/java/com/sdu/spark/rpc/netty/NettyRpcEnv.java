@@ -70,7 +70,7 @@ public class NettyRpcEnv implements RpcEnv {
     private TransportContext transportContext;
     // 客户端连接
     private TransportClientFactory clientFactory;
-    private ThreadPoolExecutor clientConnectionExecutor;
+    public ThreadPoolExecutor clientConnectionExecutor;
 
 
 
@@ -113,7 +113,7 @@ public class NettyRpcEnv implements RpcEnv {
             NettyRpcEndPointRef verifier = new NettyRpcEndPointRef(address, this);
             Future<?> future =  verifier.ask(new CheckExistence(name));
             rpcEndPointRef = getFutureResult(future);
-            rpcEndPointRef.rpcEnv = this;
+            rpcEndPointRef.nettyEnv = this;
             return rpcEndPointRef;
         } finally {
             if (rpcEndPointRef != null) {
@@ -203,12 +203,8 @@ public class NettyRpcEnv implements RpcEnv {
     }
 
     /********************************Spark RpcEndPoint Client********************************/
-    public TransportClient createClient(RpcAddress address) {
-        try {
-            return clientFactory.createClient(address.host, address.port);
-        } catch (Exception e) {
-            throw new IllegalStateException(e);
-        }
+    public TransportClient createClient(RpcAddress address) throws IOException, InterruptedException {
+        return clientFactory.createClient(address.host, address.port);
 
     }
     public Future<TransportClient> asyncCreateClient(RpcAddress address) {

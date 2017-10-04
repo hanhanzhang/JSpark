@@ -4,6 +4,7 @@ package com.sdu.spark.rpc.netty;
 import com.sdu.spark.network.client.TransportClient;
 import com.sdu.spark.rpc.RpcAddress;
 
+import java.io.IOException;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 
@@ -14,7 +15,7 @@ import java.util.concurrent.LinkedBlockingQueue;
  * */
 public class Outbox {
 
-    private NettyRpcEnv rpcEnv;
+    private NettyRpcEnv nettyEnv;
 
     /**
      * 远端服务地址
@@ -30,8 +31,10 @@ public class Outbox {
 
     private boolean stopped = false;
 
-    public Outbox(NettyRpcEnv rpcEnv, RpcAddress address) {
-        this.rpcEnv = rpcEnv;
+    private Future<?> connectFuture = null;
+
+    public Outbox(NettyRpcEnv nettyEnv, RpcAddress address) {
+        this.nettyEnv = nettyEnv;
         this.address = address;
     }
 
@@ -55,10 +58,16 @@ public class Outbox {
             if (stopped) {
                 return;
             }
+            if (connectFuture != null) {
+                // We are connecting to the remote address, so just exit
+                return;
+            }
+
             if (client == null) {
                 launchConnectTask();
                 return;
             }
+
             message = messages.poll();
             if (message == null) {
                 return;
@@ -78,19 +87,53 @@ public class Outbox {
     }
 
     private void launchConnectTask() {
-        Future<TransportClient> future = rpcEnv.asyncCreateClient(address);
-        try {
-            TransportClient transportClient = future.get();
+        connectFuture = nettyEnv.clientConnectionExecutor.submit(() -> {
+           try {
+               TransportClient client = nettyEnv.createClient(address);
+               synchronized (this) {
+                   this.client = client;
+                   if (stopped) {
+                       closeClient();
+                   }
+               }
+           } catch (InterruptedException e) {
+               // exit
+           } catch (IOException e){
+               synchronized (this) {
+                   connectFuture = null;
+               }
+               handleNetworkFailure(e);
+           }
             synchronized (this) {
-                client = transportClient;
-                if (stopped) {
-                    closeClient();
-                }
+                connectFuture = null;
             }
+            // It's possible that no thread is draining now. If we don't drain here, we cannot send the
+            // messages until the next message arrives.
             drainOutbox();
-        } catch (Exception e) {
-            // ignore
+            return;
+        });
+    }
+
+    private void handleNetworkFailure(Throwable e) {
+        synchronized (this) {
+            assert connectFuture == null;
+            if (stopped) {
+                return;
+            }
+
+            stopped = true;
+            closeClient();
         }
+
+        // 停止向address发送Rpc消息, 并通知
+        nettyEnv.removeOutbox(address);
+        OutboxMessage message = messages.poll();
+        while (message != null) {
+            message.onFailure(e);
+            message = messages.poll();
+        }
+
+        assert messages.isEmpty();
     }
 
     private void closeClient() {
