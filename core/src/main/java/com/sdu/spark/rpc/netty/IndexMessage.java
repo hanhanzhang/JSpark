@@ -1,8 +1,6 @@
 package com.sdu.spark.rpc.netty;
 
 import com.sdu.spark.rpc.RpcAddress;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
 
 /**
  * 信箱消息
@@ -24,46 +22,60 @@ public interface IndexMessage {
     /**
      * RpcEnv远端客户连接信息
      * */
-    @AllArgsConstructor
-    @Getter
     class RemoteProcessConnect implements IndexMessage {
-        private RpcAddress address;
+        public RpcAddress address;
+
+        public RemoteProcessConnect(RpcAddress address) {
+            this.address = address;
+        }
     }
 
     /**
      * RpcEnv远端客户断开连接消息
      * */
-    @AllArgsConstructor
-    @Getter
     class RemoteProcessDisconnect implements IndexMessage {
-        private RpcAddress address;
+        public RpcAddress address;
+
+        public RemoteProcessDisconnect(RpcAddress address) {
+            this.address = address;
+        }
     }
 
     /**
      * RpcEnv远端交互异常消息
      * */
-    @AllArgsConstructor
-    @Getter
     class RemoteProcessConnectionError implements IndexMessage {
-        private Throwable cause;
-        private RpcAddress address;
+        public Throwable cause;
+        public RpcAddress address;
+
+        public RemoteProcessConnectionError(Throwable cause, RpcAddress address) {
+            this.cause = cause;
+            this.address = address;
+        }
     }
 
     /**
      * RpcEnv发送给远端的消息
      * */
-    @AllArgsConstructor
-    @Getter
     class RpcMessage implements IndexMessage {
-        private RpcAddress senderAddress;
-        private Object content;
-        private NettyRpcCallContext context;
+        public RpcAddress senderAddress;
+        public Object content;
+        public NettyRpcCallContext context;
+
+        public RpcMessage(RpcAddress senderAddress, Object content, NettyRpcCallContext context) {
+            this.senderAddress = senderAddress;
+            this.content = content;
+            this.context = context;
+        }
     }
 
-    @AllArgsConstructor
-    @Getter
     class OneWayMessage implements IndexMessage {
-        private RpcAddress senderAddress;
-        private Object content;
+        public RpcAddress senderAddress;
+        public Object content;
+
+        public OneWayMessage(RpcAddress senderAddress, Object content) {
+            this.senderAddress = senderAddress;
+            this.content = content;
+        }
     }
 }

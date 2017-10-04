@@ -65,16 +65,17 @@ public class Index {
                 endPoint.onStop();
             } else if (message instanceof RpcMessage) {                 // 向远端发送消息
                 RpcMessage msg = (RpcMessage) message;
-                endPoint.receiveAndReply(msg.getContent(), msg.getContext());
+                endPoint.receiveAndReply(msg.content, msg.context);
             } else if (message instanceof RemoteProcessConnect) {       // 远端连接到RpcEnv[广播给每个RpcEndPoint]
-                endPoint.onConnect(((RemoteProcessConnect) message).getAddress());
+                endPoint.onConnect(((RemoteProcessConnect) message).address);
             } else if (message instanceof RemoteProcessDisconnect) {    // 远端关闭RpcEnv连接[广播给每个RpcEndPoint]
-                endPoint.onDisconnect(((RemoteProcessDisconnect) message).getAddress());
+                endPoint.onDisconnect(((RemoteProcessDisconnect) message).address);
             } else if (message instanceof OneWayMessage) {
                 OneWayMessage msg = (OneWayMessage) message;
-                endPoint.receive(msg.getContent());
+                endPoint.receive(msg.content);
             } else if (message instanceof RemoteProcessConnectionError) {
                 RemoteProcessConnectionError connectionError = (RemoteProcessConnectionError) message;
+                endPoint.onNetworkError(connectionError.cause, connectionError.address);
             }
             message = messageBox.poll();
             if (message == null) {
