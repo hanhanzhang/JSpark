@@ -309,7 +309,7 @@ public class Worker extends RpcEndPoint {
         RpcAddress masterAddress = new RpcAddress(ip, 6712);
         int cpu = Runtime.getRuntime().availableProcessors() * 2;
         long memory = Runtime.getRuntime().maxMemory();
-        args = new String[] {ip, "6713"};
+        args = new String[] {ip, "0"};
 
         SparkConf conf = new SparkConf();
         conf.set("spark.rpc.deliver.message.threads", "32");

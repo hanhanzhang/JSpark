@@ -68,8 +68,8 @@ public class Index {
                 endPoint.receiveAndReply(msg.content, msg.context);
             } else if (message instanceof RemoteProcessConnect) {       // 远端连接到RpcEnv[广播给每个RpcEndPoint]
                 endPoint.onConnect(((RemoteProcessConnect) message).address);
-            } else if (message instanceof RemoteProcessDisconnect) {    // 远端关闭RpcEnv连接[广播给每个RpcEndPoint]
-                endPoint.onDisconnect(((RemoteProcessDisconnect) message).address);
+            } else if (message instanceof RemoteProcessDisconnected) {    // 远端关闭RpcEnv连接[广播给每个RpcEndPoint]
+                endPoint.onDisconnect(((RemoteProcessDisconnected) message).remoteAddress);
             } else if (message instanceof OneWayMessage) {
                 OneWayMessage msg = (OneWayMessage) message;
                 endPoint.receive(msg.content);

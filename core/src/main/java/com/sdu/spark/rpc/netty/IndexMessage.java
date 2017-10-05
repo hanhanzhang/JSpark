@@ -30,6 +30,22 @@ public interface IndexMessage {
         }
     }
 
+    class RemoteProcessConnected implements IndexMessage {
+        public RpcAddress remoteAddress;
+
+        public RemoteProcessConnected(RpcAddress remoteAddress) {
+            this.remoteAddress = remoteAddress;
+        }
+    }
+
+    class RemoteProcessDisconnected implements IndexMessage {
+        public RpcAddress remoteAddress;
+
+        public RemoteProcessDisconnected(RpcAddress remoteAddress) {
+            this.remoteAddress = remoteAddress;
+        }
+    }
+
     /**
      * RpcEnv远端客户断开连接消息
      * */

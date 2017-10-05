@@ -9,6 +9,7 @@ import com.sdu.spark.deploy.MasterMessage.*;
 import com.sdu.spark.executor.Executor;
 import com.sdu.spark.rpc.*;
 import com.sdu.spark.utils.ThreadUtils;
+import org.apache.commons.collections.MapUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -53,9 +54,9 @@ public class Master extends RpcEndPoint {
      * */
     private RecoveryState state = RecoveryState.ALIVE;
 
-    /***********************************JSpark集群节点资源管理*************************************/
+    /***********************************Spark集群节点资源管理*************************************/
     // 集群工作节点
-    private Set<WorkerInfo> workers = new HashSet<>();
+    private final Set<WorkerInfo> workers = new HashSet<>();
     // 工作节点地址信息[key = 工作节点地址, value = 工作节点信息]
     private Map<RpcAddress, WorkerInfo> addressToWorker = new HashMap<>();
     // 工作节点标识[key = 工作节点唯一标识, value = 工作节点信息]
@@ -183,9 +184,12 @@ public class Master extends RpcEndPoint {
 
     @Override
     public void onDisconnect(RpcAddress remoteAddress) {
-        LOGGER.info("删除断开连接的工作节点worker(address)", remoteAddress.hostPort());
+        LOGGER.info("删除断开连接的工作节点worker(address = {})", remoteAddress.hostPort());
         WorkerInfo workerInfo = addressToWorker.get(remoteAddress);
-        removeWorker(workerInfo, String.format("worker(%s)断开连接", remoteAddress.hostPort()));
+        if (workerInfo != null) {
+            removeWorker(workerInfo, String.format("worker(%s)断开连接", remoteAddress.hostPort()));
+        }
+
         ApplicationInfo app = addressToApp.get(remoteAddress);
         if (app != null) {
             finishApplication(app);
@@ -198,9 +202,14 @@ public class Master extends RpcEndPoint {
 
     private boolean registerWorker(WorkerInfo worker) {
         // 删除已挂掉的worker及当前注册work地址相同
-        workers.stream().filter(w -> (w.host.equals(worker.host) && w.port == worker.port) &&
-                                     (w.state == WorkerState.DEAD))
-                        .forEach(w -> workers.remove(w));
+        Iterator<WorkerInfo> it = workers.iterator();
+        while (it.hasNext()) {
+            WorkerInfo w = it.next();
+            if (w.host.equals(worker.host) && w.port == worker.port &&
+                    w.state == WorkerState.DEAD) {
+                it.remove();
+            }
+        }
         RpcAddress address = worker.endPointRef.address();
         if (addressToWorker.containsKey(address)) {
             WorkerInfo oldWorker = addressToWorker.get(address);
@@ -224,29 +233,35 @@ public class Master extends RpcEndPoint {
         addressToWorker.remove(worker.endPointRef.address());
 
         // Worker节点部署的Executor
-        for (ExecutorDesc exec : worker.executors.values()) {
-            LOGGER.info("告知Application的Executor丢失消息");
-            exec.application.driver.send(new ExecutorUpdated(
-                    exec.id,
-                    ExecutorState.LOST,
-                    "worker lost",
-                    -1,
-                    true
-            ));
-            exec.state = ExecutorState.LOST;
-            exec.application.removeExecutor(exec);
-        }
-
-        // Worker节点部署的Driver
-        for (DriverInfo driver : worker.drivers.values()) {
-            if (driver.desc.supervise) {
-                LOGGER.info("重新启动Driver(id = {})", driver.id);
-                relaunchDriver(driver);
-            } else {
-                LOGGER.info("由于Driver(id = {})不支持重启, 放弃", driver.id);
-                removeDriver(driver, DriverState.ERROR, null);
+        if (MapUtils.isNotEmpty(worker.executors)) {
+            for (ExecutorDesc exec : worker.executors.values()) {
+                LOGGER.info("告知Application的Executor丢失消息");
+                exec.application.driver.send(new ExecutorUpdated(
+                        exec.id,
+                        ExecutorState.LOST,
+                        "worker lost",
+                        -1,
+                        true
+                ));
+                exec.state = ExecutorState.LOST;
+                exec.application.removeExecutor(exec);
             }
         }
+
+
+        // Worker节点部署的Driver
+        if (MapUtils.isNotEmpty(worker.drivers)) {
+            for (DriverInfo driver : worker.drivers.values()) {
+                if (driver.desc.supervise) {
+                    LOGGER.info("重新启动Driver(id = {})", driver.id);
+                    relaunchDriver(driver);
+                } else {
+                    LOGGER.info("由于Driver(id = {})不支持重启, 放弃", driver.id);
+                    removeDriver(driver, DriverState.ERROR, null);
+                }
+            }
+        }
+
 
         // 通知Application丢失Worker
         LOGGER.info("通知Application丢失Worker节点：{}", worker.workerId);
