@@ -3,6 +3,7 @@ package com.sdu.spark.unfase.memory;
 import com.sdu.spark.unfase.Platform;
 
 /**
+ * 内存块
  *
  * @author hanhan.zhang
  * */

@@ -13,11 +13,13 @@ public class MemoryLocation {
     // 内存地址偏移量
     long offset;
 
+    // 适用于堆内存
     public MemoryLocation(Object obj, long offset) {
         this.obj = obj;
         this.offset = offset;
     }
 
+    // 适用于非堆内存
     public MemoryLocation() {
         this(null, 0);
     }

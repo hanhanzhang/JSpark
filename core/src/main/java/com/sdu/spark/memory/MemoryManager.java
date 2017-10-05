@@ -109,6 +109,14 @@ public abstract class MemoryManager {
         }
     }
 
+    public long pageSizeBytes() {
+        return pageSizeBytes;
+    }
+
+    public MemoryAllocator tungstenMemoryAllocator() {
+        return tungstenMemoryAllocator;
+    }
+
     public final void setMemoryStore(MemoryStore memoryStore) {
         onHeapStorageMemoryPool.setMemoryStore(memoryStore);
         offHeapStorageMemoryPool.setMemoryStore(memoryStore);

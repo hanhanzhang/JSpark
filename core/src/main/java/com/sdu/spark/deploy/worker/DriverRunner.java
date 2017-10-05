@@ -1,16 +1,21 @@
 package com.sdu.spark.deploy.worker;
 
 import com.sdu.spark.SecurityManager;
+import com.sdu.spark.deploy.DeployMessage.DriverStateChanged;
 import com.sdu.spark.deploy.DriverDescription;
 import com.sdu.spark.deploy.DriverState;
 import com.sdu.spark.rpc.SparkConf;
 import com.sdu.spark.rpc.RpcEndPointRef;
+import com.sdu.spark.utils.ShutdownHookManager;
+import com.sdu.spark.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.Collections;
+
+import static com.sdu.spark.utils.Utils.terminateProcess;
 
 /**
  *  启动Driver进程
@@ -29,17 +34,21 @@ public class DriverRunner {
     private RpcEndPointRef worker;
     private SecurityManager securityManager;
 
-    /**
-     * Driver进程
-     * */
+    private long DRIVER_TERMINATE_TIMEOUT_MS;
+
+    /**Driver进程*/
     private volatile Process process;
     private volatile boolean killed;
-
     private volatile DriverState finishedState;
     private volatile Exception finishedException;
 
-    public DriverRunner(SparkConf conf, String driverId, File workDir, File sparkHome, DriverDescription desc,
-                        RpcEndPointRef worker, SecurityManager securityManager) {
+    public DriverRunner(SparkConf conf,
+                        String driverId,
+                        File workDir,
+                        File sparkHome,
+                        DriverDescription desc,
+                        RpcEndPointRef worker,
+                        SecurityManager securityManager) {
         this.conf = conf;
         this.driverId = driverId;
         this.workDir = workDir;
@@ -47,11 +56,19 @@ public class DriverRunner {
         this.desc = desc;
         this.worker = worker;
         this.securityManager = securityManager;
+
+        this.DRIVER_TERMINATE_TIMEOUT_MS = this.conf.getTimeAsMs("spark.worker.driverTerminateTimeout", "10s");
     }
 
     public void start() {
         new Thread(() -> {
+            ShutdownHookManager.SparkShutdownHook shutdownHook = null;
             try {
+                shutdownHook = ShutdownHookManager.get().add(() -> {
+                    LOGGER.info("Worker shutting down, kill driver " + driverId);
+                    kill();
+                });
+
                 int exitCode = prepareAndRunDriver();
                 if (exitCode == 0) {
                     finishedState = DriverState.FINISHED;
@@ -64,13 +81,25 @@ public class DriverRunner {
                 kill();
                 finishedState = DriverState.ERROR;
                 finishedException = e;
+            } finally {
+                if (shutdownHook != null) {
+                    ShutdownHookManager.get().removeShutdownHook(shutdownHook);
+                }
             }
+            // 通知Worker, Driver状态发生变化
+            worker.send(new DriverStateChanged(driverId, finishedState, finishedException));
         }, "DriverRunner for " + driverId).start();
     }
 
     private void kill() {
         LOGGER.info("关闭Driver(driverId = {})进程", driverId);
         killed = true;
+        synchronized (this) {
+            int exitCode = terminateProcess(process, DRIVER_TERMINATE_TIMEOUT_MS);
+            if (exitCode == -1) {
+                LOGGER.warn("关闭Driver进程失败, driverId = {}", driverId);
+            }
+        }
         process.destroy();
     }
 

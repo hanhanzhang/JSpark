@@ -191,9 +191,7 @@ public class Executor {
             threadId = Thread.currentThread().getId();
             Thread.currentThread().setName(threadName);
 
-            /**
-             * Task运行耗时统计
-             * */
+            /**Task运行耗时统计*/
             ThreadMXBean threadMXBean = ManagementFactory.getThreadMXBean();
             long deserializeStartTime = 0L;
             long deserializeStartCpuTime = 0L;
@@ -205,12 +203,11 @@ public class Executor {
             TaskMemoryManager taskMemoryManager = new TaskMemoryManager(env.memoryManager, taskId);
             SerializerInstance ser = env.serializer.newInstance();
             LOGGER.info("执行Task(name = {}, taskId = {})", taskDescription.name, taskId);
-            /**
-             * 向任务调度中心上报任务执行状态
-             * */
+
+            /**向任务调度中心上报任务执行状态*/
             execBackend.statusUpdate(taskId, RUNNING, EMPTY_BYTE_BUFFER);
 
-            long taskStart = 0L;
+            long taskStart;
             long taskStartCpu = 0L;
             startGCTime = computeTotalGcTime();
 
@@ -244,9 +241,7 @@ public class Executor {
                 try {
                     value = task.run(taskId, taskDescription.attemptNumber);
                 } finally {
-                    /**
-                     * 释放资源
-                     * */
+                    /**释放资源*/
                     List<BlockId> releasedLocks = env.blockManager.releaseAllLocksForTask(taskId);
                     long freedMemory = taskMemoryManager.cleanUpAllAllocatedMemory();
                     if (freedMemory > 0) {

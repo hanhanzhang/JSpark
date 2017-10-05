@@ -57,6 +57,25 @@ public class Utils {
 
     private static volatile String[] localRootDirs = null;
 
+    public static int terminateProcess(Process process, long timeoutMs)  {
+        try {
+            // Politely destroy first
+            process.destroy();
+            if (process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)) {
+                // Successful exit
+                return process.exitValue();
+            } else {
+                process.destroyForcibly();
+                if (process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)) {
+                    return process.exitValue();
+                }
+            }
+        } catch (InterruptedException e) {
+            LOGGER.error("Exception when attempting to kill process", e);
+        }
+        return -1;
+    }
+
     public static <T> T getFutureResult(Future<?> future) {
         try {
             return (T) future.get();

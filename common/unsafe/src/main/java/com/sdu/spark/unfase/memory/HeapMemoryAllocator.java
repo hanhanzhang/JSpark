@@ -43,7 +43,7 @@ public class HeapMemoryAllocator implements MemoryAllocator {
         }
 
         // 分配MemoryBlock, free时加入bufferPoolsBySize, 依靠GC清空内存
-        // 确保申请的内存空间是不低于size的且是8的倍数内存空间
+        // 确保申请的内存空间是不低于size的且是8的倍数内存空间, 即8字节对齐
         long []array = new long[(int) (size + 7) / 8];
         MemoryBlock memory = new MemoryBlock(array, Platform.LONG_ARRAY_OFFSET, array.length * 8L);
         if (MEMORY_DEBUG_FILL_ENABLED) {

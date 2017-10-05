@@ -14,6 +14,8 @@ public class ShutdownHookManager {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ShutdownHookManager.class);
 
+    private static final int DEFAULT_SHUTDOWN_PRIORITY = 100;
+
     private static final ShutdownHookManager MGR = new ShutdownHookManager();
 
     static {
@@ -41,6 +43,10 @@ public class ShutdownHookManager {
 
     private ShutdownHookManager() {}
 
+    public SparkShutdownHook add(ShutdownHook hook) {
+        return add(DEFAULT_SHUTDOWN_PRIORITY, hook);
+    }
+
     public SparkShutdownHook add(int priority, ShutdownHook hook) {
         synchronized (hooks) {
             if (!shutdownInProgress.get()) {
@@ -53,7 +59,7 @@ public class ShutdownHookManager {
         }
     }
 
-    public boolean remove(SparkShutdownHook shutdownHook) {
+    public boolean removeShutdownHook(SparkShutdownHook shutdownHook) {
         synchronized (hooks) {
             return hooks.remove(shutdownHook);
         }
