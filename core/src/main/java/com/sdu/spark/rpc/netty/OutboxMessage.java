@@ -1,9 +1,13 @@
 package com.sdu.spark.rpc.netty;
 
+import com.google.common.util.concurrent.SettableFuture;
 import com.sdu.spark.network.client.TransportClient;
 import com.sdu.spark.network.client.RpcResponseCallback;
+import com.sdu.spark.rpc.RpcEnvStoppedException;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.Serializable;
 import java.nio.ByteBuffer;
@@ -22,6 +26,8 @@ public interface OutboxMessage extends Serializable {
      * */
     class OneWayOutboxMessage implements OutboxMessage {
 
+        private static final Logger LOGGER = LoggerFactory.getLogger(OneWayOutboxMessage.class);
+
         private ByteBuffer content;
 
         public OneWayOutboxMessage(ByteBuffer content) {
@@ -35,17 +41,24 @@ public interface OutboxMessage extends Serializable {
 
         @Override
         public void onFailure(Throwable e) {
-            //ignore
+            if (e instanceof RpcEnvStoppedException) {
+                LOGGER.debug(e.getMessage());
+            } else {
+                LOGGER.warn("Failed to send one-way RPC.", e);
+            }
         }
     }
 
     /**
      *
      * */
-    @AllArgsConstructor
     class CheckExistence implements OutboxMessage {
 
         public String name;
+
+        public CheckExistence(String name) {
+            this.name = name;
+        }
 
         @Override
         public void sendWith(TransportClient client) {
@@ -72,9 +85,9 @@ public interface OutboxMessage extends Serializable {
          * */
         public long requestId;
 
-        private NettyRpcResponseCallback callback;
+        private RpcResponseCallback callback;
 
-        public RpcOutboxMessage(ByteBuffer content, NettyRpcResponseCallback callback) {
+        public RpcOutboxMessage(ByteBuffer content, RpcResponseCallback callback) {
             this.content = content;
             this.callback = callback;
         }
@@ -87,12 +100,12 @@ public interface OutboxMessage extends Serializable {
 
         @Override
         public void onSuccess(ByteBuffer response) {
-            this.callback.onSuccess(response);
+            callback.onSuccess(response);
         }
 
         @Override
         public void onFailure(Throwable e) {
-            this.callback.onFailure(e);
+            callback.onFailure(e);
         }
     }
 }

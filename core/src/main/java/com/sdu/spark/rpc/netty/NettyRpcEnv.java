@@ -2,12 +2,15 @@ package com.sdu.spark.rpc.netty;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.util.concurrent.SettableFuture;
 import com.sdu.spark.SecurityManager;
 import com.sdu.spark.network.TransportContext;
+import com.sdu.spark.network.client.RpcResponseCallback;
 import com.sdu.spark.network.client.TransportClient;
 import com.sdu.spark.network.client.TransportClientBootstrap;
 import com.sdu.spark.network.client.TransportClientFactory;
 import com.sdu.spark.network.crypto.AuthServerBootstrap;
+import com.sdu.spark.network.protocol.RpcResponse;
 import com.sdu.spark.network.server.StreamManager;
 import com.sdu.spark.network.server.TransportServer;
 import com.sdu.spark.network.server.TransportServerBootstrap;
@@ -82,7 +85,7 @@ public class NettyRpcEnv implements RpcEnv {
         this.dispatcher = new Dispatcher(this, conf);
         this.clientConnectionExecutor = newDaemonCachedThreadPool("netty-rpc-connect-%d", conf.getInt("spark.rpc.connect.threads", 64), 60);
         this.deliverMessageExecutor = newDaemonCachedThreadPool("rpc-deliver-message-%d", conf.getInt("spark.rpc.deliver.message.threads", 64), 60);
-        StreamManager streamManager = null;
+        StreamManager streamManager = new NettyStreamManager(this);
         this.transportContext = new TransportContext(fromSparkConf(conf), new NettyRpcHandler(streamManager, this.dispatcher, this));
         this.clientFactory = this.transportContext.createClientFactory(createClientBootstraps());
         this.serializerInstance = serializerInstance;
@@ -149,10 +152,26 @@ public class NettyRpcEnv implements RpcEnv {
             return deliverMessageExecutor.submit(() -> dispatcher.postLocalMessage(message));
         } else {
             // 发送网络消息
-            NettyRpcResponseCallback callback = new NettyRpcResponseCallback(this);
+            SettableFuture<Object> p = SettableFuture.create();
+            RpcResponseCallback callback = new RpcResponseCallback() {
+                @Override
+                public void onSuccess(ByteBuffer response) {
+                    try {
+                        Object result = deserialize(null, response);
+                        p.set(result);
+                    } catch (IOException e) {
+                        onFailure(e);
+                    }
+                }
+
+                @Override
+                public void onFailure(Throwable e) {
+                    p.setException(e);
+                }
+            };
             OutboxMessage.RpcOutboxMessage outboxMessage = new RpcOutboxMessage(message.serialize(this), callback);
             postToOutbox(message.receiver, outboxMessage);
-            return callback.getResponseFuture();
+            return p;
         }
     }
 

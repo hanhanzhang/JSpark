@@ -2,6 +2,8 @@ package com.sdu.spark.rpc.netty;
 
 
 import com.google.common.collect.Maps;
+import com.google.common.util.concurrent.SettableFuture;
+import com.sdu.spark.SparkException;
 import com.sdu.spark.network.client.RpcResponseCallback;
 import com.sdu.spark.rpc.*;
 import com.sdu.spark.utils.ThreadUtils;
@@ -104,46 +106,63 @@ public class Dispatcher {
     /******************************Spark Message路由*******************************/
     // 本地消息
     public Object postLocalMessage(RequestMessage req) throws ExecutionException, InterruptedException {
-        NettyLocalResponseCallback<Object> callback = new NettyLocalResponseCallback<>();
-
-        LocalNettyRpcCallContext callContext = new LocalNettyRpcCallContext(req.senderAddress, callback);
+//        NettyLocalResponseCallback<Object> callback = new NettyLocalResponseCallback<>();
+        SettableFuture<Object> p = SettableFuture.create();
+        LocalNettyRpcCallContext callContext = new LocalNettyRpcCallContext(req.senderAddress, p);
         RpcMessage rpcMessage = new RpcMessage(req.senderAddress, req.content, callContext);
         postMessage(req.receiver.name(), rpcMessage, null);
 
-        return callback.getResponse();
+        return p.get();
     }
     // 网络消息[单向]
     public void postOneWayMessage(RequestMessage req) {
         OneWayMessage oneWayMessage = new OneWayMessage(req.senderAddress, req.content);
-        postMessage(req.receiver.name(), oneWayMessage, null);
+        postMessage(req.receiver.name(), oneWayMessage, e -> {
+            if (e instanceof RpcEnvStoppedException) {
+                throw (RpcEnvStoppedException) e;
+            } else if (e instanceof SparkException) {
+                throw (SparkException) e;
+            } else {
+                throw new SparkException(e);
+            }
+        });
     }
     // 网络消息[双向]
     public void postRemoteMessage(RequestMessage req, RpcResponseCallback callback) {
         RemoteNettyRpcCallContext callContext = new RemoteNettyRpcCallContext(req.senderAddress, nettyRpcEnv, callback);
         RpcMessage rpcMessage = new RpcMessage(req.senderAddress, req.content, callContext);
-        postMessage(req.receiver.name(), rpcMessage, callback);
+        postMessage(req.receiver.name(), rpcMessage, callback::onFailure);
     }
     // 广播消息
     public void postToAll(IndexMessage message) {
         Iterator<String> it = endPoints.keySet().iterator();
         while (it.hasNext()) {
             String pointName = it.next();
-            postMessage(pointName, message, null);
+            postMessage(pointName, message, e -> {
+                if (e instanceof RpcEnvStoppedException) {
+                    LOGGER.debug("丢弃{}, 原因：{}", message, e.getMessage());
+                } else  {
+                    LOGGER.warn("丢弃{}, 原因：{}", message, e.getMessage());
+                }
+            });
         }
     }
 
-    private void postMessage(String endPointName, IndexMessage message, RpcResponseCallback callback) {
-        EndPointData data = endPoints.get(endPointName);
+    private void postMessage(String endPointName, IndexMessage message, ThrowableCallback callback) {
+        Exception error = null;
         synchronized (this) {
+            EndPointData data = endPoints.get(endPointName);
             if (stopped) {
-                if (callback != null) {
-                    callback.onFailure(new IllegalStateException("RpcEnv already stopped."));
-                } else {
-                    throw new IllegalStateException("RpcEnv already stopped.");
-                }
+                error = new RpcEnvStoppedException();
+            } else if (data == null) {
+                error = new SparkException(String.format("Could not find %s", endPointName));
+            } else {
+                data.index.post(message);
+                receivers.offer(data);
             }
-            data.index.post(message);
-            receivers.offer(data);
+        }
+        if (error != null) {
+            callback.callbackIfStopped(error);
         }
     }
 
@@ -200,5 +219,9 @@ public class Dispatcher {
                 }
             }
         }
+    }
+
+    private interface ThrowableCallback {
+        void callbackIfStopped(Exception e);
     }
 }

@@ -170,7 +170,7 @@ public class Worker extends RpcEndPoint {
                     registerMasterFuture.cancel(true);
                 }
                 RpcAddress address = master.address();
-                LOGGER.info("JSpark Master节点地址: {}", address.hostPort());
+                LOGGER.info("Spark Master节点地址: {}", address.hostPort());
                 RpcEndPointRef masterPointRef = rpcEnv.setRpcEndPointRef(Master.ENDPOINT_NAME, address);
                 sendRegisterMessageToMaster(masterPointRef);
             }

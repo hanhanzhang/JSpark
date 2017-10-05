@@ -1,6 +1,6 @@
 package com.sdu.spark.rpc.netty;
 
-import com.sdu.spark.rpc.LocalResponseCallback;
+import com.google.common.util.concurrent.SettableFuture;
 import com.sdu.spark.rpc.RpcAddress;
 
 /**
@@ -8,15 +8,16 @@ import com.sdu.spark.rpc.RpcAddress;
  * */
 public class LocalNettyRpcCallContext extends NettyRpcCallContext {
 
-    private LocalResponseCallback<Object> callback;
+//    private LocalResponseCallback<Object> callback;
+    SettableFuture<Object> p;
 
-    public LocalNettyRpcCallContext(RpcAddress senderAddress, LocalResponseCallback<Object> callback) {
+    public LocalNettyRpcCallContext(RpcAddress senderAddress, SettableFuture<Object> p) {
         super(senderAddress);
-        this.callback = callback;
+        this.p = p;
     }
 
     @Override
     public void send(Object message) {
-        callback.onSuccess(message);
+        p.set(message);
     }
 }

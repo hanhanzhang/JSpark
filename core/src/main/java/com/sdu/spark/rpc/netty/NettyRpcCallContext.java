@@ -21,6 +21,6 @@ public abstract class NettyRpcCallContext extends RpcCallContext {
 
     @Override
     public void sendFailure(Throwable cause) {
-
+//        send(new RpcFailure());
     }
 }
