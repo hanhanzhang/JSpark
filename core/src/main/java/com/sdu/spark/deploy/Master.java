@@ -6,6 +6,7 @@ import com.google.common.collect.Sets;
 import com.sdu.spark.SecurityManager;
 import com.sdu.spark.deploy.DeployMessage.*;
 import com.sdu.spark.deploy.MasterMessage.*;
+import com.sdu.spark.executor.Executor;
 import com.sdu.spark.rpc.*;
 import com.sdu.spark.utils.ThreadUtils;
 import org.slf4j.Logger;
@@ -180,18 +181,33 @@ public class Master extends RpcEndPoint {
         }
     }
 
+    @Override
+    public void onDisconnect(RpcAddress remoteAddress) {
+        LOGGER.info("删除断开连接的工作节点worker(address)", remoteAddress.hostPort());
+        WorkerInfo workerInfo = addressToWorker.get(remoteAddress);
+        removeWorker(workerInfo, String.format("worker(%s)断开连接", remoteAddress.hostPort()));
+        ApplicationInfo app = addressToApp.get(remoteAddress);
+        if (app != null) {
+            finishApplication(app);
+        }
+
+        if (state == RecoveryState.RECOVERING && canCompleteRecovery()) { 
+            completeRecovery();
+        }
+    }
+
     private boolean registerWorker(WorkerInfo worker) {
         // 删除已挂掉的worker及当前注册work地址相同
-        workers.stream().filter(w -> (w.host == worker.host && w.port == worker.port) &&
+        workers.stream().filter(w -> (w.host.equals(worker.host) && w.port == worker.port) &&
                                      (w.state == WorkerState.DEAD))
                         .forEach(w -> workers.remove(w));
         RpcAddress address = worker.endPointRef.address();
         if (addressToWorker.containsKey(address)) {
             WorkerInfo oldWorker = addressToWorker.get(address);
             if (oldWorker.state == WorkerState.UNKNOWN) {
-                removeWorker(oldWorker);
+                removeWorker(oldWorker, "被相同地址的工作节点替换");
             } else {
-                LOGGER.info("Attempted to re-register worker at same address: {}", address);
+                LOGGER.info("重复注册地址相同的Worker({})工作节点", address);
                 return true;
             }
         }
@@ -201,10 +217,80 @@ public class Master extends RpcEndPoint {
         return true;
     }
 
-    private void removeWorker(WorkerInfo worker) {
+    private void removeWorker(WorkerInfo worker, String msg) {
+        LOGGER.info("移除主机(host = {}, port = {})上worker(id = {})节点", worker.host, worker.port, worker.workerId);
+        worker.state = WorkerState.DEAD;
+        idToWorker.remove(worker.workerId);
+        addressToWorker.remove(worker.endPointRef.address());
 
+        // Worker节点部署的Executor
+        for (ExecutorDesc exec : worker.executors.values()) {
+            LOGGER.info("告知Application的Executor丢失消息");
+            exec.application.driver.send(new ExecutorUpdated(
+                    exec.id,
+                    ExecutorState.LOST,
+                    "worker lost",
+                    -1,
+                    true
+            ));
+            exec.state = ExecutorState.LOST;
+            exec.application.removeExecutor(exec);
+        }
+
+        // Worker节点部署的Driver
+        for (DriverInfo driver : worker.drivers.values()) {
+            if (driver.desc.supervise) {
+                LOGGER.info("重新启动Driver(id = {})", driver.id);
+                relaunchDriver(driver);
+            } else {
+                LOGGER.info("由于Driver(id = {})不支持重启, 放弃", driver.id);
+                removeDriver(driver, DriverState.ERROR, null);
+            }
+        }
+
+        // 通知Application丢失Worker
+        LOGGER.info("通知Application丢失Worker节点：{}", worker.workerId);
+        apps.stream().filter(app -> !completedApps.contains(app))
+                     .forEach(app -> app.driver.send(new WorkerRemoved(
+                             worker.workerId,
+                             worker.host,
+                             msg
+                     )));
+        // TODO: PersistenceEngine
     }
 
+    private void finishApplication(ApplicationInfo app) {
+        removeApplication(app, ApplicationState.FINISHED);
+    }
+
+    private boolean canCompleteRecovery() {
+        int workerState = 0;
+        for (WorkerInfo worker : workers) {
+            if (worker.state == WorkerState.UNKNOWN) {
+                workerState++;
+            }
+        }
+        int appState = 0;
+        for (ApplicationInfo app : apps) {
+            if (app.state == ApplicationState.UNKNOWN) {
+                ++appState;
+            }
+        }
+        return workerState == 0 && appState == 0;
+    }
+
+    private void completeRecovery() {
+        // TODO:
+    }
+
+    private void relaunchDriver(DriverInfo driver) {
+        // TODO:
+    }
+
+    private void removeDriver(DriverInfo driver, DriverState state, Exception e) {
+
+    }
+    
     /********************************Spark Executor管理*******************************/
     private void handleExecutorStateChanged(ExecutorStateChanged executor) {
         ExecutorDesc desc = idToApp.get(executor.appId).executors.get(executor.executorId);
@@ -459,7 +545,7 @@ public class Master extends RpcEndPoint {
                     worker.state != WorkerState.DEAD) {
                 LOGGER.info("Removing worker {} because we got no heartbeat in {} seconds", worker.workerId,
                         WORKER_TIMEOUT_MS);
-                removeWorker(worker);
+                removeWorker(worker, String.format("超过%ds未收心跳", WORKER_TIMEOUT_MS / 1000));
                 it.remove();
             } else {
                 if (worker.lastHeartbeat < System.currentTimeMillis() - (REAPER_ITERATIONS + 1) * WORKER_TIMEOUT_MS) {

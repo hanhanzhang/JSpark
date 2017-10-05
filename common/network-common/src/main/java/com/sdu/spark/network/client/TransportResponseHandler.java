@@ -11,6 +11,7 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.atomic.AtomicLong;
@@ -139,12 +140,22 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
 
     @Override
     public void exceptionCaught(Throwable cause) {
-
+        if (numOutstandingRequests() > 0) {
+            String remoteAddress = getRemoteAddress(channel);
+            LOGGER.error("Still have {} requests outstanding when connection from {} is closed",
+                    numOutstandingRequests(), remoteAddress);
+            failOutstandingRequests(cause);
+        }
     }
 
     @Override
     public void channelInActive() {
-
+        if (numOutstandingRequests() > 0) {
+            String remoteAddress = getRemoteAddress(channel);
+            LOGGER.error("Still have {} requests outstanding when connection from {} is closed",
+                    numOutstandingRequests(), remoteAddress);
+            failOutstandingRequests(new IOException("Connection from " + remoteAddress + " closed"));
+        }
     }
 
     public void updateTimeOfLastRequest() {
@@ -158,5 +169,34 @@ public class TransportResponseHandler extends MessageHandler<ResponseMessage> {
     public int numOutstandingRequests() {
         return outstandingFetches.size() + outstandingRpcCalls.size() + streamCallbacks.size() +
                 (streamActive ? 1 : 0);
+    }
+
+    private void failOutstandingRequests(Throwable cause) {
+        for (Map.Entry<StreamChunkId, ChunkReceivedCallback> entry : outstandingFetches.entrySet()) {
+            try {
+                entry.getValue().onFailure(entry.getKey().chunkIndex, cause);
+            } catch (Exception e) {
+                LOGGER.warn("ChunkReceivedCallback.onFailure throws exception", e);
+            }
+        }
+        for (Map.Entry<Long, RpcResponseCallback> entry : outstandingRpcCalls.entrySet()) {
+            try {
+                entry.getValue().onFailure(cause);
+            } catch (Exception e) {
+                LOGGER.warn("RpcResponseCallback.onFailure throws exception", e);
+            }
+        }
+        for (Pair<String, StreamCallback> entry : streamCallbacks) {
+            try {
+                entry.getValue().onFailure(entry.getKey(), cause);
+            } catch (Exception e) {
+                LOGGER.warn("StreamCallback.onFailure throws exception", e);
+            }
+        }
+
+        // It's OK if new fetches appear, as they will fail immediately.
+        outstandingFetches.clear();
+        outstandingRpcCalls.clear();
+        streamCallbacks.clear();
     }
 }

@@ -1,12 +1,13 @@
 package com.sdu.spark.storage.memory;
 
 import com.sdu.spark.memory.MemoryMode;
-import com.sun.tools.javac.util.List;
+
+import java.util.List;
 
 /**
  * @author hanhan.zhang
  * */
-public class DeserializedMemoryEntry<T> implements MemoryEntry{
+public class DeserializedMemoryEntry<T> implements MemoryEntry {
 
     public long size;
     public List<T> array;

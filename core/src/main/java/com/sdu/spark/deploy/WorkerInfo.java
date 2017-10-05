@@ -55,8 +55,8 @@ public class WorkerInfo implements Serializable{
      * 上次心跳时间
      * */
     public  long lastHeartbeat = System.currentTimeMillis();
-    private transient Map<String, ExecutorDesc> executors;
-    private transient Map<String, DriverInfo> drivers;
+    public transient Map<String, ExecutorDesc> executors;
+    public transient Map<String, DriverInfo> drivers;
 
     public WorkerInfo(String workerId, String host, int port, int cores, long memory, RpcEndPointRef endPointRef) {
         this.workerId = workerId;

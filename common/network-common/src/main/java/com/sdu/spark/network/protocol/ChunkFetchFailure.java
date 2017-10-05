@@ -2,7 +2,6 @@ package com.sdu.spark.network.protocol;
 
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Objects;
-import com.oracle.javafx.jmx.json.JSONDocument;
 import io.netty.buffer.ByteBuf;
 
 /**
