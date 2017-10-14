@@ -28,7 +28,8 @@ public class NettyRpcEnvFactory implements RpcEnvFactory {
         NettyRpcEnv rpcEnv = new NettyRpcEnv(sparkConfig,
                                              conf.bindAddress,
                                              serializerInstance,
-                                             securityManager);
+                                             securityManager,
+                                             conf.numUsableCores);
         if (!conf.clientModel) {
             assert conf.port == 0 || (conf.port >= 1024 && conf.port < 65536) :
                     "startPort should be between 1024 and 65535 (inclusive), or 0 for a random free port.";

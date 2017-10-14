@@ -86,7 +86,7 @@ public class NettyRpcEnv extends RpcEnv {
                        int numUsableCores) {
         super(conf);
         this.host = host;
-        this.dispatcher = new Dispatcher(this, conf);
+        this.dispatcher = new Dispatcher(this, numUsableCores);
         this.streamManager = new NettyStreamManager(this);
         this.clientConnectionExecutor = newDaemonCachedThreadPool("netty-rpc-connect-%d", conf.getInt("spark.rpc.connect.threads", 64), 60);
         this.deliverMessageExecutor = newDaemonCachedThreadPool("rpc-deliver-message-%d", conf.getInt("spark.rpc.deliver.message.threads", 64), 60);
