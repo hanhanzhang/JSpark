@@ -2,6 +2,7 @@ package com.sdu.spark.deploy.worker;
 
 import com.google.common.collect.Maps;
 import com.sdu.spark.SecurityManager;
+import com.sdu.spark.SparkException;
 import com.sdu.spark.deploy.DeployMessage.*;
 import com.sdu.spark.deploy.ExecutorState;
 import com.sdu.spark.deploy.Master;
@@ -20,6 +21,7 @@ import static com.sdu.spark.network.utils.NettyUtils.getIpV4;
 import static com.sdu.spark.utils.ThreadUtils.newDaemonCachedThreadPool;
 import static com.sdu.spark.utils.ThreadUtils.newDaemonSingleThreadScheduledExecutor;
 import static com.sdu.spark.utils.Utils.convertStringToInt;
+import static com.sdu.spark.utils.Utils.megabytesToString;
 
 /**
  * 集群工作节点
@@ -105,7 +107,7 @@ public class Worker extends RpcEndPoint {
             handleRegisterResponse((RegisteredWorkerResponse) msg);
         } else if (msg instanceof SendHeartbeat) {                  // 心跳消息处理
             if (master != null) {
-                master.send(new WorkerHeartbeat(workerId, self()));
+                master.send(new Heartbeat(workerId, self()));
             }
         } else if (msg instanceof LaunchDriver) {                   // 启动Driver
             launchDriver((LaunchDriver) msg);
@@ -126,8 +128,8 @@ public class Worker extends RpcEndPoint {
 
     @Override
     public void onStart() {
-        LOGGER.info("Spark Worker节点启动: hostPort = {}, JVM = {} RAM", rpcEnv.address().hostPort(),
-                cores, memory);
+        LOGGER.info("Starting Spark worker {}:{} with {} cores, {} RAM",
+                    rpcEnv.address().hostPort(), cores, megabytesToString(memory));
 //        createWorkDir();
         startRegisterWithMaster();
     }
@@ -137,8 +139,8 @@ public class Worker extends RpcEndPoint {
         workerDir = new File(sparkHome, "work");
         boolean result = workerDir.mkdirs();
         if (!result || !workerDir.isDirectory()) {
-            LOGGER.error("Worker(workerId = {}, host = {})创建工作目录异常", workerId, host());
-            System.exit(-1);
+            LOGGER.error("Failed to create work directory {}", workerDir);
+            System.exit(1);
         }
     }
 
@@ -158,6 +160,7 @@ public class Worker extends RpcEndPoint {
         if (register) {
             cancelLastRegistrationRetry();
         } else if (connectionAttemptCount < 16) {
+            LOGGER.info("Retrying connection to master (attempt {})", connectionAttemptCount);
             connectionAttemptCount++;
             if (master == null) {
                 // 关闭已提交注册任务
@@ -170,7 +173,7 @@ public class Worker extends RpcEndPoint {
                     registerMasterFuture.cancel(true);
                 }
                 RpcAddress address = master.address();
-                LOGGER.info("Spark Master节点地址: {}", address.hostPort());
+                LOGGER.info("Connecting to master {} ...", address.hostPort());
                 RpcEndPointRef masterPointRef = rpcEnv.setRpcEndPointRef(Master.ENDPOINT_NAME, address);
                 sendRegisterMessageToMaster(masterPointRef);
             }
@@ -195,18 +198,21 @@ public class Worker extends RpcEndPoint {
         });
     }
     private void sendRegisterMessageToMaster(RpcEndPointRef masterRef) {
-        LOGGER.info("Spark Worker节点[{}]尝试向Spark Master[{}]注册", rpcEnv.address().hostPort(),
-                masterRef.address().hostPort());
-        masterRef.send(new RegisterWorker(workerId, host(), port(), cores, memory, self()));
+        masterRef.send(new RegisterWorker(workerId,
+                                          host(),
+                                          port(),
+                                          cores,
+                                          memory,
+                                          self()));
     }
 
     /*******************************注册节点响应处理*********************************/
     private void handleRegisterResponse(RegisteredWorkerResponse msg) {
         if (msg instanceof RegisteredWorker) {
-            RegisteredWorker registeredWorker = (RegisteredWorker) msg;
-            LOGGER.info("Spark Worker节点成功注册到Spark Master节点: {}", registeredWorker.master.address().toSparkURL());
+            RegisteredWorker worker = (RegisteredWorker) msg;
+            LOGGER.info("Successfully registered with master ", worker.master.address().toSparkURL());
             register = true;
-            master = registeredWorker.master;
+            master = worker.master;
             cancelLastRegistrationRetry();
             // 向Master发送心跳消息
             scheduleMessageThread.scheduleWithFixedDelay(() -> {
@@ -220,7 +226,7 @@ public class Worker extends RpcEndPoint {
 
     /**********************************Worker启动Driver*************************************/
     private void launchDriver(LaunchDriver launchDriver) {
-        LOGGER.info("工作节点启动Driver(driverId = {})进程", launchDriver.driverId);
+        LOGGER.info("Asked to launch driver ", launchDriver.driverId);
         DriverRunner runner = new DriverRunner(conf, launchDriver.driverId, workerDir, sparkHome,
                                                launchDriver.desc, self(), null);
         drivers.put(launchDriver.driverId, runner);
@@ -230,27 +236,32 @@ public class Worker extends RpcEndPoint {
     }
 
     /********************************Worker启动Executor进程*********************************/
-    private void launchExecutor(LaunchExecutor launchExecutor) {
-        File executorDir = new File(workerDir, launchExecutor.appId + "/" + launchExecutor.execId);
-        LOGGER.info("工作节点启动Executor(execId = {}, appId = {})进程, 工作目录: {}",
-                                launchExecutor.execId, launchExecutor.appId, executorDir.getAbsolutePath());
+    private void launchExecutor(LaunchExecutor executor) {
+        File executorDir = new File(workerDir, executor.appId + "/" + executor.execId);
+        LOGGER.info("Asked to launch executor %s/%d for %s",
+                     executor.appId, executor.execId, executor.appDesc.name);
         if (!executorDir.mkdirs()) {
-            throw new RuntimeException(String.format("Executor工作目录%s无法创建", executorDir.getAbsolutePath()));
+            throw new SparkException(String.format("Failed to create directory %s",
+                                                   executorDir.getAbsolutePath()));
         }
 
         String[] localAppDirs = new String[0];
 
-        ExecutorRunner runner = new ExecutorRunner(launchExecutor.appId, launchExecutor.execId, launchExecutor.appDesc,
-                                                   launchExecutor.cores, launchExecutor.memory, self(), sparkHome, executorDir, conf,
+        ExecutorRunner runner = new ExecutorRunner(executor.appId, executor.execId, executor.appDesc,
+                                                   executor.cores, executor.memory, self(), sparkHome, executorDir, conf,
                                                    localAppDirs, ExecutorState.RUNNING);
-        executors.put(launchExecutor.appId + "/" + launchExecutor.execId, runner);
+        executors.put(executor.appId + "/" + executor.execId, runner);
         runner.start();
-        coresUsed += launchExecutor.cores;
-        memoryUsed += launchExecutor.memory;
+        coresUsed += executor.cores;
+        memoryUsed += executor.memory;
         if (master != null) {
-            LOGGER.info("Worker(workerId = {}, host = {})向Master发送Executor运行信息", workerId, host());
-            master.send(new ExecutorStateChanged(launchExecutor.execId, launchExecutor.appId, runner.state,
-                                                 "", 0));
+            LOGGER.info("send master executor {}/{} state changed: {}",
+                        executor.appId, executor.execId, runner.state);
+            master.send(new ExecutorStateChanged(executor.execId,
+                                                 executor.appId,
+                                                 runner.state,
+                                                 "",
+                                                 0));
         }
     }
 
@@ -261,7 +272,7 @@ public class Worker extends RpcEndPoint {
         if (runner != null) {
             runner.kill();
         } else {
-            LOGGER.info("关闭未知Executor(appId = {}, execId = {})", executor.appId, executor.execId);
+            LOGGER.info("Asked to kill unknown executor {}/{}", executor.appId, executor.execId);
         }
     }
 

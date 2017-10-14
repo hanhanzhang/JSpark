@@ -17,11 +17,11 @@ public interface DeployMessage extends Serializable {
     /**
      * 工作节点心跳信息
      * */
-    class WorkerHeartbeat implements DeployMessage {
+    class Heartbeat implements DeployMessage {
         public String workerId;
         public RpcEndPointRef worker;
 
-        public WorkerHeartbeat(String workerId, RpcEndPointRef worker) {
+        public Heartbeat(String workerId, RpcEndPointRef worker) {
             this.workerId = workerId;
             this.worker = worker;
         }

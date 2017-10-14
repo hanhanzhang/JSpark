@@ -91,15 +91,14 @@ public abstract class RpcEnv {
                          int port,
                          SparkConf conf,
                          SecurityManager securityManager) {
-       return create(
-               name,
-               host,
-               host,
-               port,
-               conf,
-               securityManager,
-               0,
-               false);
+       return create(name,
+                     host,
+                     host,
+                     port,
+                     conf,
+                     securityManager,
+                     0,
+                     false);
     }
 
     public static RpcEnv create(String name,
@@ -110,15 +109,14 @@ public abstract class RpcEnv {
                          SecurityManager securityManager,
                          int numUsableCores,
                          boolean clientModel) {
-        RpcEnvConfig rpcEnvConf = new RpcEnvConfig(
-                conf,
-                name,
-                bindAddress,
-                advertiseAddress,
-                port,
-                securityManager,
-                numUsableCores,
-                clientModel
+        RpcEnvConfig rpcEnvConf = new RpcEnvConfig(conf,
+                                                   name,
+                                                   bindAddress,
+                                                   advertiseAddress,
+                                                   port,
+                                                   securityManager,
+                                                   numUsableCores,
+                                                   clientModel
         );
         return new NettyRpcEnvFactory().create(rpcEnvConf);
     }

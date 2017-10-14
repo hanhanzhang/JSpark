@@ -28,7 +28,7 @@ public class RpcEndpointVerifier extends RpcEndPoint {
     public void receiveAndReply(Object msg, RpcCallContext context) {
         if (msg instanceof CheckExistence) {
             CheckExistence existence = (CheckExistence) msg;
-            LOGGER.info("查询RpcEndPoint, name = {}", existence.name);
+            LOGGER.info("verifier RpcEndpoint name {}", existence.name);
             RpcEndPointRef endPointRef = dispatcher.verify(existence.name);
             context.reply(endPointRef);
         }

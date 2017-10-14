@@ -6,7 +6,6 @@ import com.google.common.collect.Sets;
 import com.sdu.spark.SecurityManager;
 import com.sdu.spark.deploy.DeployMessage.*;
 import com.sdu.spark.deploy.MasterMessage.*;
-import com.sdu.spark.executor.Executor;
 import com.sdu.spark.rpc.*;
 import com.sdu.spark.utils.ThreadUtils;
 import org.apache.commons.collections.MapUtils;
@@ -20,19 +19,54 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.sdu.spark.network.utils.NettyUtils.getIpV4;
-import static com.sdu.spark.utils.Utils.convertStringToInt;
-import static com.sdu.spark.utils.Utils.getFutureResult;
+import static com.sdu.spark.utils.Utils.*;
 
 /**
- * 集群Master节点, 负责管理集群及Application信息
+ * {@link Master}职责:
  *
- * ToDo:
+ * 1: Worker节点管理
  *
- *  1: 理解"Driver"与"Application"之间关系
+ *    Worker节点启动时向Master发送Worker注册消息{@link RegisterWorker}且Worker节点启动定时线程向Master节点发送心跳消息{@link Heartbeat},
  *
- *  2: 理解"Driver"的Server消息处理
+ *    而Master节点在启动时启动定时线程向接收信箱投递Worker心跳超时消息{@link CheckForWorkerTimeOut}检测心跳超时的Worker
  *
- * @author hanhan.zhang
+ * 2: Application管理
+ *
+ *   {@link com.sdu.spark.SparkContext}初始化时启动SchedulerBackend({@link com.sdu.spark.scheduler.cluster.StandaloneSchedulerBackend}),
+ *
+ *   SchedulerBackend向Master发送注册Application消息{@link RegisterApplication}, Master调度ALIVE Worker并启动Executor进程
+ *
+ * 3: Application Driver管理
+ *
+ *    SparkSubmit提交Application时, 启动{@link com.sdu.spark.deploy.Client.ClientEndpoint}向Master注册Application
+ *
+ *    Driver{@link RequestSubmitDriver}(Driver注册先于Application注册), Master调度ALIVE Worker并启动Driver进程
+ *
+ * Note:
+ *
+ *   SparkSubmit提交Spark Job时, 程序启动顺序:
+ *
+ *   1: org.apache.spark.deploy.Client启动并向Master节点注册Spark Driver
+ *
+ *   2: Master接收Driver注册消息{@link RequestSubmitDriver}后, 调度ALIVE WORKER并向Worker节点发送启动Driver消息{@link LaunchDriver}
+ *
+ *   3: Worker接收Driver启动消息{@link LaunchDriver}后, 启动Driver进程(也就是用户编写的程序入口)
+ *
+ *   4: Driver进程启动中, 会初始化{@link com.sdu.spark.SparkContext}, SparkContext主要启动两类组件:
+ *
+ *     1': {@link com.sdu.spark.scheduler.SchedulerBackend}
+ *
+ *       SchedulerBackend通过{@link com.sdu.spark.deploy.client.StandaloneAppClient}向Master节点注册Spark Application{@link ApplicationDescription}
+ *
+ *       Master节点接收到Application注册消息{@link RegisterApplication}后, 调度可用Worker工作节点并向Worker节点发送启动Executor消息{@link LaunchExecutor}
+ *
+ *       Worker节点启动Executor进程后, 向{@link com.sdu.spark.deploy.client.StandaloneAppClient}发送Executor启动消息{@link ExecutorAdded}
+ *
+ *       Note:
+ *
+ *       StandaloneAppClient是Spark Application与Master通信客户端
+ *
+ *     2': {@link com.sdu.spark.scheduler.TaskScheduler}
  * */
 public class Master extends RpcEndPoint {
 
@@ -94,7 +128,7 @@ public class Master extends RpcEndPoint {
 
     @Override
     public void onStart() {
-        LOGGER.info("Spark Master节点启动：{}", address.toSparkURL());
+        LOGGER.info("master starting on address {}", address.toSparkURL());
         messageThread.scheduleWithFixedDelay(() -> self().send(new CheckForWorkerTimeOut()),
                                              0,
                                              WORKER_TIMEOUT_MS,
@@ -111,37 +145,39 @@ public class Master extends RpcEndPoint {
 
         } else if (msg instanceof CheckForWorkerTimeOut) {
             timeoutDeadWorkers();
-        } else if (msg instanceof WorkerHeartbeat) {       // 工作节点心跳消息
-            WorkerHeartbeat heartbeat = (WorkerHeartbeat) msg;
-            LOGGER.info("心跳: workerId = {}, hostPort = {}",
-                    heartbeat.workerId, heartbeat.worker.address().hostPort());
+        } else if (msg instanceof Heartbeat) {       // 工作节点心跳消息
+            Heartbeat heartbeat = (Heartbeat) msg;
+            LOGGER.info("Get heartbeat from worker {}, last heart timestamp {}",
+                         heartbeat.workerId, heartbeat.worker.address().hostPort());
             String workerId = heartbeat.workerId;
             WorkerInfo workerInfo = idToWorker.get(workerId);
             if (workerInfo == null) {
-                LOGGER.info("尚未注册Worker心跳: workerId = {}, hostPort = {}",
+                LOGGER.info("Got heartbeat from unregistered worker {}. Asking it to re-register.",
                             heartbeat.workerId, heartbeat.worker.address().hostPort());
                 heartbeat.worker.send(new ReconnectWorker(self()));
             } else {
                 workerInfo.lastHeartbeat = System.currentTimeMillis();
             }
         } else if (msg instanceof RegisterWorker) {       // 注册工作节点
-            RegisterWorker registerWorker = (RegisterWorker) msg;
-            if (idToWorker.containsKey(registerWorker.workerId)) {
-                registerWorker.worker.send(new RegisterWorkerFailed("Duplicate worker ID"));
+            RegisterWorker worker = (RegisterWorker) msg;
+            LOGGER.info("Registering worker {}:{} with {} cores, {} RAM",
+                        worker.host, worker.port, worker.cores, megabytesToString(worker.memory));
+            if (idToWorker.containsKey(worker.workerId)) {
+                worker.worker.send(new RegisterWorkerFailed("Duplicate worker ID"));
             } else {
-                WorkerInfo workerInfo = new WorkerInfo(registerWorker.workerId, registerWorker.host,
-                                                       registerWorker.port, registerWorker.cores,
-                                                       registerWorker.memory, registerWorker.worker);
+                WorkerInfo workerInfo = new WorkerInfo(worker.workerId, worker.host,
+                                                       worker.port, worker.cores,
+                                                       worker.memory, worker.worker);
                 if (registerWorker(workerInfo)) {
-                    registerWorker.worker.send(new RegisteredWorker(self()));
+                    worker.worker.send(new RegisteredWorker(self()));
                     // 调度分配应用
                     schedule();
                 } else {
-                    RpcAddress workerAddress = registerWorker.worker.address();
-                    LOGGER.info("Worker registration failed. Attempted to re-register worker at same " +
-                            "address: {}", workerAddress);
-                    registerWorker.worker.send(new RegisterWorkerFailed("Attempted to re-register worker at same address: "
-                            + workerAddress));
+                    RpcAddress workerAddress = worker.worker.address();
+                    LOGGER.info("Worker registration failed. Attempted to re-register worker at same address: {}",
+                                 workerAddress);
+                    worker.worker.send(new RegisterWorkerFailed("Attempted to re-register worker at same address: "
+                                                                + workerAddress));
                 }
             }
         } else if (msg instanceof MasterChangeAcknowledged) {
@@ -584,13 +620,18 @@ public class Master extends RpcEndPoint {
 
         SecurityManager securityManager = new SecurityManager(conf);
 
-        // 启动RpcEnv
-        RpcEnv rpcEnv = RpcEnv.create(
-                SYSTEM_NAME,
-                args[0],
-                convertStringToInt(args[1]),
-                conf,
-                securityManager
+        /**
+         * RpcEnv创建流程:
+         *
+         *  1: 启动{@link com.sdu.spark.network.server.TransportServer}, 负责Rpc消息接收
+         *
+         *  2: RpcEnv注册{@link com.sdu.spark.rpc.netty.RpcEndpointVerifier}, 负责RpcEndPoint查询
+         * */
+        RpcEnv rpcEnv = RpcEnv.create(SYSTEM_NAME,
+                                      args[0],
+                                      convertStringToInt(args[1]),
+                                      conf,
+                                      securityManager
         );
 
         // 向RpcEnv注册Master节点
@@ -601,7 +642,7 @@ public class Master extends RpcEndPoint {
         Future<BoundPortsResponse> future = masterRef.ask(new BoundPortsRequest());
         BoundPortsResponse response = getFutureResult(future);
         if (response != null) {
-            LOGGER.info("Master绑定端口: {}", response.rpcEndpointPort);
+            LOGGER.info("spark master started and bind port {}", response.rpcEndpointPort);
         }
 
         rpcEnv.awaitTermination();

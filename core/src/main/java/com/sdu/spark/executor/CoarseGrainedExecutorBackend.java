@@ -76,13 +76,11 @@ public class CoarseGrainedExecutorBackend extends RpcEndPoint implements Executo
 
         LOGGER.info("Executor(host= {}, id = {})尝试向Driver(address = {})注册Executor",
                      hostname, executorId, driver.address());
-        Future<?> future = driver.ask(new RegisterExecutor(
-                executorId,
-                self(),
-                hostname,
-                cores,
-                extractLogUrls()
-        ));
+        Future<Boolean> future = driver.ask(new RegisterExecutor(executorId,
+                                                           self(),
+                                                           hostname,
+                                                           cores,
+                                                           extractLogUrls()));
         boolean success = getFutureResult(future);
         LOGGER.info("Executor(host = {}, id = {})向Driver(address = {})注册Executor{}",
                 hostname, executorId, driver.address(), success ? "成功" : "失败");
@@ -180,7 +178,7 @@ public class CoarseGrainedExecutorBackend extends RpcEndPoint implements Executo
             LOGGER.error(message);
         }
         if (notifyDriver && driver != null) {
-            Future<?> future = driver.ask(new RemoveExecutor(executorId, reason));
+            Future<Boolean> future = driver.ask(new RemoveExecutor(executorId, reason));
             boolean success = getFutureResult(future);
             if (!success) {
                 LOGGER.error("Driver下线Executor(execId = {})失败", executorId);

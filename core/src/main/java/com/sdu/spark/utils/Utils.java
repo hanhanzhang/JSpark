@@ -76,6 +76,10 @@ public class Utils {
         return -1;
     }
 
+    public static String megabytesToString(long megabytes) {
+        return bytesToString(megabytes * 1024L * 1024L);
+    }
+
     public static <T> T getFutureResult(Future<T> future) {
         try {
             return future.get();

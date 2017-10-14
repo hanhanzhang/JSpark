@@ -25,13 +25,16 @@ public class NettyRpcEnvFactory implements RpcEnvFactory {
         JavaSerializerInstance serializerInstance = new JavaSerializerInstance(sparkConfig.getInt("spark.serializer.objectStreamReset", 100),
                 Thread.currentThread().getContextClassLoader());
 
-        NettyRpcEnv rpcEnv = new NettyRpcEnv(sparkConfig, conf.bindAddress, serializerInstance, securityManager);
+        NettyRpcEnv rpcEnv = new NettyRpcEnv(sparkConfig,
+                                             conf.bindAddress,
+                                             serializerInstance,
+                                             securityManager);
         if (!conf.clientModel) {
             assert conf.port == 0 || (conf.port >= 1024 && conf.port < 65536) :
                     "startPort should be between 1024 and 65535 (inclusive), or 0 for a random free port.";
             rpcEnv.startServer(conf.bindAddress, conf.port);
             int actualPort = rpcEnv.address().port;
-            LOGGER.info("Spark RpcEnv绑定地址: {}:{}", conf.bindAddress, actualPort);
+            LOGGER.info("Spark Netty RpcEnv started on address {}:{}", conf.bindAddress, actualPort);
         }
         return rpcEnv;
     }

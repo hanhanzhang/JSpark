@@ -69,7 +69,7 @@ public class StandaloneAppClient {
 
     public void stop() {
         if (endpoint.get() != null) {
-            Future<?> future = endpoint.get().ask(new StopAppClient());
+            Future<Boolean> future = endpoint.get().ask(new StopAppClient());
             boolean response = getFutureResult(future);
             if (response) {
                 LOGGER.info("移除Application[name = {}]成功", appDescription.name);

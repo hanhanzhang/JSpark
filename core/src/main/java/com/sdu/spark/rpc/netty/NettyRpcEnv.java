@@ -37,7 +37,6 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.sdu.spark.utils.ThreadUtils.newDaemonCachedThreadPool;
-import static com.sdu.spark.utils.Utils.getFutureResult;
 
 /**
  * @author hanhan.zhang
@@ -203,7 +202,7 @@ public class NettyRpcEnv extends RpcEnv {
             bootstraps = Collections.emptyList();
         }
         server = transportContext.createServer(host, port, bootstraps);
-        // 注册RpcEndPoint节点
+        /**注册{@link RpcEndpointVerifier}负责RpcEndPoint节点查询*/
         dispatcher.registerRpcEndPoint(RpcEndpointVerifier.NAME, new RpcEndpointVerifier(this, dispatcher));
     }
 
