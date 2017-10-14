@@ -27,7 +27,7 @@ public class RpcEndpointAddress implements Serializable {
     @Override
     public String toString() {
         if (address != null) {
-            return String.format("spark://%s@${%s}:${%s}", name, address.host, address.port);
+            return String.format("spark://%s@%s:%s", name, address.host, address.port);
         }
         return String.format("spark-client://%s", name);
     }

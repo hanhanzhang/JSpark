@@ -76,9 +76,9 @@ public class Utils {
         return -1;
     }
 
-    public static <T> T getFutureResult(Future<?> future) {
+    public static <T> T getFutureResult(Future<T> future) {
         try {
-            return (T) future.get();
+            return future.get();
         } catch (InterruptedException e) {
             e.printStackTrace();
             LOGGER.error("future task interrupted exception", e);

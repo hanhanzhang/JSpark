@@ -42,7 +42,7 @@ import static com.sdu.spark.utils.Utils.getFutureResult;
 /**
  * @author hanhan.zhang
  * */
-public class NettyRpcEnv implements RpcEnv {
+public class NettyRpcEnv extends RpcEnv {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(NettyRpcEnv.class);
 
@@ -50,7 +50,6 @@ public class NettyRpcEnv implements RpcEnv {
     public static volatile TransportClient currentClient;
 
     private String host;
-    public SparkConf conf;
 
     /**********************************Spark RpcEnv消息路由************************************/
     // 发送消息信箱[key = 接收地址, value = 发送信箱]
@@ -79,7 +78,7 @@ public class NettyRpcEnv implements RpcEnv {
     private AtomicBoolean stopped = new AtomicBoolean(false);
 
     public NettyRpcEnv(SparkConf conf, String host, JavaSerializerInstance serializerInstance, SecurityManager securityManager) {
-        this.conf = conf;
+        super(conf);
         this.host = host;
         this.dispatcher = new Dispatcher(this, conf);
         this.clientConnectionExecutor = newDaemonCachedThreadPool("netty-rpc-connect-%d", conf.getInt("spark.rpc.connect.threads", 64), 60);
@@ -108,28 +107,16 @@ public class NettyRpcEnv implements RpcEnv {
     }
 
     @Override
-    public RpcEndPointRef setRpcEndPointRef(String name, RpcAddress rpcAddress) {
-        NettyRpcEndPointRef rpcEndPointRef = null;
-        try {
-            RpcEndpointAddress address = new RpcEndpointAddress(RpcEndpointVerifier.NAME, rpcAddress);
-            NettyRpcEndPointRef verifier = new NettyRpcEndPointRef(address, this);
-            Future<?> future =  verifier.ask(new CheckExistence(name));
-            rpcEndPointRef = getFutureResult(future);
-            rpcEndPointRef.nettyEnv = this;
-            return rpcEndPointRef;
-        } finally {
-            if (rpcEndPointRef != null) {
-                LOGGER.info("RpcEnv注册远端RpcEndPoint的引用RpcEndPointRef(host = {}, name = {})",
-                                rpcEndPointRef.address().hostPort(), rpcEndPointRef.name());
-            }
-        }
+    public Future<RpcEndPointRef> asyncSetupEndpointRefByURI(String uri) {
+        RpcEndpointAddress endpointAddress = RpcEndpointAddress.apply(uri);
+        /**RpcEnv会创建{@link RpcEndpointVerifier}负责EndPointName查询*/
+        RpcEndpointAddress verifierEndpointAddress = new RpcEndpointAddress(RpcEndpointVerifier.NAME,
+                                                                            endpointAddress.address);
+        /**向{@link RpcEndpointVerifier}询问endpointAddress是否存在*/
+        NettyRpcEndPointRef verifier = new NettyRpcEndPointRef(verifierEndpointAddress, this);
+        return verifier.ask(new CheckExistence(endpointAddress.name));
     }
 
-    @Override
-    public RpcEndPointRef setupEndpointRefByURI(String uri) {
-        RpcEndpointAddress endpointAddress = RpcEndpointAddress.apply(uri);
-        return setRpcEndPointRef(endpointAddress.name, endpointAddress.address);
-    }
 
     /*******************************Spark RpcEnv网络数据传输***********************************/
     // 单向消息
@@ -285,6 +272,11 @@ public class NettyRpcEnv implements RpcEnv {
             throw new RuntimeException(e);
         }
 
+    }
+
+    @Override
+    public <T> T deserialize(DeserializeAction<T> deserializeAction) {
+        return null;
     }
 
 

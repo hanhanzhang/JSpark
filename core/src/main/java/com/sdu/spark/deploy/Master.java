@@ -598,7 +598,7 @@ public class Master extends RpcEndPoint {
         RpcEndPointRef masterRef = rpcEnv.setRpcEndPointRef(ENDPOINT_NAME, master);
 
         // 向Master的对应RpcEndPoint节点发送消息
-        Future<?> future = masterRef.ask(new BoundPortsRequest());
+        Future<BoundPortsResponse> future = masterRef.ask(new BoundPortsRequest());
         BoundPortsResponse response = getFutureResult(future);
         if (response != null) {
             LOGGER.info("Master绑定端口: {}", response.rpcEndpointPort);

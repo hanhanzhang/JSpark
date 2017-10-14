@@ -1,41 +1,80 @@
 package com.sdu.spark.rpc;
 
 import com.sdu.spark.SecurityManager;
+import com.sdu.spark.SparkException;
 import com.sdu.spark.rpc.netty.NettyRpcEnvFactory;
 
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+
+import static com.sdu.spark.utils.RpcUtils.lookupRpcTimeout;
 
 /**
  *
  * @author hanhan.zhang
  * */
-public interface RpcEnv {
+public abstract class RpcEnv {
+
+    public SparkConf conf;
+    private int defaultLookupTimeout;
+
+    public RpcEnv(SparkConf conf) {
+        this.conf = conf;
+
+        this.defaultLookupTimeout = lookupRpcTimeout(conf);
+    }
 
     // RpcEnv Server监听地址
-    RpcAddress address();
+    public abstract RpcAddress address();
 
     // RpcEndPoint节点引用
-    RpcEndPointRef endPointRef(RpcEndPoint endPoint);
+    public abstract RpcEndPointRef endPointRef(RpcEndPoint endPoint);
 
     // RpcEndPoint节点注册
-    RpcEndPointRef setRpcEndPointRef(String name, RpcEndPoint endPoint);
-    RpcEndPointRef setRpcEndPointRef(String name, RpcAddress rpcAddress);
-    RpcEndPointRef setupEndpointRefByURI(String uri);
+    public abstract RpcEndPointRef setRpcEndPointRef(String name, RpcEndPoint endPoint);
+
+    public RpcEndPointRef setRpcEndPointRef(String name, RpcAddress address) {
+        RpcEndpointAddress endpointAddress = new RpcEndpointAddress(name, address);
+        return setupEndpointRefByURI(endpointAddress.toString());
+    }
+
+    public abstract Future<RpcEndPointRef> asyncSetupEndpointRefByURI(String uri);
+
+    public RpcEndPointRef setupEndpointRefByURI(String uri) {
+        Future<RpcEndPointRef> f = asyncSetupEndpointRefByURI(uri);
+        try {
+            return f.get(defaultLookupTimeout, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            throw new SparkException("register RpcEndpoint " + uri + " occur interrupt exception", e);
+        } catch (ExecutionException e) {
+            throw new SparkException("register RpcEndpoint " + uri + " occur execute exception", e);
+        } catch (TimeoutException e) {
+            throw new SparkException("register RpcEndpoint " + uri + " timeout", e);
+        }
+    }
 
     // RpcEndPoint关闭
-    void stop(RpcEndPointRef endPoint);
+    public abstract void stop(RpcEndPointRef endPoint);
 
     // RpcEnv关闭
-    void awaitTermination();
-    void shutdown();
+    public abstract void awaitTermination();
+    public abstract void shutdown();
 
+    public abstract <T> T deserialize(DeserializeAction<T> deserializeAction);
+
+    public interface DeserializeAction<T> {
+        T deserialize();
+    }
 
     /********************************Spark RpcEnv*************************************/
-    static RpcEnv create(String name,
+    public static RpcEnv create(String name,
                          String host,
                          int port,
                          SparkConf conf,
-                         SecurityManager securityManager, boolean clientModel) {
+                         SecurityManager securityManager,
+                         boolean clientModel) {
         return create(
                 name,
                 host,
@@ -47,7 +86,7 @@ public interface RpcEnv {
                 clientModel);
     }
 
-    static RpcEnv create(String name,
+    public static RpcEnv create(String name,
                          String host,
                          int port,
                          SparkConf conf,
@@ -63,7 +102,7 @@ public interface RpcEnv {
                false);
     }
 
-    static RpcEnv create(String name,
+    public static RpcEnv create(String name,
                          String bindAddress,
                          String advertiseAddress,
                          int port,

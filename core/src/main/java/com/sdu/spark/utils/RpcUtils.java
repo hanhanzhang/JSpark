@@ -27,6 +27,10 @@ public class RpcUtils {
         return maxSizeInMB * 1024 * 1024;
     }
 
+    public static int lookupRpcTimeout(SparkConf conf) {
+        return conf.getInt("spark.rpc.lookupTimeout", 120);
+    }
+
     public static long getRpcAskTimeout(SparkConf sparkConf) {
         return sparkConf.getLong("spark.rpc.askTimeout", 5000);
     }
