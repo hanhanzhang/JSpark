@@ -60,19 +60,19 @@ public class SparkEnv {
     private String executorId;
     public RpcEnv rpcEnv;
     public SparkConf conf;
-    private ShuffleManager shuffleManager;
+    public ShuffleManager shuffleManager;
     private BroadcastManager broadcastManager;
     private SerializerManager serializerManager;
     private OutputCommitCoordinator outputCommitCoordinator;
     public BlockManager blockManager;
     public MemoryManager memoryManager;
-    public Serializer serializer;
+    public Serializer closureSerializer;
     public MapOutputTracker mapOutputTracker;
 
 
     public SparkEnv(String executorId,
                     RpcEnv rpcEnv,
-                    Serializer serializer,
+                    Serializer closureSerializer,
                     MapOutputTracker mapOutputTracker,
                     ShuffleManager shuffleManager,
                     BroadcastManager broadcastManager,
@@ -92,7 +92,7 @@ public class SparkEnv {
         this.blockManager = blockManager;
         this.memoryManager = memoryManager;
 
-        this.serializer = serializer;
+        this.closureSerializer = closureSerializer;
     }
 
     public void stop() {
@@ -194,9 +194,9 @@ public class SparkEnv {
         // RPC消息序列化
         Serializer serializer = instantiateClassFromConf(conf,
                                                          isDriver,
-                                                         "spark.serializer",
-                                                         "com.sdu.spark.serializer.JavaSerializer");
-        LOGGER.debug("Using serializer: {}", serializer.getClass());
+                                                         "spark.closureSerializer",
+                                                         "com.sdu.spark.closureSerializer.JavaSerializer");
+        LOGGER.debug("Using closureSerializer: {}", serializer.getClass());
         SerializerManager serializerManager = new SerializerManager(serializer, conf, ioEncryptionKey);
         JavaSerializer closureSerializer = new JavaSerializer(conf);
 

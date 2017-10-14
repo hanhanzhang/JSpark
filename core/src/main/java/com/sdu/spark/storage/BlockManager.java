@@ -57,7 +57,7 @@ public class BlockManager implements BlockDataManager, BlockEvictionHandler {
     public BlockManagerMaster master;
     private SerializerManager serializerManager;
     private SparkConf conf;
-    private MemoryManager memoryManager;
+    public final MemoryManager memoryManager;
     private MapOutputTracker mapOutputTracker;
     private ShuffleManager shuffleManager;
     private BlockTransferService blockTransferService;
@@ -80,11 +80,11 @@ public class BlockManager implements BlockDataManager, BlockEvictionHandler {
     private BlockInfoManager blockInfoManager;
 
     // 存储管理
-    private DiskBlockManager diskBlockManager;
+    public DiskBlockManager diskBlockManager;
 
     // Block实际存储
     private DiskStore diskStore;
-    private MemoryStore memoryStore;
+    public MemoryStore memoryStore;
 
     private BlockReplicationPolicy blockReplicationPolicy;
     private volatile Set<BlockManagerId> cachedPeers;
@@ -234,9 +234,16 @@ public class BlockManager implements BlockDataManager, BlockEvictionHandler {
     }
 
     public List<BlockId> releaseAllLocksForTask(long taskId) {
-        throw new UnsupportedOperationException("");
+        return blockInfoManager.releaseAllLocksForTask(taskId);
     }
 
+
+    public <T> Pair<BlockResult, Iterator<T>> getOrElseUpdate(BlockId blockId,
+                                                              StorageLevel storageLevel,
+                                                              RDDIterator<T> rddIterator) {
+        // TODO: 待实现
+        throw new UnsupportedOperationException("");
+    }
 
     private boolean doPutBytes(BlockId blockId, ChunkedByteBuffer bytes,
                                    StorageLevel level, boolean tellMaster) {
@@ -263,6 +270,10 @@ public class BlockManager implements BlockDataManager, BlockEvictionHandler {
     @Override
     public boolean putBlockData(BlockId blockId, ManagedBuffer data, StorageLevel level) {
         return false;
+    }
+
+    public void registerTask(long taskAttemptId) {
+        blockInfoManager.registerTask(taskAttemptId);
     }
 
     @Override
@@ -658,5 +669,9 @@ public class BlockManager implements BlockDataManager, BlockEvictionHandler {
 
     interface BlockDataConvert<T> {
         T putBody(BlockInfo blockInfo);
+    }
+
+    public interface RDDIterator<T> {
+        Iterator<T> makeIterator();
     }
 }

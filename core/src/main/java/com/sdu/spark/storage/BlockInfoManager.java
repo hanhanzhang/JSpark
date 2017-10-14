@@ -42,7 +42,7 @@ public class BlockInfoManager {
         registerTask(BlockInfo.NON_TASK_WRITER);
     }
 
-    private synchronized void registerTask(long taskAttemptId) {
+    public synchronized void registerTask(long taskAttemptId) {
         checkArgument(!readLocksByTask.containsKey(taskAttemptId),
                         String.format("Task attempt %s is already registered", taskAttemptId));
         readLocksByTask.put(taskAttemptId, ConcurrentHashMultiset.create());

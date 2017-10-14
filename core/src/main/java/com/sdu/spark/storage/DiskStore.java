@@ -134,20 +134,16 @@ public class DiskStore {
     }
 
     public boolean remove(BlockId blockId)  {
-        try {
-            blockSizes.remove(blockId.name());
-            File file = diskManager.getFile(blockId);
-            if (file.exists()) {
-                boolean ret = file.delete();
-                if (!ret) {
-                    LOGGER.error("Error deleting {}", file.getPath());
-                }
-                return ret;
+        blockSizes.remove(blockId.name());
+        File file = diskManager.getFile(blockId);
+        if (file.exists()) {
+            boolean ret = file.delete();
+            if (!ret) {
+                LOGGER.error("Error deleting {}", file.getPath());
             }
-            return false;
-        } catch (IOException e) {
-            throw new SparkException("disk remove blockId " + blockId + " failure", e);
+            return ret;
         }
+        return false;
     }
 
     private class CountingWritableChannel implements WritableByteChannel {

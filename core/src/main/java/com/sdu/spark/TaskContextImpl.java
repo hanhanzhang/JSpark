@@ -39,8 +39,12 @@ public class TaskContextImpl extends TaskContext {
     private Throwable failure = null;
     private volatile FetchFailedException fetchFailedException;
 
-    public TaskContextImpl(int stageId, int partitionId, long taskAttemptId, int attemptNumber,
-                           TaskMemoryManager taskMemoryManager, Properties localProperties) {
+    public TaskContextImpl(int stageId,
+                           int partitionId,
+                           long taskAttemptId,
+                           int attemptNumber,
+                           TaskMemoryManager taskMemoryManager,
+                           Properties localProperties) {
         this.stageId = stageId;
         this.partitionId = partitionId;
         this.taskAttemptId = taskAttemptId;

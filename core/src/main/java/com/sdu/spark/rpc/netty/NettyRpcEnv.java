@@ -10,7 +10,6 @@ import com.sdu.spark.network.client.TransportClient;
 import com.sdu.spark.network.client.TransportClientBootstrap;
 import com.sdu.spark.network.client.TransportClientFactory;
 import com.sdu.spark.network.crypto.AuthServerBootstrap;
-import com.sdu.spark.network.protocol.RpcResponse;
 import com.sdu.spark.network.server.StreamManager;
 import com.sdu.spark.network.server.TransportServer;
 import com.sdu.spark.network.server.TransportServerBootstrap;

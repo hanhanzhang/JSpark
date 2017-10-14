@@ -1,6 +1,7 @@
 package com.sdu.spark.storage;
 
 import com.google.common.collect.Lists;
+import com.sdu.spark.SparkException;
 import com.sdu.spark.executor.ExecutorExitCode;
 import com.sdu.spark.rpc.SparkConf;
 import org.apache.commons.lang3.tuple.ImmutablePair;
@@ -92,8 +93,12 @@ public class DiskBlockManager {
         return new File(subDir, filename);
     }
 
-    public File getFile(BlockId blockId) throws IOException {
-        return getFile(blockId.name());
+    public File getFile(BlockId blockId) {
+        try {
+            return getFile(blockId.name());
+        } catch (IOException e) {
+            throw new SparkException(String.format("Got block %s store file failure", blockId), e);
+        }
     }
 
     public boolean containsBlock(BlockId blockId) throws IOException {

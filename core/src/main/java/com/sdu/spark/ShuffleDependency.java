@@ -1,6 +1,7 @@
 package com.sdu.spark;
 
 import com.sdu.spark.rdd.RDD;
+import com.sdu.spark.shuffle.ShuffleHandle;
 import org.apache.commons.lang3.tuple.Pair;
 
 /**
@@ -14,5 +15,9 @@ public class ShuffleDependency<K, V, C> extends Dependency<Pair<K, V>> {
     @Override
     public RDD<Pair<K, V>> rdd() {
         throw new UnsupportedOperationException("");
+    }
+
+    public ShuffleHandle shuffleHandle() {
+        return SparkEnv.env.shuffleManager.registerShuffle(shuffleId, rdd().partitions().size(), this);
     }
 }

@@ -1,7 +1,10 @@
 package com.sdu.spark.scheduler;
 
+import com.sdu.spark.SparkEnv;
+import com.sdu.spark.SparkException;
 import com.sdu.spark.TaskContext;
 import com.sdu.spark.TaskContextImpl;
+import com.sdu.spark.memory.MemoryMode;
 import com.sdu.spark.memory.TaskMemoryManager;
 import org.apache.logging.log4j.util.Strings;
 
@@ -11,9 +14,9 @@ import java.util.Properties;
  * @author hanhan.zhang
  * */
 public abstract class Task<T> {
-    private int stageId;
+    protected int stageId;
     private int stageAttemptId;
-    private int partitionId;
+    protected int partitionId;
     public transient Properties localProperties = new Properties();
     private int jobId;
     public String appId;
@@ -25,14 +28,20 @@ public abstract class Task<T> {
     public long epoch;
 
     public transient TaskContextImpl context;
-
+    private transient volatile String reasonIfKilled = null;
+    // 运行Task的线程
     private transient Thread taskThread;
 
     public long executorDeserializeTime = 0L;
     public long executorDeserializeCpuTime = 0L;
 
-    public Task(int stageId, int stageAttemptId, int partitionId, Properties localProperties,
-                int jobId, String appId, String appAttemptId) {
+    public Task(int stageId,
+                int stageAttemptId,
+                int partitionId,
+                Properties localProperties,
+                int jobId,
+                String appId,
+                String appAttemptId) {
         this.stageId = stageId;
         this.stageAttemptId = stageAttemptId;
         this.partitionId = partitionId;
@@ -43,33 +52,68 @@ public abstract class Task<T> {
     }
 
     public T run(long taskAttemptId, int attemptNumber) {
-        context =  new TaskContextImpl(stageId, partitionId, taskAttemptId,
-                                       attemptNumber, taskMemoryManager, localProperties);
+        // 注册Task
+        SparkEnv.env.blockManager.registerTask(taskAttemptId);
+        context =  new TaskContextImpl(stageId,
+                                       partitionId,
+                                       taskAttemptId,
+                                       attemptNumber,
+                                       taskMemoryManager,
+                                       localProperties);
+        TaskContext.setTaskContext(context);
         taskThread = Thread.currentThread();
+
+        if (reasonIfKilled != null) {
+            kill(false, reasonIfKilled);
+        }
+
+        // TODO: CallerContext实现
+        
         try {
             return runTask(context);
         } catch (Throwable e) {
-            context.markTaskFailed(e);
-            throw e;
+            try {
+                context.markTaskFailed(e);
+            } catch (Throwable t) {
+                e.addSuppressed(t);
+            }
+            context.markTaskCompleted();
+            throw new SparkException(e);
         } finally {
             try {
                 context.markTaskCompleted();
+                // 释放Task内存
+                SparkEnv.env.blockManager.memoryStore.releaseUnrollMemoryForThisTask(MemoryMode.ON_HEAP);
+                SparkEnv.env.blockManager.memoryStore.releaseUnrollMemoryForThisTask(MemoryMode.OFF_HEAP);
+                // 唤醒其他因为分配不到内存而阻塞的Task, 重新申请内存
+                synchronized (SparkEnv.env.blockManager.memoryManager) {
+                    SparkEnv.env.blockManager.memoryManager.notifyAll();
+                }
             } finally {
-                // TODO: 释放Task的内存
+                // 移除TaskContext
+                TaskContext.unset();
             }
         }
     }
 
     private void kill(boolean interruptThread, String reason) {
-        if (Strings.isNotEmpty(reason)) {
-            if (context != null) {
-                context.markInterrupted(reason);
-            }
-            if (interruptThread && taskThread != null) {
-                taskThread.interrupt();
-            }
+        assert reason != null;
+        reasonIfKilled = reason;
+        if (context != null) {
+            context.markInterrupted(reason);
+        }
+        if (interruptThread && taskThread != null) {
+            taskThread.interrupt();;
         }
     }
 
-    public abstract T runTask(TaskContext context);
+    public void setTaskMemoryManager(TaskMemoryManager taskMemoryManager) {
+        this.taskMemoryManager = taskMemoryManager;
+    }
+
+    public TaskLocation[] preferredLocations() {
+        return null;
+    }
+
+    public abstract T runTask(TaskContext context) throws Exception;
 }

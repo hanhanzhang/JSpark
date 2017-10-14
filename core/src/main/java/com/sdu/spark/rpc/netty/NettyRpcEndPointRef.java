@@ -68,6 +68,7 @@ public class NettyRpcEndPointRef extends RpcEndPointRef {
         nettyEnv.send(new RequestMessage(nettyEnv.address(), this, message));
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public <T> Future<T> ask(Object message) {
         assert nettyEnv != null;

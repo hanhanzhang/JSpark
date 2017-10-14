@@ -9,7 +9,6 @@ import com.sdu.spark.scheduler.TaskState;
 import com.sdu.spark.scheduler.cluster.CoarseGrainedClusterMessage.*;
 import com.sdu.spark.scheduler.cluster.CoarseGrainedClusterMessage.Shutdown;
 import com.sdu.spark.serializer.SerializerInstance;
-import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.math.NumberUtils;
 import org.slf4j.Logger;
@@ -25,7 +24,6 @@ import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static com.sdu.spark.utils.Utils.getFutureResult;
-import static com.sdu.spark.utils.Utils.isLocalMaster;
 
 /**
  * {@link CoarseGrainedExecutorBackend}两个重要属性:
@@ -61,7 +59,7 @@ public class CoarseGrainedExecutorBackend extends RpcEndPoint implements Executo
         this.cores = cores;
         this.userClassPath = userClassPath;
         this.env = env;
-        this.ser = this.env.serializer.newInstance();
+        this.ser = this.env.closureSerializer.newInstance();
     }
 
     @Override

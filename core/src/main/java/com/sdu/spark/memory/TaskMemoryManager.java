@@ -13,7 +13,7 @@ import java.util.*;
 import static com.sdu.spark.utils.Utils.bytesToString;
 
 /**
- * 对应每个Task
+ * 每个Task会初始化一个TaskMemoryManager
  *
  * @author hanhan.zhang
  * */
@@ -314,12 +314,12 @@ public class TaskMemoryManager {
      */
     public long cleanUpAllAllocatedMemory() {
         synchronized (this) {
-            for (MemoryConsumer c: consumers) {
+            consumers.forEach(c -> {
                 if (c != null && c.getUsed() > 0) {
                     // In case of failed task, it's normal to see leaked memory
                     LOGGER.debug("unreleased " + bytesToString(c.getUsed()) + " memory from " + c);
                 }
-            }
+            });
             consumers.clear();
 
             for (MemoryBlock page : pageTable) {

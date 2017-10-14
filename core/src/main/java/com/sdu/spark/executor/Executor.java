@@ -201,7 +201,7 @@ public class Executor {
             }
 
             TaskMemoryManager taskMemoryManager = new TaskMemoryManager(env.memoryManager, taskId);
-            SerializerInstance ser = env.serializer.newInstance();
+            SerializerInstance ser = env.closureSerializer.newInstance();
             LOGGER.info("执行Task(name = {}, taskId = {})", taskDescription.name, taskId);
 
             /**向任务调度中心上报任务执行状态*/
@@ -264,7 +264,7 @@ public class Executor {
                 /**
                  * 序列化结果
                  * */
-                SerializerInstance resultSer = env.serializer.newInstance();
+                SerializerInstance resultSer = env.closureSerializer.newInstance();
                 long beforeSerialization = System.currentTimeMillis();
                 ByteBuffer valueBytes = resultSer.serialize(value);
                 long afterSerialization = System.currentTimeMillis();

@@ -13,6 +13,10 @@ public class SparkTransportConf {
 
     private static final int MAX_DEFAULT_NETTY_THREADS = 8;
 
+    public static TransportConf fromSparkConf(SparkConf conf, String module) {
+        return fromSparkConf(conf, module, 0);
+    }
+
     public static TransportConf fromSparkConf(SparkConf conf, String module, int numUsableCores) {
 
         // Specify thread configuration based on our JVM's allocation of cores (rather than necessarily

@@ -9,7 +9,6 @@ import java.io.Serializable;
  * */
 public abstract class Dependency<T> implements Serializable {
 
-    /**依赖的RDD*/
     public abstract RDD<T> rdd();
 
 }

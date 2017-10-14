@@ -6,11 +6,38 @@ import com.sdu.spark.utils.TaskCompletionListener;
 import com.sdu.spark.utils.TaskFailureListener;
 
 import java.io.Serializable;
+import java.util.Properties;
 
 /**
  * @author hanhan.zhang
  * */
 public abstract class TaskContext implements Serializable {
+
+    private static ThreadLocal<TaskContext> taskContext = new ThreadLocal<>();
+
+    public static void setTaskContext(TaskContext tc) {
+        taskContext.set(tc);
+    }
+
+    public static void unset() {
+        taskContext.remove();
+    }
+
+    public TaskContext get() {
+        return taskContext.get();
+    }
+
+    public int getPartitionId() {
+        TaskContext tc = taskContext.get();
+        if (tc == null) {
+            return 0;
+        }
+        return tc.partitionId();
+    }
+
+    public TaskContextImpl empty() {
+        return new TaskContextImpl(0, 0, 0, 0, null, new Properties());
+    }
 
     /**
      * Returns true if the task has completed.

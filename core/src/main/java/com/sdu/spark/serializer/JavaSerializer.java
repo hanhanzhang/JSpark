@@ -17,7 +17,7 @@ public class JavaSerializer implements Serializer, Externalizable {
 
     public JavaSerializer(SparkConf conf) {
         this.counterReset = conf.getInt("spark.serializer.objectStreamReset", 10);
-        this.extraDebugInfo = conf.getBoolean("spark.serializer.extraDebugInfo", true);
+        this.extraDebugInfo = conf.getBoolean("spark.closureSerializer.extraDebugInfo", true);
     }
 
     @Override

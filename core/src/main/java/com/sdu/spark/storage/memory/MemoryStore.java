@@ -207,8 +207,13 @@ public class MemoryStore {
         throw new UnsupportedOperationException("");
     }
 
-    public void releaseUnrollMemoryForThisTask(MemoryMode memoryMode, long memory) {
+    public void releaseUnrollMemoryForThisTask(MemoryMode memoryMode) {
+        releaseUnrollMemoryForThisTask(memoryMode, Long.MAX_VALUE);
+    }
 
+    public void releaseUnrollMemoryForThisTask(MemoryMode memoryMode, long memory) {
+        // TODO: 待实现
+        throw new UnsupportedOperationException("Unsupported");
     }
 
     public interface ChunkedByteBufferAllocator {

@@ -5,9 +5,9 @@ import java.io.Serializable;
 /**
  * @author hanhan.zhang
  * */
-public interface Partitioner extends Serializable {
+public abstract class Partitioner implements Serializable {
 
-    int numPartitions();
-    int getPartition(Object key);
+    public abstract int numPartitions();
+    public abstract int getPartition(Object key);
 
 }
