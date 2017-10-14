@@ -34,7 +34,7 @@ import static com.sdu.spark.utils.Utils.getFutureResult;
  *
  * @author hanhan.zhang
  * */
-public class CoarseGrainedExecutorBackend extends RpcEndPoint implements ExecutorBackend {
+public class CoarseGrainedExecutorBackend extends ThreadSafeRpcEndpoint implements ExecutorBackend {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(CoarseGrainedExecutorBackend.class);
 
@@ -146,7 +146,7 @@ public class CoarseGrainedExecutorBackend extends RpcEndPoint implements Executo
     }
 
     @Override
-    public void onDisconnect(RpcAddress remoteAddress) {
+    public void onDisconnected(RpcAddress remoteAddress) {
         if (stopping.get()) {
             LOGGER.info("由于Driver(address = {})关闭断开连接", remoteAddress.hostPort());
         } else if (driver != null && driver.address().equals(remoteAddress)){

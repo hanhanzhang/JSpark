@@ -1,7 +1,7 @@
 package com.sdu.spark.deploy;
 
-import com.sdu.spark.rpc.RpcEndPoint;
 import com.sdu.spark.rpc.RpcEnv;
+import com.sdu.spark.rpc.ThreadSafeRpcEndpoint;
 
 /**
  * todo待实现
@@ -10,7 +10,7 @@ import com.sdu.spark.rpc.RpcEnv;
  * */
 public class Client {
 
-    public class ClientEndpoint extends RpcEndPoint {
+    public class ClientEndpoint extends ThreadSafeRpcEndpoint {
         public ClientEndpoint(RpcEnv rpcEnv) {
             super(rpcEnv);
         }

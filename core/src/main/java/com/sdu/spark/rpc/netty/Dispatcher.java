@@ -8,7 +8,6 @@ import com.sdu.spark.network.client.RpcResponseCallback;
 import com.sdu.spark.rpc.*;
 import com.sdu.spark.utils.ThreadUtils;
 import com.sdu.spark.rpc.netty.IndexMessage.*;
-import lombok.Getter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -25,37 +24,80 @@ public class Dispatcher {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(Dispatcher.class);
 
+    /**
+     * {@link EndPointData}职责:
+     *
+     *  1: 维护{@link RpcEndPoint}与{@link RpcEndPointRef}对应关系
+     *
+     *  2: 维护{@link RpcEndPoint}与{@link RpcEndPointRef}Rpc消息接收信箱{@link Index}
+     *
+     *  3: {@link EndPointData}实例化时, 向信箱投递{@link OnStart}消息, 进而调用{@link RpcEndPoint#onStart()}方法
+     * */
+    private class EndPointData {
+        String name;
+        RpcEndPoint endPoint;
+        RpcEndPointRef endPointRef;
+        Index index;
+
+        EndPointData(String name, RpcEndPoint endPoint, RpcEndPointRef endPointRef) {
+            this.name = name;
+            this.endPoint = endPoint;
+            this.endPointRef = endPointRef;
+            this.index = new Index(this.endPoint, this.endPointRef);
+        }
+    }
+
+    private EndPointData PoisonPill = new EndPointData(null, null, null);
+
     private NettyRpcEnv nettyRpcEnv;
 
     /*****************************Spark Point-To-Point映射*******************************/
-    // key = RpcEndPoint Name, value = EndPointData
+    /** key = RpcEndPoint Name, value = EndPointData*/
     private Map<String, EndPointData> endPoints = Maps.newConcurrentMap();
-    // key = RpcEndPoint, value = RpcEndPointRef
+    /**key = RpcEndPoint, value = RpcEndPointRef*/
     private Map<RpcEndPoint, RpcEndPointRef> endPointRefs = Maps.newConcurrentMap();
-
-    //
+    /**Track the receivers whose inboxes may contain messages(线程池访问, 需确保线程安全)*/
     private LinkedBlockingQueue<EndPointData> receivers = new LinkedBlockingQueue<>();
-
 
     private Boolean stopped = false;
 
-    // 消息分发工作线程
-    private ThreadPoolExecutor pool;
+    /**Rpc Message分发线程池*/
+    private ThreadPoolExecutor threadpool;
 
-    private static final int DEFAULT_DISPATCHER_THREADS = 5;
+    private class MessageLoop implements Runnable {
+        @Override
+        public void run() {
+            while (true) {
+                try {
+                    EndPointData data = receivers.take();
+                    if (data == PoisonPill) {
+                        // Put PoisonPill back so that other MessageLoops can see it.
+                        receivers.offer(PoisonPill);
+                        return;
+                    }
+                    data.index.process(Dispatcher.this);
+                } catch (Exception e) {
+                    LOGGER.error("thread = {} occur exception", Thread.currentThread().getName(), e);
+                }
+            }
+        }
+    }
 
-    public Dispatcher(NettyRpcEnv nettyRpcEnv, SparkConf conf) {
+    /**
+     * @param numUsableCores Number of CPU cores allocated to the process, for sizing the thread threadpool.
+     *                       If 0, will consider the available CPUs on the host.
+     * */
+    public Dispatcher(NettyRpcEnv nettyRpcEnv, int numUsableCores) {
         this.nettyRpcEnv = nettyRpcEnv;
 
-        int threads = conf.getInt("spark.rpc.netty.dispatcher.numThreads", Runtime.getRuntime().availableProcessors());
-        if (threads <= 0) {
-            threads = DEFAULT_DISPATCHER_THREADS;
-        }
-
-        pool = ThreadUtils.newDaemonCachedThreadPool("dispatcher-event-loop-%d", threads, 60);
+        int availableCores = numUsableCores > 0 ? numUsableCores
+                                                : Runtime.getRuntime().availableProcessors();
+        int numThreads = nettyRpcEnv.conf.getInt("spark.rpc.netty.dispatcher.numThreads",
+                                                 Math.max(availableCores, 2));
+        threadpool = ThreadUtils.newDaemonFixedThreadPool(numThreads, "dispatcher-event-loop-%d");
         // 启动消息处理任务
-        for (int i = 0; i < threads; ++i) {
-            pool.execute(new MessageLoop());
+        for (int i = 0; i < numThreads; ++i) {
+            threadpool.execute(new MessageLoop());
         }
     }
 
@@ -87,6 +129,7 @@ public class Dispatcher {
         }
     }
 
+    /**RpcEndpoint Name查询, {@link RpcEndpointVerifier#receiveAndReply(Object, RpcCallContext)} */
     public RpcEndPointRef verify(String name) {
         EndPointData endPointData = endPoints.get(name);
         if (endPointData == null) {
@@ -103,18 +146,16 @@ public class Dispatcher {
         endPointRefs.remove(endPoint);
     }
 
-    /******************************Spark Message路由*******************************/
-    // 本地消息
+    /** 本地消息*/
     public Object postLocalMessage(RequestMessage req) throws ExecutionException, InterruptedException {
-//        NettyLocalResponseCallback<Object> callback = new NettyLocalResponseCallback<>();
         SettableFuture<Object> p = SettableFuture.create();
         LocalNettyRpcCallContext callContext = new LocalNettyRpcCallContext(req.senderAddress, p);
         RpcMessage rpcMessage = new RpcMessage(req.senderAddress, req.content, callContext);
         postMessage(req.receiver.name(), rpcMessage, null);
-
         return p.get();
     }
-    // 网络消息[单向]
+
+    /**网络消息[单向]*/
     public void postOneWayMessage(RequestMessage req) {
         OneWayMessage oneWayMessage = new OneWayMessage(req.senderAddress, req.content);
         postMessage(req.receiver.name(), oneWayMessage, e -> {
@@ -127,22 +168,24 @@ public class Dispatcher {
             }
         });
     }
-    // 网络消息[双向]
+
+    /**网络消息[双向]*/
     public void postRemoteMessage(RequestMessage req, RpcResponseCallback callback) {
         RemoteNettyRpcCallContext callContext = new RemoteNettyRpcCallContext(req.senderAddress, nettyRpcEnv, callback);
         RpcMessage rpcMessage = new RpcMessage(req.senderAddress, req.content, callContext);
         postMessage(req.receiver.name(), rpcMessage, callback::onFailure);
     }
-    // 广播消息
+
+    /**广播消息*/
     public void postToAll(IndexMessage message) {
         Iterator<String> it = endPoints.keySet().iterator();
         while (it.hasNext()) {
             String pointName = it.next();
             postMessage(pointName, message, e -> {
                 if (e instanceof RpcEnvStoppedException) {
-                    LOGGER.debug("丢弃{}, 原因：{}", message, e.getMessage());
+                    LOGGER.debug("Message {} dropped", message, e.getMessage());
                 } else  {
-                    LOGGER.warn("丢弃{}, 原因：{}", message, e.getMessage());
+                    LOGGER.warn("Message {} dropped", message, e.getMessage());
                 }
             });
         }
@@ -168,7 +211,7 @@ public class Dispatcher {
 
     public void awaitTermination() {
         try {
-            pool.awaitTermination(Long.MAX_VALUE, TimeUnit.SECONDS);
+            threadpool.awaitTermination(Long.MAX_VALUE, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             // ignore
         }
@@ -189,36 +232,8 @@ public class Dispatcher {
         }
         // 删除已注册的Rpc节点
         endPoints.keySet().forEach(this::unregisterRpcEndpoint);
-        pool.shutdown();
-    }
-
-    private class EndPointData {
-        String name;
-        RpcEndPoint endPoint;
-        RpcEndPointRef endPointRef;
-        // RpcEndPoint与RpcEndPointRef间的消息收件箱
-        Index index;
-
-        EndPointData(String name, RpcEndPoint endPoint, RpcEndPointRef endPointRef) {
-            this.name = name;
-            this.endPoint = endPoint;
-            this.endPointRef = endPointRef;
-            this.index = new Index(this.endPoint, this.endPointRef);
-        }
-    }
-
-    private class MessageLoop implements Runnable {
-        @Override
-        public void run() {
-            while (true) {
-                try {
-                    EndPointData data = receivers.take();
-                    data.index.process(Dispatcher.this);
-                } catch (Exception e) {
-                    LOGGER.error("thread = {} occur exception", Thread.currentThread().getName(), e);
-                }
-            }
-        }
+        receivers.offer(PoisonPill);
+        threadpool.shutdown();
     }
 
     private interface ThrowableCallback {

@@ -95,7 +95,7 @@ public abstract class CoarseGrainedSchedulerBackend implements ExecutorAllocatio
         return new DriverEndPoint(this.rpcEnv);
     }
 
-    private class DriverEndPoint extends RpcEndPoint {
+    private class DriverEndPoint extends ThreadSafeRpcEndpoint {
         protected Set<String> executorsPendingLossReason = Sets.newHashSet();
         // Executor分配地址映射[key = RpcAddress, value = executorId]
         private Map<RpcAddress, String> addressToExecutorId = Maps.newHashMap();
@@ -176,7 +176,7 @@ public abstract class CoarseGrainedSchedulerBackend implements ExecutorAllocatio
         }
 
         @Override
-        public void onDisconnect(RpcAddress remoteAddress) {
+        public void onDisconnected(RpcAddress remoteAddress) {
             String executorId = addressToExecutorId.get(remoteAddress);
             String reason = String.format("RpcAddress(host = %s, port = %d)断开连接", remoteAddress.host, remoteAddress.port);
             removeExecutor(executorId, reason);

@@ -68,7 +68,7 @@ import static com.sdu.spark.utils.Utils.*;
  *
  *     2': {@link com.sdu.spark.scheduler.TaskScheduler}
  * */
-public class Master extends RpcEndPoint {
+public class Master extends ThreadSafeRpcEndpoint {
 
     public static final Logger LOGGER = LoggerFactory.getLogger(Master.class);
 
@@ -219,7 +219,7 @@ public class Master extends RpcEndPoint {
     }
 
     @Override
-    public void onDisconnect(RpcAddress remoteAddress) {
+    public void onDisconnected(RpcAddress remoteAddress) {
         LOGGER.info("删除断开连接的工作节点worker(address = {})", remoteAddress.hostPort());
         WorkerInfo workerInfo = addressToWorker.get(remoteAddress);
         if (workerInfo != null) {

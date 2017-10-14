@@ -28,6 +28,11 @@ public interface IndexMessage {
         public RemoteProcessConnect(RpcAddress address) {
             this.address = address;
         }
+
+        @Override
+        public String toString() {
+            return String.format("remote %s process connecting message", address);
+        }
     }
 
     class RemoteProcessConnected implements IndexMessage {
@@ -35,6 +40,11 @@ public interface IndexMessage {
 
         public RemoteProcessConnected(RpcAddress remoteAddress) {
             this.remoteAddress = remoteAddress;
+        }
+
+        @Override
+        public String toString() {
+            return String.format("remote %s process connected message", remoteAddress);
         }
     }
 
@@ -44,22 +54,26 @@ public interface IndexMessage {
         public RemoteProcessDisconnected(RpcAddress remoteAddress) {
             this.remoteAddress = remoteAddress;
         }
+
+        @Override
+        public String toString() {
+            return String.format("remote %s process disconnected message", remoteAddress);
+        }
     }
 
-    /**
-     * RpcEnv远端客户断开连接消息
-     * */
     class RemoteProcessDisconnect implements IndexMessage {
         public RpcAddress address;
 
         public RemoteProcessDisconnect(RpcAddress address) {
             this.address = address;
         }
+
+        @Override
+        public String toString() {
+            return String.format("remote %s process disconnect message", address);
+        }
     }
 
-    /**
-     * RpcEnv远端交互异常消息
-     * */
     class RemoteProcessConnectionError implements IndexMessage {
         public Throwable cause;
         public RpcAddress address;
@@ -68,11 +82,13 @@ public interface IndexMessage {
             this.cause = cause;
             this.address = address;
         }
+
+        @Override
+        public String toString() {
+            return String.format("remote %s process connection error message", address);
+        }
     }
 
-    /**
-     * RpcEnv发送给远端的消息
-     * */
     class RpcMessage implements IndexMessage {
         public RpcAddress senderAddress;
         public Object content;
@@ -83,6 +99,11 @@ public interface IndexMessage {
             this.content = content;
             this.context = context;
         }
+
+        @Override
+        public String toString() {
+            return String.format("rpc message from %s ", senderAddress);
+        }
     }
 
     class OneWayMessage implements IndexMessage {
@@ -92,6 +113,11 @@ public interface IndexMessage {
         public OneWayMessage(RpcAddress senderAddress, Object content) {
             this.senderAddress = senderAddress;
             this.content = content;
+        }
+
+        @Override
+        public String toString() {
+            return String.format("rpc one way message from %s ", senderAddress);
         }
     }
 }

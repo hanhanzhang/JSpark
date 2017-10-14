@@ -28,7 +28,7 @@ import static com.sdu.spark.utils.Utils.megabytesToString;
  *
  * @author hanhan.zhang
  * */
-public class Worker extends RpcEndPoint {
+public class Worker extends ThreadSafeRpcEndpoint {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(Worker.class);
 

@@ -101,7 +101,7 @@ public class StandaloneAppClient {
         }
     }
 
-    private class ClientEndPoint extends RpcEndPoint {
+    private class ClientEndPoint extends ThreadSafeRpcEndpoint {
 
         private RpcEndPointRef master = null;
         private boolean alreadyDisconnected = false;
@@ -192,7 +192,7 @@ public class StandaloneAppClient {
         }
 
         @Override
-        public void onDisconnect(RpcAddress remoteAddress) {
+        public void onDisconnected(RpcAddress remoteAddress) {
             if (master.address().equals(remoteAddress)) {
                 markDisconnected();
             }

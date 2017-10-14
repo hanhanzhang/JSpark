@@ -40,14 +40,14 @@ public class WorkerWatcher extends RpcEndPoint {
     }
 
     @Override
-    public void onConnect(RpcAddress remoteAddress) {
+    public void onConnected(RpcAddress remoteAddress) {
         if (isWorker(remoteAddress)) {
             LOGGER.info("Remote(address = {})连接Worker(address = {})成功", remoteAddress, expectedAddress);
         }
     }
 
     @Override
-    public void onDisconnect(RpcAddress remoteAddress) {
+    public void onDisconnected(RpcAddress remoteAddress) {
         if (isWorker(remoteAddress)) {
             exitNonZero();
         }

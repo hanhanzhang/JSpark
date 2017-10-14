@@ -30,7 +30,7 @@ import static com.sdu.spark.utils.Utils.bytesToString;
  *
  * @author hanhan.zhang
  * */
-public class BlockManagerMasterEndpoint extends RpcEndPoint {
+public class BlockManagerMasterEndpoint extends ThreadSafeRpcEndpoint {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(BlockManagerMasterEndpoint.class);
 

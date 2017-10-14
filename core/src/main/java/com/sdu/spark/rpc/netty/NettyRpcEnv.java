@@ -79,7 +79,11 @@ public class NettyRpcEnv extends RpcEnv {
 
     private AtomicBoolean stopped = new AtomicBoolean(false);
 
-    public NettyRpcEnv(SparkConf conf, String host, JavaSerializerInstance serializerInstance, SecurityManager securityManager) {
+    public NettyRpcEnv(SparkConf conf,
+                       String host,
+                       JavaSerializerInstance serializerInstance,
+                       SecurityManager securityManager,
+                       int numUsableCores) {
         super(conf);
         this.host = host;
         this.dispatcher = new Dispatcher(this, conf);
