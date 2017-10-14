@@ -6,6 +6,8 @@ import com.sdu.spark.network.server.StreamManager;
 import com.sdu.spark.rpc.RpcEnvFileServer;
 import io.netty.channel.Channel;
 
+import java.io.File;
+
 /**
  * @author hanhan.zhang
  * */
@@ -65,5 +67,20 @@ public class NettyStreamManager implements StreamManager, RpcEnvFileServer {
     @Override
     public void streamSent(String streamId) {
 
+    }
+
+    @Override
+    public String addFile(File file) {
+        return null;
+    }
+
+    @Override
+    public String addJar(File file) {
+        return null;
+    }
+
+    @Override
+    public String addDirectory(String baseUri, File path) {
+        return null;
     }
 }

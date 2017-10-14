@@ -4,6 +4,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.util.concurrent.SettableFuture;
 import com.sdu.spark.SecurityManager;
+import com.sdu.spark.SparkException;
 import com.sdu.spark.network.TransportContext;
 import com.sdu.spark.network.client.RpcResponseCallback;
 import com.sdu.spark.network.client.TransportClient;
@@ -28,6 +29,7 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
+import java.nio.channels.ReadableByteChannel;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
@@ -55,6 +57,7 @@ public class NettyRpcEnv extends RpcEnv {
     private Map<RpcAddress, Outbox> outboxes = Maps.newConcurrentMap();
     // 接收消息路由
     private Dispatcher dispatcher;
+    private NettyStreamManager streamManager;
     // 消息分发线程
     private ThreadPoolExecutor deliverMessageExecutor;
 
@@ -63,7 +66,7 @@ public class NettyRpcEnv extends RpcEnv {
     // Spark权限管理模块
     private SecurityManager securityManager;
     // 数据序列化
-    private JavaSerializerInstance serializerInstance;
+    private JavaSerializerInstance javaSerializerInstance;
     // RpcEnv网络数据监听
     private TransportServer server;
     // 网络数据通信
@@ -80,12 +83,13 @@ public class NettyRpcEnv extends RpcEnv {
         super(conf);
         this.host = host;
         this.dispatcher = new Dispatcher(this, conf);
+        this.streamManager = new NettyStreamManager(this);
         this.clientConnectionExecutor = newDaemonCachedThreadPool("netty-rpc-connect-%d", conf.getInt("spark.rpc.connect.threads", 64), 60);
         this.deliverMessageExecutor = newDaemonCachedThreadPool("rpc-deliver-message-%d", conf.getInt("spark.rpc.deliver.message.threads", 64), 60);
         StreamManager streamManager = new NettyStreamManager(this);
         this.transportContext = new TransportContext(fromSparkConf(conf), new NettyRpcHandler(streamManager, this.dispatcher, this));
         this.clientFactory = this.transportContext.createClientFactory(createClientBootstraps());
-        this.serializerInstance = serializerInstance;
+        this.javaSerializerInstance = serializerInstance;
         this.securityManager = securityManager;
     }
 
@@ -217,17 +221,23 @@ public class NettyRpcEnv extends RpcEnv {
 
     /***********************************Spark网络数据序列化***************************************/
     public ByteBuffer serialize(Object content) throws IOException {
-        return serializerInstance.serialize(content);
+        return javaSerializerInstance.serialize(content);
     }
 
     public SerializationStream serializeStream(OutputStream out) throws IOException {
-        return serializerInstance.serializeStream(out);
+        return javaSerializerInstance.serializeStream(out);
     }
 
     public <T> T deserialize(TransportClient client, ByteBuffer buf) throws IOException {
-        NettyRpcEnv.currentEnv = this;
         NettyRpcEnv.currentClient = client;
-        return serializerInstance.deserialize(buf);
+        return deserialize(() -> {
+            try {
+                return javaSerializerInstance.deserialize(buf);
+            } catch (IOException e) {
+                LOGGER.error("deserialize buf failure", e);
+                throw new SparkException(e);
+            }
+        });
     }
 
     @Override
@@ -275,6 +285,17 @@ public class NettyRpcEnv extends RpcEnv {
 
     @Override
     public <T> T deserialize(DeserializeAction<T> deserializeAction) {
+        NettyRpcEnv.currentEnv = this;
+        return deserializeAction.deserialize();
+    }
+
+    @Override
+    public RpcEnvFileServer fileServer() {
+        return streamManager;
+    }
+
+    @Override
+    public ReadableByteChannel openChannel(String uri) {
         return null;
     }
 

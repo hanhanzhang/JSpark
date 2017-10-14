@@ -4,6 +4,7 @@ import com.sdu.spark.SecurityManager;
 import com.sdu.spark.SparkException;
 import com.sdu.spark.rpc.netty.NettyRpcEnvFactory;
 
+import java.nio.channels.ReadableByteChannel;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -63,6 +64,10 @@ public abstract class RpcEnv {
     public abstract void shutdown();
 
     public abstract <T> T deserialize(DeserializeAction<T> deserializeAction);
+
+    public abstract RpcEnvFileServer fileServer();
+
+    public abstract ReadableByteChannel openChannel(String uri);
 
     public interface DeserializeAction<T> {
         T deserialize();
