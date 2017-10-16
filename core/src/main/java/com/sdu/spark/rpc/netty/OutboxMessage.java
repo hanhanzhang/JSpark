@@ -1,11 +1,8 @@
 package com.sdu.spark.rpc.netty;
 
-import com.google.common.util.concurrent.SettableFuture;
-import com.sdu.spark.network.client.TransportClient;
 import com.sdu.spark.network.client.RpcResponseCallback;
+import com.sdu.spark.network.client.TransportClient;
 import com.sdu.spark.rpc.RpcEnvStoppedException;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

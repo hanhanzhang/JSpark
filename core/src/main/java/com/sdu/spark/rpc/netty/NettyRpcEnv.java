@@ -41,6 +41,26 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import static com.sdu.spark.utils.ThreadUtils.newDaemonCachedThreadPool;
 
 /**
+ * {@link NettyRpcEnv}职责：
+ *
+ * 1: RpcEndPoint(RpcEndPoint负责处理不同RpcMessage)管理
+ *
+ *    1': 注册RpcEndpoint(具体管理由{@link Dispatcher}实现)
+ *
+ *    2': 查询RpcEndpoint({@link Dispatcher#verify(String)})
+ *
+ * 2: Rpc消息路由({@link #send(RequestMessage)}、{@link #ask(RequestMessage)})
+ *
+ *    1': 若是RpcMessage消息接收地址与RpcEnv地址相同, 则由{@link Dispatcher}向接收信箱投递RpcMessage
+ *
+ *    2': 若是RpcMessage消息接收地址与RpcEnv地址不同, 则向{@link Outbox}发送信箱投递RpcMessage
+ *
+ * 3: Network Server/Client
+ *
+ *   1': {@link TransportContext#createServer(String, int, List)}启动Network Server负责接收RpcMessage
+ *
+ *   2': {@link TransportClientFactory#createClient(String, int)}创建Remote Server连接并发送RpcMessage
+ *
  * @author hanhan.zhang
  * */
 public class NettyRpcEnv extends RpcEnv {
@@ -53,7 +73,10 @@ public class NettyRpcEnv extends RpcEnv {
     private String host;
 
     /**********************************Spark RpcEnv消息路由************************************/
-    // 发送消息信箱[key = 接收地址, value = 发送信箱]
+    /**
+     * A map for {@link RpcAddress} and {@link Outbox}. When we are connecting to a remote RpcAddress,
+     * we just put messages to its {@link Outbox} to implement a non-blocking `send` method.
+     */
     private Map<RpcAddress, Outbox> outboxes = Maps.newConcurrentMap();
     // 接收消息路由
     private Dispatcher dispatcher;
@@ -90,7 +113,6 @@ public class NettyRpcEnv extends RpcEnv {
         this.streamManager = new NettyStreamManager(this);
         this.clientConnectionExecutor = newDaemonCachedThreadPool("netty-rpc-connect-%d", conf.getInt("spark.rpc.connect.threads", 64), 60);
         this.deliverMessageExecutor = newDaemonCachedThreadPool("rpc-deliver-message-%d", conf.getInt("spark.rpc.deliver.message.threads", 64), 60);
-        StreamManager streamManager = new NettyStreamManager(this);
         this.transportContext = new TransportContext(fromSparkConf(conf), new NettyRpcHandler(streamManager, this.dispatcher, this));
         this.clientFactory = this.transportContext.createClientFactory(createClientBootstraps());
         this.javaSerializerInstance = serializerInstance;
@@ -172,9 +194,8 @@ public class NettyRpcEnv extends RpcEnv {
         if (receiver.client != null) {
             message.sendWith(receiver.client);
         } else {
-            if (receiver.address() == null) {
-                throw new IllegalStateException("Cannot send message to client endpoint with no listen address.");
-            }
+            assert receiver.address() != null :
+                    "Cannot send message to client endpoint with no listen address.";
             Outbox outbox = outboxes.get(receiver.address());
             if (outbox == null) {
                 Outbox newOutbox = new Outbox(this, receiver.address());

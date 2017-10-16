@@ -1,15 +1,16 @@
 package com.sdu.spark.rpc.netty;
 
 
+import com.sdu.spark.SparkException;
 import com.sdu.spark.network.client.TransportClient;
 import com.sdu.spark.rpc.RpcAddress;
 
 import java.io.IOException;
+import java.util.LinkedList;
 import java.util.concurrent.Future;
-import java.util.concurrent.LinkedBlockingQueue;
 
 /**
- * 发送信箱, 线程安全
+ * RpcMessage发送信箱
  *
  * @author hanhan.zhang
  * */
@@ -17,21 +18,20 @@ public class Outbox {
 
     private NettyRpcEnv nettyEnv;
 
-    /**
-     * 远端服务地址
-     * */
+    /**远端服务地址*/
     public RpcAddress address;
 
-    /**
-     * 远端服务客户端
-     * */
+    /**远端服务客户端*/
     private TransportClient client;
 
-    private LinkedBlockingQueue<OutboxMessage> messages = new LinkedBlockingQueue<>();
+    private LinkedList<OutboxMessage> messages = new LinkedList<>();
 
     private boolean stopped = false;
 
     private Future<?> connectFuture = null;
+
+    /**If there is any thread draining the message queue*/
+    private boolean draining = false;
 
     public Outbox(NettyRpcEnv nettyEnv, RpcAddress address) {
         this.nettyEnv = nettyEnv;
@@ -39,21 +39,29 @@ public class Outbox {
     }
 
     public void send(OutboxMessage message) {
-        if (stopped) {
-            message.onFailure(new IllegalStateException("Message is dropped because Outbox is stopped"));
-            return;
-        }
+        boolean dropped;
         synchronized (this) {
-            messages.add(message);
+            if (stopped) {
+                dropped = true;
+            } else {
+                messages.add(message);
+                dropped = false;
+            }
         }
-        drainOutbox();
+        if (dropped) {
+            message.onFailure(new IllegalStateException("Message is dropped because Outbox is stopped"));
+        } else {
+            drainOutbox();
+        }
     }
 
     /**
-     * 发送消息
-     * */
+     * Drain the message queue. If there is other draining thread, just exit. If the connection has
+     * not been established, launch a task in the `nettyEnv.clientConnectionExecutor` to setup the
+     * connection.
+     */
     private void drainOutbox() {
-        OutboxMessage message = null;
+        OutboxMessage message;
         synchronized (this) {
             if (stopped) {
                 return;
@@ -64,7 +72,13 @@ public class Outbox {
             }
 
             if (client == null) {
+                // There is no connect task but client is null, so we need to launch the connect task.
                 launchConnectTask();
+                return;
+            }
+
+            if (draining) {
+                // There is some thread draining, so just exit
                 return;
             }
 
@@ -72,13 +86,28 @@ public class Outbox {
             if (message == null) {
                 return;
             }
+            draining = true;
         }
 
+        // 消息处理
         while (true) {
-            message.sendWith(client);
+            TransportClient _client = null;
             synchronized (this) {
+                _client = this.client;
+            }
+            if (_client != null) {
+                message.sendWith(_client);
+            } else {
+                assert stopped;
+            }
+
+            synchronized (this) {
+                if (stopped) {
+                    return;
+                }
                 message = messages.poll();
                 if (message == null) {
+                    draining = false;
                     return;
                 }
             }
@@ -146,11 +175,17 @@ public class Outbox {
                 return;
             }
             stopped = true;
+            if (connectFuture != null) {
+                connectFuture.cancel(true);
+            }
             closeClient();
         }
+
+        // We always check `stopped` before updating messages, so here we can make sure no thread will
+        // update messages and it's safe to just drain the queue.
         OutboxMessage message = messages.poll();
         while (message != null) {
-            message.onFailure(new IllegalStateException("Message is dropped because Outbox is stopped"));
+            message.onFailure(new SparkException("Message is dropped because Outbox is stopped"));
             message = messages.poll();
         }
     }
