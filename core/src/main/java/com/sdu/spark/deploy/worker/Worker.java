@@ -128,7 +128,7 @@ public class Worker extends ThreadSafeRpcEndpoint {
 
     @Override
     public void onStart() {
-        LOGGER.info("Starting Spark worker {}:{} with {} cores, {} RAM",
+        LOGGER.info("Starting Spark worker {} with {} cores, {} RAM",
                     rpcEnv.address().hostPort(), cores, megabytesToString(memory));
 //        createWorkDir();
         startRegisterWithMaster();
