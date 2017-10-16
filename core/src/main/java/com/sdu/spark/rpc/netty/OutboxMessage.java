@@ -18,9 +18,7 @@ public interface OutboxMessage extends Serializable {
 
     void onFailure(Throwable e);
 
-    /**
-     * 单向网络消息
-     * */
+    /**单向网络消息*/
     class OneWayOutboxMessage implements OutboxMessage {
 
         private static final Logger LOGGER = LoggerFactory.getLogger(OneWayOutboxMessage.class);

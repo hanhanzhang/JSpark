@@ -147,8 +147,6 @@ public class Master extends ThreadSafeRpcEndpoint {
             timeoutDeadWorkers();
         } else if (msg instanceof Heartbeat) {       // 工作节点心跳消息
             Heartbeat heartbeat = (Heartbeat) msg;
-            LOGGER.info("Get heartbeat from worker {}, last heart timestamp {}",
-                         heartbeat.workerId, heartbeat.worker.address().hostPort());
             String workerId = heartbeat.workerId;
             WorkerInfo workerInfo = idToWorker.get(workerId);
             if (workerInfo == null) {
@@ -156,6 +154,8 @@ public class Master extends ThreadSafeRpcEndpoint {
                             heartbeat.workerId, heartbeat.worker.address().hostPort());
                 heartbeat.worker.send(new ReconnectWorker(self()));
             } else {
+                LOGGER.info("Get heartbeat from worker {}, last heart timestamp {}",
+                        heartbeat.workerId, workerInfo.lastHeartbeat);
                 workerInfo.lastHeartbeat = System.currentTimeMillis();
             }
         } else if (msg instanceof RegisterWorker) {       // 注册工作节点
@@ -220,10 +220,10 @@ public class Master extends ThreadSafeRpcEndpoint {
 
     @Override
     public void onDisconnected(RpcAddress remoteAddress) {
-        LOGGER.info("删除断开连接的工作节点worker(address = {})", remoteAddress.hostPort());
+        LOGGER.info("{} got disassociated, removing it.", remoteAddress.hostPort());
         WorkerInfo workerInfo = addressToWorker.get(remoteAddress);
         if (workerInfo != null) {
-            removeWorker(workerInfo, String.format("worker(%s)断开连接", remoteAddress.hostPort()));
+            removeWorker(workerInfo, String.format("%s got disassociated", remoteAddress.hostPort()));
         }
 
         ApplicationInfo app = addressToApp.get(remoteAddress);
@@ -250,9 +250,9 @@ public class Master extends ThreadSafeRpcEndpoint {
         if (addressToWorker.containsKey(address)) {
             WorkerInfo oldWorker = addressToWorker.get(address);
             if (oldWorker.state == WorkerState.UNKNOWN) {
-                removeWorker(oldWorker, "被相同地址的工作节点替换");
+                removeWorker(oldWorker, "Worker replaced by a new worker with same address");
             } else {
-                LOGGER.info("重复注册地址相同的Worker({})工作节点", address);
+                LOGGER.info("Attempted to re-register worker at same address: ", address);
                 return true;
             }
         }
@@ -263,7 +263,7 @@ public class Master extends ThreadSafeRpcEndpoint {
     }
 
     private void removeWorker(WorkerInfo worker, String msg) {
-        LOGGER.info("移除主机(host = {}, port = {})上worker(id = {})节点", worker.host, worker.port, worker.workerId);
+        LOGGER.info("Removing worker {} on {}:{} ", worker.workerId, worker.host, worker.port);
         worker.state = WorkerState.DEAD;
         idToWorker.remove(worker.workerId);
         addressToWorker.remove(worker.endPointRef.address());
@@ -271,7 +271,7 @@ public class Master extends ThreadSafeRpcEndpoint {
         // Worker节点部署的Executor
         if (MapUtils.isNotEmpty(worker.executors)) {
             for (ExecutorDesc exec : worker.executors.values()) {
-                LOGGER.info("告知Application的Executor丢失消息");
+                LOGGER.info("Telling app of lost executor: {}", exec.id);
                 exec.application.driver.send(new ExecutorUpdated(
                         exec.id,
                         ExecutorState.LOST,
@@ -289,10 +289,10 @@ public class Master extends ThreadSafeRpcEndpoint {
         if (MapUtils.isNotEmpty(worker.drivers)) {
             for (DriverInfo driver : worker.drivers.values()) {
                 if (driver.desc.supervise) {
-                    LOGGER.info("重新启动Driver(id = {})", driver.id);
+                    LOGGER.info("Re-launching driver {}", driver.id);
                     relaunchDriver(driver);
                 } else {
-                    LOGGER.info("由于Driver(id = {})不支持重启, 放弃", driver.id);
+                    LOGGER.info("Not re-launching driver {} because it was not supervised", driver.id);
                     removeDriver(driver, DriverState.ERROR, null);
                 }
             }
@@ -300,7 +300,7 @@ public class Master extends ThreadSafeRpcEndpoint {
 
 
         // 通知Application丢失Worker
-        LOGGER.info("通知Application丢失Worker节点：{}", worker.workerId);
+        LOGGER.info("Telling app of lost worker: {}", worker.workerId);
         apps.stream().filter(app -> !completedApps.contains(app))
                      .forEach(app -> app.driver.send(new WorkerRemoved(
                              worker.workerId,
@@ -346,7 +346,7 @@ public class Master extends ThreadSafeRpcEndpoint {
     private void handleExecutorStateChanged(ExecutorStateChanged executor) {
         ExecutorDesc desc = idToApp.get(executor.appId).executors.get(executor.executorId);
         if (desc == null) {
-            LOGGER.info("收到未知应用(appId = {})的Executor(execId = {})的状态变更", executor.appId, executor.executorId);
+            LOGGER.info("Got status update for unknown executor {}/{}", executor.appId, executor.executorId);
             return;
         }
         ApplicationInfo appInfo = idToApp.get(executor.appId);
@@ -451,8 +451,7 @@ public class Master extends ThreadSafeRpcEndpoint {
     }
 
     private void launchDriver(WorkerInfo worker, DriverInfo driver) {
-        LOGGER.info("工作节点(workerId = {}, host = {})启动Spark应用(driverId = {})",
-                worker.workerId, worker.host, driver.id);
+        LOGGER.info("Launching driver {} on worker {}", driver.id, worker.workerId);
         worker.addDriver(driver);
         driver.worker = worker;
         worker.endPointRef.send(new LaunchDriver(driver.id, driver.desc));
@@ -596,7 +595,7 @@ public class Master extends ThreadSafeRpcEndpoint {
                     worker.state != WorkerState.DEAD) {
                 LOGGER.info("Removing worker {} because we got no heartbeat in {} seconds", worker.workerId,
                         WORKER_TIMEOUT_MS);
-                removeWorker(worker, String.format("超过%ds未收心跳", WORKER_TIMEOUT_MS / 1000));
+                removeWorker(worker, String.format("Not receiving heartbeat for %d seconds", WORKER_TIMEOUT_MS / 1000));
                 it.remove();
             } else {
                 if (worker.lastHeartbeat < System.currentTimeMillis() - (REAPER_ITERATIONS + 1) * WORKER_TIMEOUT_MS) {
