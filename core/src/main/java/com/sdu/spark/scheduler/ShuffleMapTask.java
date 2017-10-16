@@ -6,6 +6,7 @@ import com.sdu.spark.rdd.RDD;
 import com.sdu.spark.serializer.SerializerInstance;
 import com.sdu.spark.shuffle.ShuffleManager;
 import com.sdu.spark.shuffle.ShuffleWriter;
+import com.sdu.spark.utils.scala.Product2;
 import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -58,7 +59,7 @@ public class ShuffleMapTask extends Task<MapStatus> {
         long deserializeStartCpuTime = threadMXBean.isCurrentThreadCpuTimeSupported() ? threadMXBean.getCurrentThreadCpuTime()
                                                                                       : 0L;
         SerializerInstance ser = SparkEnv.env.closureSerializer.newInstance();
-        Pair<RDD<Pair<Object, Object>>, ShuffleDependency<Object, Object, Object>> res = ser.deserialize(ByteBuffer.wrap(taskBinary.value()),
+        Pair<RDD<Product2<Object, Object>>, ShuffleDependency<Object, Object, Object>> res = ser.deserialize(ByteBuffer.wrap(taskBinary.value()),
                                                                        Thread.currentThread().getContextClassLoader());
 
         executorDeserializeTime = System.currentTimeMillis() - deserializeStartTime;
@@ -66,7 +67,7 @@ public class ShuffleMapTask extends Task<MapStatus> {
                                                                                     : 0L;
 
         assert res != null;
-        RDD<Pair<Object, Object>> rdd = res.getLeft();
+        RDD<Product2<Object, Object>> rdd = res.getLeft();
         ShuffleDependency<Object, Object, Object> dep = res.getRight();
         ShuffleWriter<Object, Object> writer = null;
         try {

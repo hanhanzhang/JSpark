@@ -1,6 +1,6 @@
 package com.sdu.spark.shuffle;
 
-import org.apache.commons.lang3.tuple.Pair;
+import com.sdu.spark.utils.scala.Product2;
 
 import java.util.Iterator;
 
@@ -9,6 +9,6 @@ import java.util.Iterator;
  * */
 public interface ShuffleReader<K, V> {
 
-    Iterator<Pair<K, V>> read();
+    Iterator<Product2<K, V>> read();
 
 }
