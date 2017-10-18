@@ -9,6 +9,7 @@ import com.sdu.spark.shuffle.IndexShuffleBlockResolver;
 import com.sdu.spark.shuffle.ShuffleWriter;
 import com.sdu.spark.storage.BlockManager;
 import com.sdu.spark.utils.colleciton.ExternalSorter;
+import com.sdu.spark.utils.scala.Product2;
 import org.apache.commons.lang3.tuple.Pair;
 
 import java.util.Iterator;
@@ -44,7 +45,7 @@ public class SortShuffleWriter<K, V, C> implements ShuffleWriter<K, V>{
     }
 
     @Override
-    public void write(Iterator<Pair<K, V>> records) {
+    public void write(Iterator<Product2<K, V>> records) {
 
     }
 

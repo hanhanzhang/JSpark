@@ -30,25 +30,26 @@ public class SizeEstimator {
 
     private static ConcurrentMap<Class<?>, ClassInfo> classInfos = new MapMaker().weakKeys().makeMap();
 
-    // Java基本类型字节数
+    /**Java基本类型占用字节数(long, int, short, byte)*/
     private static ArrayList<Integer> fieldSizes = Lists.newArrayList(8, 4, 2, 1);
-    // Java基本类型占用字节数
-    private static int BYTE_SIZE = 1;
-    private static int BOOLEAN_SIZE = 1;
-    private static int CHAR_SIZE = 2;
-    private static int SHORT_SIZE = 2;
-    private static int INT_SIZE = 4;
-    private static int LONG_SIZE = 8;
-    private static int FLOAT_SIZE = 4;
-    private static int DOUBLE_SIZE = 8;
-    // Java对象引用所占字节数
+    private static final int BYTE_SIZE = 1;
+    private static final int BOOLEAN_SIZE = 1;
+    private static final int CHAR_SIZE = 2;
+    private static final int SHORT_SIZE = 2;
+    private static final int INT_SIZE = 4;
+    private static final int LONG_SIZE = 8;
+    private static final int FLOAT_SIZE = 4;
+    private static final int DOUBLE_SIZE = 8;
+
+    /**对象引用占用字节*/
     private static int pointerSize = 4;
     private static int objectSize = 8;
-    // 内存对齐用
-    private static int ALIGN_SIZE = 8;
+
+    /**8字节对齐*/
+    private static final int ALIGN_SIZE = 8;
 
     // Estimate the size of arrays larger than ARRAY_SIZE_FOR_SAMPLING by sampling.
-    private static int ARRAY_SIZE_FOR_SAMPLING = 400;
+    private static final int ARRAY_SIZE_FOR_SAMPLING = 400;
     private static int ARRAY_SAMPLE_SIZE = 100; // should be lower than ARRAY_SIZE_FOR_SAMPLING
 
     private static boolean is64bit = false;
@@ -318,7 +319,6 @@ public class SizeEstimator {
 
         SearchState(IdentityHashMap<Object, Object> visited) {
             this.visited = visited;
-
             this.stack = new Stack<>();
         }
 

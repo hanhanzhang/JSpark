@@ -1,5 +1,6 @@
 package com.sdu.spark.shuffle;
 
+import com.sdu.spark.utils.scala.Product2;
 import org.apache.commons.lang3.tuple.Pair;
 
 import java.util.Iterator;
@@ -13,7 +14,7 @@ import java.util.Iterator;
 public class BlockStoreShuffleReader<K, C> implements ShuffleReader<K, C> {
 
     @Override
-    public Iterator<Pair<K, C>> read() {
+    public Iterator<Product2<K, C>> read() {
         return null;
     }
 
