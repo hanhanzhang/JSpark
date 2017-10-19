@@ -88,6 +88,8 @@ public class SparkContext {
     private RpcEndPointRef heartbeatReceiver;
     private List<String> jars;
     private int executorMemory;
+
+    private AtomicInteger nextShuffleId = new AtomicInteger(0);
     private AtomicInteger nextRddId = new AtomicInteger(0);
 
 
@@ -192,6 +194,10 @@ public class SparkContext {
 
     public CallSite getCallSite() {
         throw new UnsupportedOperationException("");
+    }
+
+    public int newShuffleId() {
+        return nextShuffleId.getAndIncrement();
     }
 
     public int newRddId(){

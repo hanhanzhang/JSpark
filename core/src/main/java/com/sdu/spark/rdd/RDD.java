@@ -71,6 +71,10 @@ public abstract class RDD<T> implements Serializable {
         throw new SparkException(String.format("Got partition %d of rdd %s failure", partition.index(), blockId));
     }
 
+    public SparkContext context() {
+        return sc;
+    }
+
     public final LinkedList<Dependency<?>> dependencies() {
         throw new UnsupportedOperationException("");
     }

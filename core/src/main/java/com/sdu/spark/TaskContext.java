@@ -23,7 +23,7 @@ public abstract class TaskContext implements Serializable {
         taskContext.remove();
     }
 
-    public TaskContext get() {
+    public static TaskContext get() {
         return taskContext.get();
     }
 

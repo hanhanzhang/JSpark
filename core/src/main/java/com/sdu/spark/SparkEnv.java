@@ -62,16 +62,18 @@ public class SparkEnv {
     public SparkConf conf;
     public ShuffleManager shuffleManager;
     private BroadcastManager broadcastManager;
-    private SerializerManager serializerManager;
+    public SerializerManager serializerManager;
     private OutputCommitCoordinator outputCommitCoordinator;
     public BlockManager blockManager;
     public MemoryManager memoryManager;
+    public Serializer serializer;
     public Serializer closureSerializer;
     public MapOutputTracker mapOutputTracker;
 
 
     public SparkEnv(String executorId,
                     RpcEnv rpcEnv,
+                    Serializer serializer,
                     Serializer closureSerializer,
                     MapOutputTracker mapOutputTracker,
                     ShuffleManager shuffleManager,
@@ -92,6 +94,7 @@ public class SparkEnv {
         this.blockManager = blockManager;
         this.memoryManager = memoryManager;
 
+        this.serializer = serializer;
         this.closureSerializer = closureSerializer;
     }
 
@@ -272,6 +275,7 @@ public class SparkEnv {
                 executorId,
                 rpcEnv,
                 serializer,
+                closureSerializer,
                 mapOutputTracker,
                 shuffleManager,
                 broadcastManager,

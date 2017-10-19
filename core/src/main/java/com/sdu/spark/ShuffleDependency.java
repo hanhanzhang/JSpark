@@ -14,12 +14,40 @@ public class ShuffleDependency<K, V, C> extends Dependency<Product2<K, V>> {
     public transient RDD<Product2<K, V>> rdd;
     public Partitioner partitioner;
     private Serializer serializer;
-    public int shuffleId;
+    private boolean keyOrdering;
+    private Aggregator<K, V, C> aggregator;
+    private boolean mapSideCombine;
+    private int shuffleId;
 
+    public ShuffleDependency(RDD<Product2<K, V>> rdd,
+                             Partitioner partitioner) {
+        this(rdd, partitioner, SparkEnv.env.serializer, false, null, true);
+    }
+
+    public ShuffleDependency(RDD<Product2<K, V>> rdd,
+                             Partitioner partitioner,
+                             Serializer serializer,
+                             boolean keyOrdering,
+                             Aggregator<K, V, C> aggregator,
+                             boolean mapSideCombine) {
+        this.rdd = rdd;
+        this.partitioner = partitioner;
+        this.serializer = serializer;
+        this.keyOrdering = keyOrdering;
+        this.aggregator = aggregator;
+        this.mapSideCombine = mapSideCombine;
+
+        // TODO:  _rdd.sparkContext.cleaner.foreach(_.registerShuffleForCleanup(this))
+    }
 
     @Override
     public RDD<Product2<K, V>> rdd() {
         return null;
+    }
+
+    public int shuffleId() {
+        this.shuffleId = rdd.context().newShuffleId();
+        return this.shuffleId;
     }
 
     public ShuffleHandle shuffleHandle() {
