@@ -4,8 +4,9 @@ import com.google.common.collect.Lists;
 import com.sdu.spark.SparkException;
 import com.sdu.spark.executor.ExecutorExitCode;
 import com.sdu.spark.rpc.SparkConf;
-import org.apache.commons.lang3.tuple.ImmutablePair;
-import org.apache.commons.lang3.tuple.Pair;
+import com.sdu.spark.storage.BlockId.TempLocalBlockId;
+import com.sdu.spark.storage.BlockId.TempShuffleBlockId;
+import com.sdu.spark.utils.scala.Tuple2;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -132,21 +133,21 @@ public class DiskBlockManager {
     }
 
     /** Produces a unique block id and File suitable for storing local intermediate results. */
-    public Pair<BlockId.TempLocalBlockId, File> createTempLocalBlock() throws IOException {
+    public Tuple2<BlockId, File> createTempLocalBlock() throws IOException {
         BlockId.TempLocalBlockId blockId = new BlockId.TempLocalBlockId(UUID.randomUUID());
         while (getFile(blockId).exists()) {
             blockId = new BlockId.TempLocalBlockId(UUID.randomUUID());
         }
-        return ImmutablePair.of(blockId, getFile(blockId));
+        return new Tuple2<>(blockId, getFile(blockId));
     }
 
     /** Produces a unique block id and File suitable for storing shuffled intermediate results. */
-    public Pair<BlockId.TempShuffleBlockId, File> createTempShuffleBlock() throws IOException {
+    public Tuple2<TempShuffleBlockId, File> createTempShuffleBlock() throws IOException {
         BlockId.TempShuffleBlockId blockId = new BlockId.TempShuffleBlockId(UUID.randomUUID());
         while (getFile(blockId).exists()) {
             blockId = new BlockId.TempShuffleBlockId(UUID.randomUUID());
         }
-        return ImmutablePair.of(blockId, getFile(blockId));
+        return new Tuple2<>(blockId, getFile(blockId));
     }
 
 }

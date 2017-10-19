@@ -17,6 +17,7 @@ import com.sdu.spark.network.utils.TransportConf;
 import com.sdu.spark.rpc.RpcEndPointRef;
 import com.sdu.spark.rpc.RpcEnv;
 import com.sdu.spark.rpc.SparkConf;
+import com.sdu.spark.serializer.SerializerInstance;
 import com.sdu.spark.serializer.SerializerManager;
 import com.sdu.spark.shuffle.ShuffleManager;
 import com.sdu.spark.storage.BlockData.Allocator;
@@ -31,6 +32,7 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
 import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.Future;
@@ -410,6 +412,12 @@ public class BlockManager implements BlockDataManager, BlockEvictionHandler {
         throw new SparkException("Block " + blockId + " was not found even though it's read-locked");
     }
 
+    public DiskBlockObjectWriter getDiskWriter(BlockId blockId,
+                                               File file,
+                                               SerializerInstance serializerInstance,
+                                               int buffsizee) {
+        throw new UnsupportedOperationException("");
+    }
 
     public boolean putBytes(BlockId blockId, ChunkedByteBuffer bytes, StorageLevel level) {
         return putBytes(blockId, bytes, level, true);

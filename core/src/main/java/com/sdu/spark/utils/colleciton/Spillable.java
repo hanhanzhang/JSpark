@@ -59,7 +59,7 @@ public abstract class Spillable<C> extends MemoryConsumer {
      * memory before spilling.
      *
      * @param collection collection to spill to disk
-     * @param currentMemory estimated size of the collection in bytes
+     * @param currentMemory collection占用内存估量
      * @return true if `collection` was spilled to disk; false otherwise
      */
     protected boolean maybeSpill(C collection, long currentMemory) {
@@ -87,7 +87,7 @@ public abstract class Spillable<C> extends MemoryConsumer {
     /**
      * Release our memory back to the execution pool so that other tasks can grab it.
      */
-    private void releaseMemory() {
+    protected void releaseMemory() {
         freeMemory(myMemoryThreshold - initialMemoryThreshold);
         myMemoryThreshold = initialMemoryThreshold;
     }

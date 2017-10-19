@@ -174,7 +174,7 @@ public class AppendOnlyMap<K, V> implements Iterable<Tuple2<K, V>>, Serializable
     }
 
     @SuppressWarnings("unchecked")
-    private void growTable() {
+    void growTable() {
         // capacity < MAXIMUM_CAPACITY (2 ^ 29) so capacity * 2 won't overflow
         int newCapacity = capacity * 2;
         checkArgument(newCapacity <= MAXIMUM_CAPACITY, "Can't contain more than " + MAXIMUM_CAPACITY + " elements");

@@ -104,6 +104,10 @@ public class SizeEstimator {
         }
     }
 
+    public static long estimate(Object obj) {
+        return estimate(obj, new IdentityHashMap<>());
+    }
+
     public static long estimate(Object obj, IdentityHashMap<Object, Object> visited) {
         SearchState state = new SearchState(visited);
         state.enqueue(obj);

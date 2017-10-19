@@ -3,6 +3,7 @@ package com.sdu.spark.rpc;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.sdu.spark.network.utils.JavaUtils;
+import com.sdu.spark.utils.Utils;
 import org.apache.commons.lang3.math.NumberUtils;
 
 import java.io.Serializable;
@@ -94,5 +95,9 @@ public class SparkConf implements Serializable {
 
     public long getSizeAsBytes(String key, String defaultValue) {
         return JavaUtils.byteStringAsBytes(get(key, defaultValue));
+    }
+
+    public String getSizeAsKb(String key, String defaultValue) {
+        throw new UnsupportedOperationException("");
     }
 }
