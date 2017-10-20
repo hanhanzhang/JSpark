@@ -31,7 +31,7 @@ public class ShuffleMapStage extends Stage {
 
     @Override
     public List<Integer> findMissingPartitions() {
-        return Arrays.asList(mapOutputTrackerMaster.findMissingPartitions(shuffleDep.shuffleId));
+        return Arrays.asList(mapOutputTrackerMaster.findMissingPartitions(shuffleDep.shuffleId()));
     }
 
     @Override
@@ -48,7 +48,7 @@ public class ShuffleMapStage extends Stage {
     }
 
     public int numAvailableOutputs() {
-        return mapOutputTrackerMaster.getNumAvailableOutputs(shuffleDep.shuffleId);
+        return mapOutputTrackerMaster.getNumAvailableOutputs(shuffleDep.shuffleId());
     }
 
     public boolean isAvailable() {

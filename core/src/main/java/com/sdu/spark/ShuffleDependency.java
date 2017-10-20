@@ -4,7 +4,6 @@ import com.sdu.spark.rdd.RDD;
 import com.sdu.spark.serializer.Serializer;
 import com.sdu.spark.shuffle.ShuffleHandle;
 import com.sdu.spark.utils.scala.Product2;
-import org.apache.commons.lang3.tuple.Pair;
 
 /**
  * @author hanhan.zhang
@@ -13,10 +12,10 @@ public class ShuffleDependency<K, V, C> extends Dependency<Product2<K, V>> {
 
     public transient RDD<Product2<K, V>> rdd;
     public Partitioner partitioner;
-    private Serializer serializer;
-    private boolean keyOrdering;
-    private Aggregator<K, V, C> aggregator;
-    private boolean mapSideCombine;
+    public Serializer serializer;
+    public boolean keyOrdering;
+    public Aggregator<K, V, C> aggregator;
+    public boolean mapSideCombine;
     private int shuffleId;
 
     public ShuffleDependency(RDD<Product2<K, V>> rdd,

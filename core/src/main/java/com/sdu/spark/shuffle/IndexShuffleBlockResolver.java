@@ -20,6 +20,10 @@ import java.io.IOException;
 import java.nio.file.Files;
 
 /**
+ * {@link IndexShuffleBlockResolver}负责Shuffle File创建及Shuffle数据读取
+ *
+ *  1: shuffle数据有两种文件: shuffle数据文件、shuffle索引文件
+ *
  * @author hanhan.zhang
  * */
 public class IndexShuffleBlockResolver implements ShuffleBlockResolver {
@@ -96,6 +100,22 @@ public class IndexShuffleBlockResolver implements ShuffleBlockResolver {
                 LOGGER.debug("close block {} shuffle file failure", blockId, e);
             }
 
+        }
+    }
+
+    public void removeDataByMap(int shuffleId, int mapId) {
+        File file = getDataFile(shuffleId, mapId);
+        if (file.exists()) {
+            if (!file.delete()) {
+                LOGGER.warn("Error delete shuffle data file {} failure", file.getPath());
+            }
+        }
+
+        file = getIndexFile(shuffleId, mapId);
+        if (file.exists()) {
+            if (!file.delete()) {
+                LOGGER.warn("Error delete shuffle index file {} failure", file.getPath());
+            }
         }
     }
 

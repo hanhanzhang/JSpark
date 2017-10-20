@@ -1,7 +1,9 @@
 package com.sdu.spark;
 
+import com.google.common.collect.LinkedHashMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Multimap;
 import com.sdu.spark.broadcast.BroadcastManager;
 import com.sdu.spark.rpc.RpcCallContext;
 import com.sdu.spark.rpc.SparkConf;
@@ -10,6 +12,7 @@ import com.sdu.spark.serializer.Serializer;
 import com.sdu.spark.storage.BlockId;
 import com.sdu.spark.storage.BlockManagerId;
 import com.sdu.spark.utils.ThreadUtils;
+import com.sdu.spark.utils.scala.Tuple2;
 import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -113,11 +116,11 @@ public class MapOutputTrackerMaster extends MapOutputTracker {
     }
 
     @Override
-    public Map<BlockManagerId, Pair<BlockId, Long>> getMapSizesByExecutorId(int shuffleId, int startPartition, int endPartition) {
+    public Multimap<BlockManagerId, Tuple2<BlockId, Long>> getMapSizesByExecutorId(int shuffleId, int startPartition, int endPartition) {
         LOGGER.info("Fetching outputs for shuffle $shuffleId, partitions {}-{}", startPartition, endPartition);
         ShuffleStatus status = shuffleStatuses.get(shuffleId);
         if (status == null) {
-            return Collections.emptyMap();
+            return LinkedHashMultimap.create();
         }
         return status.withMapStatuses(mapStatuses ->
                 MapOutputTracker.convertMapStatuses(shuffleId, startPartition, endPartition, mapStatuses));
@@ -171,9 +174,9 @@ public class MapOutputTrackerMaster extends MapOutputTracker {
     }
 
     public MapOutputStatistics getStatistics(ShuffleDependency<?, ?, ?> dep) {
-        ShuffleStatus status = shuffleStatuses.get(dep.shuffleId);
+        ShuffleStatus status = shuffleStatuses.get(dep.shuffleId());
         if (status == null) {
-            throw new RuntimeException("shuffleId " + dep.shuffleId + " not exist");
+            throw new RuntimeException("shuffleId " + dep.shuffleId() + " not exist");
         }
 
         return status.withMapStatuses(mapStatuses -> {
@@ -183,7 +186,7 @@ public class MapOutputTrackerMaster extends MapOutputTracker {
                     totalSizes[i] += mapStatuses[i].getSizeForBlock(j);
                 }
             }
-            return new MapOutputStatistics(dep.shuffleId, totalSizes);
+            return new MapOutputStatistics(dep.shuffleId(), totalSizes);
         });
     }
 
@@ -193,7 +196,7 @@ public class MapOutputTrackerMaster extends MapOutputTracker {
     public String[] getPreferredLocationsForShuffle(ShuffleDependency<?, ?, ?> dep, int partitionId) {
         if (shuffleLocalityEnabled && dep.rdd().partitions().size() < SHUFFLE_PREF_MAP_THRESHOLD &&
                 dep.partitioner.numPartitions() < SHUFFLE_PREF_REDUCE_THRESHOLD) {
-            BlockManagerId[] blockManagerIds = getLocationsWithLargestOutputs(dep.shuffleId, partitionId,
+            BlockManagerId[] blockManagerIds = getLocationsWithLargestOutputs(dep.shuffleId(), partitionId,
                     dep.partitioner.numPartitions(), REDUCER_PREF_LOCS_FRACTION);
             if (blockManagerIds.length != 0) {
                 String[] host = new String[blockManagerIds.length];

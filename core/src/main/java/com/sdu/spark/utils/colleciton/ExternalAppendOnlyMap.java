@@ -16,6 +16,7 @@ import com.sdu.spark.serializer.Serializer;
 import com.sdu.spark.serializer.SerializerInstance;
 import com.sdu.spark.serializer.SerializerManager;
 import com.sdu.spark.storage.*;
+import com.sdu.spark.utils.CompletionIterator;
 import com.sdu.spark.utils.Utils;
 import com.sdu.spark.utils.scala.Product2;
 import com.sdu.spark.utils.scala.Tuple2;
@@ -36,6 +37,12 @@ import java.util.*;
  * 1: {@link #currentMap}维护内存中Key-Value数据信息(每次插入/更新操作都会触发估算内存占用量, 超过阈值Spill内存数据到Disk)
  *
  * 2: {@link #spilledMaps}维护已Spill到Disk中数据信息(记录每个Batch在文件中偏移量, 便于Batch数据读取)
+ *
+ *
+ * TODO:
+ *
+ * 1: {@link ExternalIterator}实现
+ *
  *
  * @author hanhan.zhang
  * */
@@ -111,8 +118,23 @@ public class ExternalAppendOnlyMap<K, V, C> extends Spillable<AppendOnlyMap<K, C
         return 0;
     }
 
+    /**
+     * Force to spilling the current in-memory collection to disk to release memory,
+     * It will be called by TaskMemoryManager when there is not enough memory for the task.
+     * */
     @Override
     public boolean forceSpill() {
+        if (readingIterator != null) {
+            boolean isSpilled = readingIterator.spill();
+            if (isSpilled) {
+                currentMap = null;
+            }
+            return true;
+        } else if (currentMap.size() > 0) {
+            spill(currentMap);
+            currentMap = new SizeTrackingAppendOnlyMap<>();
+            return true;
+        }
         return false;
     }
 
@@ -243,7 +265,8 @@ public class ExternalAppendOnlyMap<K, V, C> extends Spillable<AppendOnlyMap<K, C
             throw new IllegalStateException("ExternalAppendOnlyMap.iterator is destructive and should only be called once.");
         }
         if (spilledMaps.isEmpty()) {
-
+            return CompletionIterator.apply(destructiveIterator(currentMap.iterator()),
+                                            this::freeCurrentMap);
         } else {
             return new ExternalIterator();
         }
@@ -314,7 +337,7 @@ public class ExternalAppendOnlyMap<K, V, C> extends Spillable<AppendOnlyMap<K, C
                                                                    StringUtils.join(batchOffsets, '，'));
             this.deserializeStream = nextBatchStream();
 
-            // TODO: context.addTaskCompletionListener(context => cleanup())
+            context.addTaskCompletionListener(cxt -> cleanup());
         }
 
         private DeserializationStream nextBatchStream() {

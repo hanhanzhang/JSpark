@@ -1,17 +1,21 @@
 package com.sdu.spark;
 
+import com.google.common.collect.LinkedHashMultimap;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.sdu.spark.rpc.SparkConf;
 import com.sdu.spark.scheduler.MapStatus;
 import com.sdu.spark.shuffle.FetchFailedException;
 import com.sdu.spark.storage.BlockId;
 import com.sdu.spark.storage.BlockManagerId;
+import com.sdu.spark.utils.scala.Tuple2;
 import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -46,10 +50,12 @@ public class MapOutputTrackerWorker extends MapOutputTracker {
     }
 
     @Override
-    public Map<BlockManagerId, Pair<BlockId, Long>> getMapSizesByExecutorId(int shuffleId, int startPartition, int endPartition) {
+    public Multimap<BlockManagerId, Tuple2<BlockId, Long>> getMapSizesByExecutorId(int shuffleId,
+                                                                                         int startPartition,
+                                                                                         int endPartition) {
         MapStatus[] statuses = getStatus(shuffleId);
         if (statuses == null) {
-            return Collections.emptyMap();
+            return LinkedHashMultimap.create();
         }
         return convertMapStatuses(shuffleId, startPartition, endPartition, statuses);
     }

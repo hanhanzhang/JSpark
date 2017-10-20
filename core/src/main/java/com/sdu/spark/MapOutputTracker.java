@@ -1,6 +1,9 @@
 package com.sdu.spark;
 
+import com.google.common.collect.LinkedHashMultimap;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Multimap;
 import com.sdu.spark.broadcast.Broadcast;
 import com.sdu.spark.broadcast.BroadcastManager;
 import com.sdu.spark.rpc.RpcEndPointRef;
@@ -10,12 +13,14 @@ import com.sdu.spark.shuffle.FetchFailedException.MetadataFetchFailedException;
 import com.sdu.spark.storage.BlockId;
 import com.sdu.spark.storage.BlockId.ShuffleBlockId;
 import com.sdu.spark.storage.BlockManagerId;
+import com.sdu.spark.utils.scala.Tuple2;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.*;
+import java.util.List;
 import java.util.Map;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
@@ -63,7 +68,7 @@ public abstract class MapOutputTracker {
         }
     }
 
-    protected void sendTracker(Object message) throws SparkException{
+    protected void sendTracker(Object message) throws SparkException {
         Object response = askTracker(message);
         if (response.getClass() != Boolean.class) {
             throw new SparkException("Error reply received from MapOutputTracker. Expecting true, got " + message.toString());
@@ -73,7 +78,7 @@ public abstract class MapOutputTracker {
     /**
      * @return key = BlockManagerId(Shuffle数据存储Executor) value = [key = BlockId, value = 数据块大小]
      * */
-    public abstract Map<BlockManagerId, Pair<BlockId, Long>> getMapSizesByExecutorId(int shuffleId, int startPartition, int endPartition);
+    public abstract Multimap<BlockManagerId, Tuple2<BlockId, Long>> getMapSizesByExecutorId(int shuffleId, int startPartition, int endPartition);
 
     public abstract void unregisterShuffle(int shuffleId);
 
@@ -142,10 +147,12 @@ public abstract class MapOutputTracker {
         }
     }
 
-    public static Map<BlockManagerId, Pair<BlockId, Long>> convertMapStatuses(int shuffleId, int startPartition,
-                                                                              int endPartition, MapStatus[] statuses) {
+    public static Multimap<BlockManagerId, Tuple2<BlockId, Long>> convertMapStatuses(int shuffleId,
+                                                                                               int startPartition,
+                                                                                               int endPartition,
+                                                                                               MapStatus[] statuses) {
         assert (statuses != null);
-        Map<BlockManagerId, Pair<BlockId, Long>> splitsByAddress = Maps.newHashMap();
+        Multimap<BlockManagerId, Tuple2<BlockId, Long>> splitsByAddress = LinkedHashMultimap.create();
         for (int i = 0; i < statuses.length; ++i) {
             MapStatus status = statuses[i];
             if (status == null) {
@@ -155,7 +162,7 @@ public abstract class MapOutputTracker {
             }
             for (int part = startPartition; part <= endPartition; ++part) {
                 ShuffleBlockId shuffleBlockId = new ShuffleBlockId(shuffleId, i, part);
-                Pair<BlockId, Long> blockIdInfo = ImmutablePair.of(shuffleBlockId, status.getSizeForBlock(part));
+                Tuple2<BlockId, Long> blockIdInfo = new Tuple2<>(shuffleBlockId, status.getSizeForBlock(part));
                 splitsByAddress.put(status.location(), blockIdInfo);
             }
         }

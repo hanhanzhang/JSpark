@@ -72,7 +72,7 @@ public class BlockManager implements BlockDataManager, BlockEvictionHandler {
 
     // Shuffle Block数据块存储服务地址、数据块存储服务客户端、数据块存储服务端口
     private BlockManagerId shuffleServerId;
-    private ShuffleClient shuffleClient;
+    public ShuffleClient shuffleClient;
     private int externalShuffleServicePort;
 
     private long maxFailuresBeforeLocationRefresh;

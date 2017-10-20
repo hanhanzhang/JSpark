@@ -318,10 +318,10 @@ public class DAGScheduler {
     }
 
     private ShuffleMapStage getOrCreateShuffleMapStage(ShuffleDependency<?, ?, ?> shuffleDep, int firstJobId) {
-        ShuffleMapStage stage = shuffleIdToMapStage.get(shuffleDep.shuffleId);
+        ShuffleMapStage stage = shuffleIdToMapStage.get(shuffleDep.shuffleId());
         if (stage == null) {
             getMissingAncestorShuffleDependencies(shuffleDep.rdd()).forEach(dep -> {
-                if (!shuffleIdToMapStage.containsKey(dep.shuffleId)) {
+                if (!shuffleIdToMapStage.containsKey(dep.shuffleId())) {
                     createShuffleMapStage(dep, firstJobId);
                 }
             });
@@ -342,7 +342,7 @@ public class DAGScheduler {
             if (!visited.contains(toVisit)) {
                 visited.add(toVisit);
                 getShuffleDependencies(toVisit).forEach(shuffleDep -> {
-                    if (!shuffleIdToMapStage.containsKey(shuffleDep.shuffleId)) {
+                    if (!shuffleIdToMapStage.containsKey(shuffleDep.shuffleId())) {
                         ancestors.push(shuffleDep);
                         waitingForVisit.push(shuffleDep.rdd());
                     }
@@ -361,14 +361,14 @@ public class DAGScheduler {
                 id, rdd, numTasks, parents, jobId, rdd.creationSite, shuffleDep, mapOutputTracker);
 
         stageIdToStage.put(id, stage);
-        shuffleIdToMapStage.put(shuffleDep.shuffleId, stage);
+        shuffleIdToMapStage.put(shuffleDep.shuffleId(), stage);
         updateJobIdStageIdMaps(jobId, Lists.newArrayList(stage));
 
-        if (!mapOutputTracker.containsShuffle(shuffleDep.shuffleId)) {
+        if (!mapOutputTracker.containsShuffle(shuffleDep.shuffleId())) {
             // Kind of ugly: need to register RDDs with the cache and map output tracker here
             // since we can't do it in the RDD constructor because # of partitions is unknown
             LOGGER.info("注册RDD[rddId = {}, callSite = {}]", rdd.id, rdd.creationSite.shortForm);
-            mapOutputTracker.registerShuffle(shuffleDep.shuffleId, rdd.partitions().size());
+            mapOutputTracker.registerShuffle(shuffleDep.shuffleId(), rdd.partitions().size());
         }
         return stage;
     }

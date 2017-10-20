@@ -29,9 +29,9 @@ public class Aggregator<K, V, C> implements Serializable {
     }
 
     /**
-     * 按照Key聚合Value, 生成集合
+     * 聚合Key对应Value(单条记录)
      * */
-    public Iterator<Tuple2<K, C>> combineValueByKey(Iterator<? extends Product2<K, V>> iter,
+    public Iterator<Tuple2<K, C>> combineValueByKey(Iterator<Product2<K, V>> iter,
                                                     TaskContext context) {
         ExternalAppendOnlyMap<K, V, C> combiners = new ExternalAppendOnlyMap<>(initial, merge, output);
         combiners.insertAll(iter);
@@ -41,7 +41,7 @@ public class Aggregator<K, V, C> implements Serializable {
 
 
     /**
-     * 按照Key聚合Value集合, 生成输出结果
+     * 聚合Key对应集合(多条记录)
      * */
     public Iterator<Tuple2<K, C>> combineCombinersByKey(Iterator<? extends Product2<K, C>> iter,
                                                         TaskContext context) {

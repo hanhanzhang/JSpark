@@ -7,4 +7,9 @@ public interface Serializer {
 
     SerializerInstance newInstance();
 
+    default boolean supportsRelocationOfSerializedObjects() {
+        return false;
+    }
+
+
 }

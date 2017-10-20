@@ -1,8 +1,10 @@
 package com.sdu.spark.shuffle.sort;
 
+import com.google.common.base.Preconditions;
 import com.sdu.spark.ShuffleDependency;
 import com.sdu.spark.SparkEnv;
 import com.sdu.spark.TaskContext;
+import com.sdu.spark.rpc.SparkConf;
 import com.sdu.spark.scheduler.MapStatus;
 import com.sdu.spark.shuffle.BaseShuffleHandle;
 import com.sdu.spark.shuffle.IndexShuffleBlockResolver;
@@ -13,6 +15,8 @@ import com.sdu.spark.utils.scala.Product2;
 import org.apache.commons.lang3.tuple.Pair;
 
 import java.util.Iterator;
+
+import static com.google.common.base.Preconditions.checkArgument;
 
 /**
  * @author hanhan.zhang
@@ -67,5 +71,14 @@ public class SortShuffleWriter<K, V, C> implements ShuffleWriter<K, V>{
                 sorter = null;
             }
         }
+    }
+
+    public static boolean shouldBypassMergeSort(SparkConf conf, ShuffleDependency<?, ?, ?> dep) {
+        if (dep.mapSideCombine) {   // map端需数据聚合
+            checkArgument(dep.aggregator == null, "Map-side combine without Aggregator specified!");
+            return false;
+        }
+        int bypassMergeThreshold = conf.getInt("spark.shuffle.sort.bypassMergeThreshold", 200);
+        return dep.partitioner.numPartitions() <= bypassMergeThreshold;
     }
 }

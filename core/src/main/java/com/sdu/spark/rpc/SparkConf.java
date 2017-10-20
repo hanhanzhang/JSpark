@@ -100,4 +100,8 @@ public class SparkConf implements Serializable {
     public String getSizeAsKb(String key, String defaultValue) {
         throw new UnsupportedOperationException("");
     }
+
+    public long getSizeAsMb(String key, String defaultValue) {
+        throw new UnsupportedOperationException("");
+    }
 }
