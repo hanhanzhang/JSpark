@@ -490,4 +490,8 @@ public class Utils {
             return new File[0];
         }
     }
+
+    public static File tempFileWith(File path) {
+        return new File(path.getAbsolutePath() + "." + UUID.randomUUID());
+    }
 }

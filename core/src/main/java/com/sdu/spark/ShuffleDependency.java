@@ -36,6 +36,8 @@ public class ShuffleDependency<K, V, C> extends Dependency<Product2<K, V>> {
         this.aggregator = aggregator;
         this.mapSideCombine = mapSideCombine;
 
+        this.shuffleId = rdd.context().newShuffleId();
+
         // TODO:  _rdd.sparkContext.cleaner.foreach(_.registerShuffleForCleanup(this))
     }
 
@@ -45,7 +47,6 @@ public class ShuffleDependency<K, V, C> extends Dependency<Product2<K, V>> {
     }
 
     public int shuffleId() {
-        this.shuffleId = rdd.context().newShuffleId();
         return this.shuffleId;
     }
 

@@ -29,6 +29,7 @@ import static com.sdu.spark.utils.Utils.getFutureResult;
 /**
  * @author hanhan.zhang
  * */
+@SuppressWarnings("unchecked")
 public class DAGScheduler {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(DAGScheduler.class);

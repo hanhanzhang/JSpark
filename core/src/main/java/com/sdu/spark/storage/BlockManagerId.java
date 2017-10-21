@@ -10,6 +10,12 @@ import java.io.ObjectOutput;
 import java.util.concurrent.ConcurrentMap;
 
 /**
+ * {@link BlockManagerId}记录Shuffle Block网络存储地址
+ *
+ * 1: {@link com.sdu.spark.scheduler.MapStatus}使用{@link BlockManagerId}标识Shuffle Block存储地址
+ *
+ * 2: {@link com.sdu.spark.shuffle.ShuffleWriter}写Shuffle Block并生成{@link com.sdu.spark.scheduler.MapStatus}
+ *
  * @author hanhan.zhang
  * */
 public class BlockManagerId implements Externalizable {

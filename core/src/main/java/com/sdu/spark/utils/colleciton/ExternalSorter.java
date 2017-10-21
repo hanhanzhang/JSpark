@@ -5,8 +5,10 @@ import com.sdu.spark.Partitioner;
 import com.sdu.spark.TaskContext;
 import com.sdu.spark.memory.MemoryConsumer;
 import com.sdu.spark.serializer.Serializer;
+import com.sdu.spark.storage.BlockId;
 import com.sdu.spark.utils.scala.Product2;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.Iterator;
 
@@ -35,6 +37,10 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
     }
 
     public void insertAll(Iterator<? extends Product2<K, V>> records) {
+        throw new UnsupportedOperationException("");
+    }
+
+    public long[] writePartitionedFile(BlockId blockId, File outputFile) {
         throw new UnsupportedOperationException("");
     }
 
