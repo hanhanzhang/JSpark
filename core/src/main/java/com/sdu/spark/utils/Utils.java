@@ -494,4 +494,8 @@ public class Utils {
     public static File tempFileWith(File path) {
         return new File(path.getAbsolutePath() + "." + UUID.randomUUID());
     }
+
+    public static String getUsedTimeMs(long startTimeMs) {
+        return (System.currentTimeMillis() - startTimeMs) + " ms";
+    }
 }

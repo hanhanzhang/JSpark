@@ -21,7 +21,7 @@ import java.nio.file.Files;
 /**
  * {@link IndexShuffleBlockResolver}负责Shuffle File创建及Shuffle数据读取
  *
- *  1: shuffle数据有两种文件: shuffle数据文件、shuffle索引文件
+ *  1: shuffle数据有两种文件: shuffle数据文件、shuffle索引文件(记录每个Block在数据文件中偏移量)
  *
  * @author hanhan.zhang
  * */
