@@ -83,11 +83,10 @@ public class BlockStoreShuffleReader<K, C> implements ShuffleReader<K, C> {
                 SparkEnv.env.conf.getBoolean("spark.shuffle.detectCorrupt", true)
         );
 
-        SerializerInstance ser = handle.dependency.serializer.newInstance();
+        SerializerInstance ser = dep.serializer.newInstance();
         // Java不支持Iterator.flatMap, 还是Scala方便
         List<Tuple2<Object, Object>> records = Lists.newLinkedList();
         while (wrappedStreams.hasNext()) {
-            Tuple2<BlockId, InputStream> blockData = wrappedStreams.next();
             try {
                 InputStream wrappedStream = wrappedStreams.next()._2();
                 Iterator<Tuple2<Object, Object>> recIter = ser.deserializeStream(wrappedStream).asKeyValueIterator();

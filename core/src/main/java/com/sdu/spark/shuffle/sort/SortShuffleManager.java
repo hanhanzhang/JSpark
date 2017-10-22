@@ -75,7 +75,7 @@ public class SortShuffleManager implements ShuffleManager {
         numMapsForShuffle.putIfAbsent(handle.shuffleId, ((BaseShuffleHandle) handle).numMaps);
         SparkEnv env = SparkEnv.env;
         if (handle instanceof SerializedShuffleHandle) {
-            return new UnsafeShuffleWriter<K, V>(
+            return new UnsafeShuffleWriter<>(
                     env.blockManager,
                     shuffleBlockResolver,
                     context.taskMemoryManager(),
@@ -128,7 +128,7 @@ public class SortShuffleManager implements ShuffleManager {
 
     @Override
     public ShuffleBlockResolver shuffleBlockResolver() {
-        return null;
+        return shuffleBlockResolver;
     }
 
     @Override

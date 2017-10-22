@@ -44,6 +44,10 @@ public class SizeTracker {
      * */
     private long nextSampleNum;
 
+    public SizeTracker() {
+        this.tracker = this;
+    }
+
     public SizeTracker(Object tracker) {
         assert tracker != null;
         this.tracker = tracker;

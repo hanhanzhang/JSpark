@@ -27,20 +27,16 @@ public class AppendOnlyMap<K, V> implements Iterable<Tuple2<K, V>>, Serializable
     private static final int MAXIMUM_CAPACITY = 1 << 29;
     private static final float LOAD_FACTOR = 0.7f;
 
-    private int initialCapacity;
     /**map real capacity must be 2^n*/
     private int capacity;
+    /**mask = capacity - 1, 计算hash值*/
     private int mask;
     private int curSize;
     private int growThreshold;
 
-    /**
-     * Holds keys and values in the same array for memory locality; specifically, the order of
-     * elements is key0, value0, key1, value1, key2, value2, etc.
-     * */
+    /**偶数 = key, 奇数 = value*/
     private Object[] data;
 
-    // Treat the null key differently so we can use nulls in "data" to represent empty items.
     private boolean haveNullValue = false;
     private V nullValue= null;
 
@@ -53,10 +49,9 @@ public class AppendOnlyMap<K, V> implements Iterable<Tuple2<K, V>>, Serializable
     }
 
     public AppendOnlyMap(int initialCapacity) {
-        this.initialCapacity = initialCapacity;
 
-        checkArgument(initialCapacity <= MAXIMUM_CAPACITY, String.format("Can't make capacity bigger than %d elements", MAXIMUM_CAPACITY));
-        checkArgument(initialCapacity >= 1, "Invalid initial capacity");
+        checkArgument(initialCapacity >= MAXIMUM_CAPACITY, String.format("Can't make capacity bigger than %d elements", MAXIMUM_CAPACITY));
+        checkArgument(initialCapacity <= 1, "Invalid initial capacity");
 
         this.capacity = nextPowerOf2(initialCapacity);
         this.mask = capacity -1;
@@ -70,18 +65,17 @@ public class AppendOnlyMap<K, V> implements Iterable<Tuple2<K, V>>, Serializable
     public V apply(K key) {
         checkArgument(destroyed, destructionMessage);
         if (key == null) {
-            return null;
+            return nullValue;
         }
 
         int pos = rehash(key.hashCode()) & mask;
         int i = 1;
         while (true) {
             K curKey = (K) data[2 * pos];
-            if (curKey == null) {
-                return null;
-            }
-            if (curKey.equals(key)) {
+            if (key.equals(curKey)) {
                 return (V) data[2 * pos + 1];
+            } else if (curKey == null) {
+                return null;
             } else {
                 int delta = i;
                 pos = (pos + delta) & mask;
@@ -112,7 +106,7 @@ public class AppendOnlyMap<K, V> implements Iterable<Tuple2<K, V>>, Serializable
                 data[2 * pos] = key;
                 data[2 * pos + 1] = value;
                 incrementSize();
-                break;
+                return;
             } else if (curKey.equals(key)) {
                 data[2 * pos + 1] = value;
                 break;
@@ -132,7 +126,7 @@ public class AppendOnlyMap<K, V> implements Iterable<Tuple2<K, V>>, Serializable
     public V changeValue(K key, Updater<V> updater) {
         checkArgument(destroyed, destructionMessage);
         if (key == null) {
-            if (haveNullValue) {
+            if (!haveNullValue) {
                 incrementSize();
             }
             nullValue = updater.updateFunc(haveNullValue, nullValue);
@@ -144,7 +138,7 @@ public class AppendOnlyMap<K, V> implements Iterable<Tuple2<K, V>>, Serializable
         int i = 0;
         while (true) {
             K curKey = (K) data[pos * 2];
-            if (curKey == null) {
+            if (curKey == null) {       // key不存在, value肯定为null
                 V newValue = updater.updateFunc(false, nullValue);
                 data[2 * pos] = key;
                 data[2 * pos + 1] = newValue;
@@ -152,7 +146,7 @@ public class AppendOnlyMap<K, V> implements Iterable<Tuple2<K, V>>, Serializable
                 return newValue;
             } else if (curKey.equals(key)) {
                 V newValue = updater.updateFunc(true, (V) data[2 * pos + 1]);
-                data[2 * pos + 1] = updater.updateFunc(true, newValue);
+                data[2 * pos + 1] = newValue;
                 return newValue;
             } else {
                 int delta = i;
@@ -295,6 +289,7 @@ public class AppendOnlyMap<K, V> implements Iterable<Tuple2<K, V>>, Serializable
             @Override
             public Tuple2<K, V> next() {
                 if (nullValueReady) {
+                    nullValueReady = false;
                     return new Tuple2<>(null, nullValue);
                 } else {
                     Tuple2<K, V> item = new Tuple2<>((K) data[i * 2], (V) data[i * 2 + 1]);
