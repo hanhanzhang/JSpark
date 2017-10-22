@@ -4,23 +4,30 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
+import com.sdu.spark.SparkException;
 import com.sdu.spark.TaskContext;
+import com.sdu.spark.network.buffer.FileSegmentManagedBuffer;
 import com.sdu.spark.network.buffer.ManagedBuffer;
 import com.sdu.spark.network.shuffle.BlockFetchingListener;
+import com.sdu.spark.network.shuffle.OneForOneBlockFetcher;
 import com.sdu.spark.network.shuffle.ShuffleClient;
 import com.sdu.spark.network.shuffle.TempShuffleFileManager;
 import com.sdu.spark.storage.BlockException;
 import com.sdu.spark.storage.BlockId;
+import com.sdu.spark.storage.BlockId.ShuffleBlockId;
 import com.sdu.spark.storage.BlockManager;
 import com.sdu.spark.storage.BlockManagerId;
 import com.sdu.spark.utils.Utils;
+import com.sdu.spark.utils.io.ChunkedByteBufferOutputStream;
 import com.sdu.spark.utils.scala.Tuple2;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.Serializable;
+import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.stream.Collectors;
@@ -30,10 +37,51 @@ import static com.sdu.spark.utils.Utils.getUsedTimeMs;
 /**
  * {@link ShuffleBlockFetcherIterator}负责Shuffle Block数据读取
  *
- * 1: {@link #initialize()} 启动Block数据块请求
+ * 1: ShuffleBlockFetcherIterator构造函数会初始化Shuffle Block数据块拉取请求(拆分本进程数据块拉取和跨进程数据块拉取), 对于跨进程
+ *
+ *    Shuffle Block数据块请求构建{@link FetchRequest}
+ *
+ * 2: ShuffleBlockFetcherIterator构造函数出启动对Shuffle Block数据块拉取
+ *
+ *    1': {@link #fetchLocalBlocks()}
+ *
+ *      拉取本进程Shuffle Block数据({@link BlockManager#getBlockData(BlockId)})
+ *
+ *    2': {@link #fetchUpToMaxBytes()}
+ *
+ *      拉取跨进程Shuffle Block数据({@link ShuffleClient#fetchBlocks(String, int, String, String[], BlockFetchingListener, TempShuffleFileManager)})
+ *
+ * 3: Shuffle Block数据拉取限流
+ *
+ *    1': {@link #maxBytesInFlight}
+ *
+ *      'spark.reducer.maxSizeInFlight'控制Shuffle Block最大拉取数据字节数, {@link #bytesInFlight}标识ShuffleBlockFetcherIterator
+ *
+ *       当前Shuffle Block数据拉取字节数
+ *
+ *    2': {@link #maxReqsInFlight}
+ *
+ *      'spark.reducer.maxReqsInFlight'控制Shuffle Block最大拉取数量, {@link #reqsInFlight}标识ShuffleBlockFetcherIterator
+ *
+ *      当前Shuffle Block数据拉取数量
+ *
+ *    3': {@link #maxBlocksInFlightPerAddress}
+ *
+ *      'spark.reducer.maxBlocksInFlightPerAddress'控制对Executor拉取Shuffle Block最大数量, {@link #numBlocksInFlightPerAddress}
+ *
+ *      维护对每个Executor已进行的Shuffle Block拉取数量
+ *
+ *  4: Shuffle Block数据传输实现
+ *
+ *    {@link OneForOneBlockFetcher#start()}请求Shuffle Blocks并将数据陆地磁盘{@link #shuffleFilesSet}
+ *
+ *  5: Shuffle Block数据拉取结果由{@link #results}记录, {@link SuccessFetchResult#buf}类型为{@link FileSegmentManagedBuffer},
+ *
+ *    {@link FileSegmentManagedBuffer#file}为Shuffle Block数据落地磁盘文件
  *
  * @author hanhan.zhang
  * */
+@SuppressWarnings("ConstantConditions")
 public class ShuffleBlockFetcherIterator implements TempShuffleFileManager, Iterator<Tuple2<BlockId, InputStream>> {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ShuffleBlockFetcherIterator.class);
@@ -45,56 +93,53 @@ public class ShuffleBlockFetcherIterator implements TempShuffleFileManager, Iter
     private ResultWrapper wrapper;
 
     /**
-     * Block请求起始时间
+     * Shuffle Block请求起始时间
      * */
     private long startTime;
 
     /**
-     * 每次网络传输Block数据最大字节数
+     * 网络传输Shuffle Block数据最大字节数
      * */
     private long maxBytesInFlight;
     private long maxReqsInFlight;
     /**
-     * 每个Executor能接收最大Block数的请求
+     * Executor接收Shuffle Block最大请求数量
      * */
     private int maxBlocksInFlightPerAddress;
     private long maxReqSizeShuffleToMem;
     private boolean detectCorrupt;
 
-    /**Block数请求量*/
+    /**Shuffle Block拉取数量, numBlocksToFetch = localBlocks.size + remoteBlocks.size*/
     private int numBlocksToFetch = 0;
-    /**本进程(即同一个Executor)请求的Block集合*/
+    /**本进程(即同Executor)Shuffle Block数据拉取集合*/
     private List<BlockId> localBlocks = Lists.newLinkedList();
-    /**跨进程(即不同Executor)请求的Block集合*/
+    /**跨进程(即不同Executor)Shuffle Block数据拉取集合*/
     private List<BlockId> remoteBlocks = Lists.newLinkedList();
-    /**跨进程Block数据请求*/
+    /**跨进程Shuffle Block数据拉取请求*/
     private Queue<FetchRequest> fetchRequests = new LinkedBlockingQueue<>();
-    /**每个Executor已请求Block数量*/
+    /**Key = Executor, value = 已发起Shuffle Block拉取数量*/
     private Map<BlockManagerId, Integer> numBlocksInFlightPerAddress = Maps.newHashMap();
     private Map<BlockManagerId, Queue<FetchRequest>> deferredFetchRequests = Maps.newHashMap();
 
-    /**正在请求中的Block数据*/
+    /**当前Shuffle Block数据拉取结果*/
     private volatile SuccessFetchResult currentResult = null;
-    /**正在请求数据量*/
+    /**当前Shuffle Block数据拉取字节数*/
     private long bytesInFlight = 0L;
-    /**正在请求Block数量*/
+    /**当前拉取Shuffle Block数量*/
     private long reqsInFlight = 0;
 
-    /**
-     * 存储数据比较大Shuffle Block文件
-     * */
+    /**Shuffle Block拉取数据块遍历用(标识已遍历Shuffle Block数量)*/
+    private int numBlocksProcessed = 0;
+    /**Shuffle Block*/
+    private Set<BlockId> corruptedBlocks = Sets.newHashSet();
+
+    /**Shuffle Block数据拉取后落地磁盘文件集合*/
     private Set<File> shuffleFilesSet = Sets.newHashSet();
 
-    /**
-     * A queue to hold our results. This turns the asynchronous model provided by
-     * {@link com.sdu.spark.network.BlockTransferService} into a synchronous model (iterator).
-     * */
+    /**Shuffle Block数据拉取结果集合, Shuffle Block遍历集合*/
     private Queue<FetchResult> results = new LinkedBlockingQueue<>();
 
-    /**
-     * Whether the iterator is still active. If isZombie is true, the callback interface will no
-     * longer place fetched blocks into {@link #results}.
-     * */
+    /**标识Shuffle Block拉取是否处于激活状态*/
     private boolean isZombie = false;
 
     /**
@@ -272,7 +317,7 @@ public class ShuffleBlockFetcherIterator implements TempShuffleFileManager, Iter
     private boolean isRemoteBlockFetchable(Queue<FetchRequest> fetchReqQueue) {
         return fetchReqQueue.size() > 0 &&
                 (bytesInFlight == 0 ||
-                        (bytesInFlight + 1 <= maxReqsInFlight &&
+                        (reqsInFlight + 1 <= maxReqsInFlight &&
                             bytesInFlight + fetchReqQueue.peek().size <= maxBytesInFlight));
     }
 
@@ -342,12 +387,21 @@ public class ShuffleBlockFetcherIterator implements TempShuffleFileManager, Iter
 
     @Override
     public File createTempShuffleFile() {
-        return null;
+        try {
+            return blockManager.diskBlockManager.createTempLocalBlock()._2();
+        } catch (IOException e) {
+            throw new SparkException("create tmp shuffle file failure", e);
+        }
     }
 
     @Override
     public boolean registerTempShuffleFileToClean(File file) {
-        return false;
+        if (isZombie) {
+            return false;
+        } else {
+            shuffleFilesSet.add(file);
+            return true;
+        }
     }
 
     /**
@@ -375,14 +429,110 @@ public class ShuffleBlockFetcherIterator implements TempShuffleFileManager, Iter
 
     }
 
-    @Override
-    public boolean hasNext() {
-        return false;
+    private void throwFetchFailedException(BlockId blockId, BlockManagerId address, Throwable e) {
+        if (blockId instanceof ShuffleBlockId) {
+            ShuffleBlockId shuffleBlockId = (ShuffleBlockId) blockId;
+            throw new FetchFailedException(address,
+                                           shuffleBlockId.shuffleId,
+                                           shuffleBlockId.mapId,
+                                           shuffleBlockId.reduceId,
+                                           e);
+        } else {
+            throw new SparkException("Failed to get block " + blockId + ", which is not a shuffle block", e);
+        }
     }
 
     @Override
+    public boolean hasNext() {
+        return numBlocksProcessed < numBlocksToFetch;
+    }
+
+    @SuppressWarnings("unchecked")
+    @Override
     public Tuple2<BlockId, InputStream> next() {
-        return null;
+        if (!hasNext()) {
+            throw new NoSuchElementException();
+        }
+        numBlocksProcessed += 1;
+        FetchResult result = null;
+        InputStream input = null;
+
+        while (result == null) {
+            long startFetchWait = System.currentTimeMillis();
+            result = results.poll();
+            long stopFetchWait = System.currentTimeMillis();
+            // TODO: Shuffle Metric
+            LOGGER.debug("shuffle fetch wait cost {}ms", stopFetchWait - startFetchWait);
+
+            if (result instanceof SuccessFetchResult) {
+                SuccessFetchResult fetchResult = (SuccessFetchResult) result;
+                if (!fetchResult.address.equals(blockManager.blockManagerId)) {  //跨进程请求
+                    int reqBlocks = numBlocksInFlightPerAddress.get(fetchResult.address);
+                    reqBlocks -= 1;
+                    numBlocksInFlightPerAddress.put(fetchResult.address, reqBlocks);
+                    // TODO: Shuffle Metric
+                }
+                bytesInFlight -= fetchResult.size;
+                if (fetchResult.isNetworkReqDone) {             // BlockManagerId的Shuffle Block全部请求完成
+                    reqsInFlight -= 1;
+                    LOGGER.debug("Number of requests in flight {}", reqsInFlight);
+                }
+
+                InputStream in = null;
+                try {
+                    in = fetchResult.buf.createInputStream();
+                } catch (IOException e) {
+                    assert fetchResult.buf instanceof FileSegmentManagedBuffer;
+                    LOGGER.error("Failed to create input stream from local block", e);
+                    fetchResult.buf.release();
+                    throwFetchFailedException(fetchResult.blockId, fetchResult.address, e);
+                }
+
+                InputStream inputStream = wrapper.streamWrapper(fetchResult.blockId, in);
+                // Only copy the stream if it's wrapped by compression or encryption, also the size of
+                // block is small (the decompressed block is smaller than maxBytesInFlight)
+                if (detectCorrupt && !inputStream.equals(in) && fetchResult.size < maxBytesInFlight / 3) {
+                    ChunkedByteBufferOutputStream out = new ChunkedByteBufferOutputStream(64 * 1024, ByteBuffer::allocate);
+                    try {
+                        // Decompress the whole block at once to detect any corruption, which could increase
+                        // the memory usage tne potential increase the chance of OOM.
+                        // TODO: manage the memory used here, and spill it into disk in case of OOM.
+                        Utils.copyStream(input, out, false);
+                        out.close();
+                        input = out.toChunkedByteBuffer().toInputStream(true);
+                    } catch (IOException e) {
+                        fetchResult.buf.release();
+                        if (fetchResult.buf instanceof FileSegmentManagedBuffer ||
+                                corruptedBlocks.contains(fetchResult.blockId)) {
+                            throwFetchFailedException(fetchResult.blockId, fetchResult.address, e);
+                        } else {
+                            LOGGER.warn("got an corrupted block {} from {}, fetch again",
+                                        fetchResult.blockId, fetchResult.address, e);
+                            corruptedBlocks.add(fetchResult.blockId);
+                            List<Tuple2<BlockId, Long>> blocks = Lists.newArrayList(new Tuple2<>(fetchResult.blockId, fetchResult.size));
+                            fetchRequests.add(new FetchRequest(fetchResult.address, blocks));
+                            result = null;
+                        }
+                    } finally {
+                        // TODO: release the buf here to free memory earlier
+                        try {
+                            inputStream.close();
+                            in.close();
+                        } catch (IOException e) {
+                            // ignore
+                        }
+                    }
+                }
+
+            } else if (result instanceof FailureFetchResult) {
+                FailureFetchResult failureFetchResult = (FailureFetchResult) result;
+                throwFetchFailedException(result.blockId, result.address, failureFetchResult.e);
+            }
+
+            fetchUpToMaxBytes();
+        }
+        currentResult = (SuccessFetchResult) result;
+        return new Tuple2<>(currentResult.blockId, new BufferReleasingInputStream(input, this));
     }
 
     private class FetchRequest implements Serializable {
@@ -455,6 +605,70 @@ public class ShuffleBlockFetcherIterator implements TempShuffleFileManager, Iter
             super(blockId, address);
             this.e = e;
         }
+    }
+
+    private class BufferReleasingInputStream extends InputStream {
+
+        InputStream delegate;
+        ShuffleBlockFetcherIterator iterator;
+
+        boolean closed = false;
+
+        BufferReleasingInputStream(InputStream delegate,
+                                          ShuffleBlockFetcherIterator iterator) {
+            this.delegate = delegate;
+            this.iterator = iterator;
+        }
+
+        @Override
+        public int read() throws IOException {
+            return 0;
+        }
+
+        @Override
+        public int available() throws IOException {
+            return delegate.available();
+        }
+
+        @Override
+        public synchronized void mark(int readlimit) {
+            delegate.mark(readlimit);
+        }
+
+        @Override
+        public long skip(long n) throws IOException {
+            return delegate.skip(n);
+        }
+
+        @Override
+        public boolean markSupported() {
+            return delegate.markSupported();
+        }
+
+        @Override
+        public int read(byte[] b) throws IOException {
+            return delegate.read(b);
+        }
+
+        @Override
+        public int read(byte[] b, int off, int len) throws IOException {
+            return delegate.read(b, off, len);
+        }
+
+        @Override
+        public void close() throws IOException {
+            if (!closed) {
+                delegate.close();
+                iterator.releaseCurrentResultBuffer();
+                closed = true;
+            }
+        }
+
+        @Override
+        public synchronized void reset() throws IOException {
+            delegate.reset();
+        }
+
     }
 
     public interface ResultWrapper {

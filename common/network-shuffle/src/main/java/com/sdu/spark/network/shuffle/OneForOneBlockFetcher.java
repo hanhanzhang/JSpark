@@ -138,6 +138,7 @@ public class OneForOneBlockFetcher {
             ManagedBuffer buffer = new FileSegmentManagedBuffer(transportConf, targetFile, 0, targetFile.length());
             listener.onBlockFetchSuccess(blockIds[chunkIndex], buffer);
             if (!tempShuffleFileManager.registerTempShuffleFileToClean(targetFile)) {
+                // 使用方不处理Shuffle Block数据文件, 由自身对Shuffle Block文件做删除操作
                 targetFile.delete();
             }
         }
