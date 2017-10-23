@@ -310,7 +310,7 @@ public class SparkSubmitArguments extends SparkSubmitArgumentsParser {
                 " YARN-only:\n" +
                 "  --queue QUEUE_NAME          The YARN queue to submit to (Default: \"default\").\n" +
                 "  --num-executors NUM         Number of executors to launch (Default: 2).\n" +
-                "                              If dynamic allocation is enabled, the initial number of\n" +
+                "                              If dynamic allocation is enabled, the initialCollection number of\n" +
                 "                              executors will be at least NUM.\n" +
                 "  --archives ARCHIVES         Comma separated list of archives to be extracted into the\n" +
                 "                              working directory of each executor.\n" +

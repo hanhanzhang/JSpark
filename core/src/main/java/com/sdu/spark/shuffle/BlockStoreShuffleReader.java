@@ -1,5 +1,6 @@
 package com.sdu.spark.shuffle;
 
+import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.sdu.spark.*;
 import com.sdu.spark.serializer.SerializerInstance;
@@ -90,9 +91,7 @@ public class BlockStoreShuffleReader<K, C> implements ShuffleReader<K, C> {
             try {
                 InputStream wrappedStream = wrappedStreams.next()._2();
                 Iterator<Tuple2<Object, Object>> recIter = ser.deserializeStream(wrappedStream).asKeyValueIterator();
-                while (recIter.hasNext()) {
-                    records.add(recIter.next());
-                }
+                Iterators.addAll(records, recIter);
             } catch (IOException e) {
                 String msg = "deserialize failure";
                 LOGGER.error(msg, e);
@@ -128,12 +127,12 @@ public class BlockStoreShuffleReader<K, C> implements ShuffleReader<K, C> {
         }
 
         // Shuffle Block数据排序(Sort)
-        if (dep.keyOrdering) {
+        if (dep.keyOrdering != null) {
             ExternalSorter<K, C, C> sorter = new ExternalSorter<>(
                     context,
                     null,
                     null,
-                    true,
+                    dep.keyOrdering,
                     dep.serializer
             );
             sorter.insertAll(aggregatedIter);

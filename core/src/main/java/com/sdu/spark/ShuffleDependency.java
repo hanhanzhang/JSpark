@@ -5,6 +5,8 @@ import com.sdu.spark.serializer.Serializer;
 import com.sdu.spark.shuffle.ShuffleHandle;
 import com.sdu.spark.utils.scala.Product2;
 
+import java.util.Comparator;
+
 /**
  * @author hanhan.zhang
  * */
@@ -13,20 +15,20 @@ public class ShuffleDependency<K, V, C> extends Dependency<Product2<K, V>> {
     public transient RDD<Product2<K, V>> rdd;
     public Partitioner partitioner;
     public Serializer serializer;
-    public boolean keyOrdering;
+    public Comparator<K> keyOrdering;
     public Aggregator<K, V, C> aggregator;
     public boolean mapSideCombine;
     private int shuffleId;
 
     public ShuffleDependency(RDD<Product2<K, V>> rdd,
                              Partitioner partitioner) {
-        this(rdd, partitioner, SparkEnv.env.serializer, false, null, true);
+        this(rdd, partitioner, SparkEnv.env.serializer, null, null, true);
     }
 
     public ShuffleDependency(RDD<Product2<K, V>> rdd,
                              Partitioner partitioner,
                              Serializer serializer,
-                             boolean keyOrdering,
+                             Comparator<K> keyOrdering,
                              Aggregator<K, V, C> aggregator,
                              boolean mapSideCombine) {
         this.rdd = rdd;

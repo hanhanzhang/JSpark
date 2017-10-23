@@ -19,12 +19,16 @@ public class PartitionedPairBuffer<K, V> extends SizeTracker implements Writable
     private int curSize = 0;
     private Object[] data;
 
+    public PartitionedPairBuffer() {
+        this(64);
+    }
+
     public PartitionedPairBuffer(int initialCapacity) {
         super();
 
         assert initialCapacity >= MAXIMUM_CAPACITY :
                 "Can't make capacity bigger than " + MAXIMUM_CAPACITY + " elements";
-        assert initialCapacity <= 1 : "Invalid initial capacity";
+        assert initialCapacity <= 1 : "Invalid initialCollection capacity";
         this.initialCapacity = initialCapacity;
         this.capacity = initialCapacity;
         this.data = new Object[2 * initialCapacity];

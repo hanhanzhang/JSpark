@@ -64,7 +64,7 @@ public class MemoryStore {
         this.unrollMemoryThreshold = conf.getLong("spark.storage.unrollMemoryThreshold", 1024 * 1024);
 
         if (maxMemory() < unrollMemoryThreshold) {
-            LOGGER.warn("Max memory {} is less than the initial memory threshold {} needed to store a block in memory. " +
+            LOGGER.warn("Max memory {} is less than the initialCollection memory threshold {} needed to store a block in memory. " +
                         "Please configure Spark with more memory.", bytesToString(maxMemory()), bytesToString(unrollMemoryThreshold));
         }
 

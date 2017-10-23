@@ -142,7 +142,7 @@ public class DiskBlockManager {
     }
 
     /** Produces a unique block id and File suitable for storing shuffled intermediate results. */
-    public Tuple2<TempShuffleBlockId, File> createTempShuffleBlock() throws IOException {
+    public Tuple2<BlockId, File> createTempShuffleBlock() {
         BlockId.TempShuffleBlockId blockId = new BlockId.TempShuffleBlockId(UUID.randomUUID());
         while (getFile(blockId).exists()) {
             blockId = new BlockId.TempShuffleBlockId(UUID.randomUUID());

@@ -3,13 +3,12 @@ package com.sdu.spark.utils.colleciton;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.io.ByteStreams;
-import com.sdu.spark.Aggregator.CreateAggregatorInitialValue;
-import com.sdu.spark.Aggregator.CreateAggregatorMergeValue;
-import com.sdu.spark.Aggregator.CreateAggregatorOutput;
+import com.sdu.spark.Aggregator.InitialCollection;
+import com.sdu.spark.Aggregator.AppendValue;
+import com.sdu.spark.Aggregator.CollectionToOutput;
 import com.sdu.spark.SparkEnv;
 import com.sdu.spark.SparkException;
 import com.sdu.spark.TaskContext;
-import com.sdu.spark.memory.MemoryConsumer;
 import com.sdu.spark.rpc.SparkConf;
 import com.sdu.spark.serializer.DeserializationStream;
 import com.sdu.spark.serializer.Serializer;
@@ -32,7 +31,7 @@ import java.nio.file.StandardOpenOption;
 import java.util.*;
 
 /**
- * {@link ExternalAppendOnlyMap}类似Hadoop MapReduce中shuffle-merge-combine-sort过程
+ * {@link ExternalAppendOnlyMap}类似Hadoop MapReduce中shuffle-appendValue-combine-sort过程
  *
  * 1: {@link #currentMap}维护内存中Key-Value数据信息(每次插入/更新操作都会触发估算内存占用量, 超过阈值Spill内存数据到Disk)
  *
@@ -50,9 +49,9 @@ public class ExternalAppendOnlyMap<K, V, C> extends Spillable<AppendOnlyMap<K, C
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ExternalAppendOnlyMap.class);
 
-    private CreateAggregatorInitialValue<V, C> initial;
-    private CreateAggregatorMergeValue<V, C> merge;
-    private CreateAggregatorOutput<C> output;
+    private InitialCollection<V, C> initial;
+    private AppendValue<V, C> merge;
+    private CollectionToOutput<C> output;
 
     private Serializer serializer;
     private BlockManager blockManager;
@@ -73,9 +72,9 @@ public class ExternalAppendOnlyMap<K, V, C> extends Spillable<AppendOnlyMap<K, C
     private Comparator<K> keyComparator;
     private SpillableIterator readingIterator;
 
-    public ExternalAppendOnlyMap(CreateAggregatorInitialValue<V, C> initial,
-                                 CreateAggregatorMergeValue<V, C> merge,
-                                 CreateAggregatorOutput<C> output) {
+    public ExternalAppendOnlyMap(InitialCollection<V, C> initial,
+                                 AppendValue<V, C> merge,
+                                 CollectionToOutput<C> output) {
         super(TaskContext.get().taskMemoryManager());
 
         this.initial = initial;
@@ -512,9 +511,9 @@ public class ExternalAppendOnlyMap<K, V, C> extends Spillable<AppendOnlyMap<K, C
         @Override
         public C updateFunc(boolean hadValue, C value) {
             if (hadValue) {
-                return merge.mergeValue(curEntry._2(), value);
+                return merge.appendValue(curEntry._2(), value);
             }
-            return initial.createCombiner(curEntry._2());
+            return initial.createCollection(curEntry._2());
         }
     }
 }
