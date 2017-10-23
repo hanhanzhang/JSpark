@@ -2,22 +2,22 @@ package com.sdu.spark.utils.colleciton;
 
 import com.sdu.spark.SparkEnv;
 import com.sdu.spark.memory.MemoryConsumer;
+import com.sdu.spark.memory.MemoryMode;
 import com.sdu.spark.memory.TaskMemoryManager;
 import com.sdu.spark.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+
 /**
- * Spills contents of an in-memory collection to disk when the memory threshold
- * has been exceeded.
+ * {@link Spillable}负责将内存数据超过一定阈值或一定数目后落地磁盘
  *
  * @author hanhan.zhang
  * */
 public abstract class Spillable<C> extends MemoryConsumer {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(Spillable.class);
-
-    protected TaskMemoryManager taskMemoryManager;
 
     // Initial threshold for the size of a collection before we start tracking its memory usage
     // For testing only
@@ -37,17 +37,12 @@ public abstract class Spillable<C> extends MemoryConsumer {
 
     public Spillable(TaskMemoryManager taskMemoryManager) {
         super(taskMemoryManager);
-        this.taskMemoryManager = taskMemoryManager;
 
         this.initialMemoryThreshold = SparkEnv.env.conf.getLong("spark.shuffle.spill.initialMemoryThreshold",
                                                                 5 * 1024 * 1024);
         this.numElementsForceSpillThreshold = SparkEnv.env.conf.getLong("spark.shuffle.spill.numElementsForceSpillThreshold",
                                                                         Long.MAX_VALUE);
         this.myMemoryThreshold = initialMemoryThreshold;
-    }
-
-    public long elementsRead() {
-        return elementsRead;
     }
 
     public void addElementsRead() {
@@ -82,6 +77,21 @@ public abstract class Spillable<C> extends MemoryConsumer {
             releaseMemory();
         }
         return shouldSpill;
+    }
+
+    @Override
+    public long spill(long size, MemoryConsumer trigger) throws IOException {
+        if (trigger != this && taskMemoryManager.getTungstenMemoryMode() == MemoryMode.ON_HEAP) {
+            boolean isSpilled = forceSpill();
+            if (!isSpilled) {
+                return 0L;
+            }
+            long freeMemory = myMemoryThreshold - initialMemoryThreshold;
+            memoryBytesSpilled += freeMemory;
+            releaseMemory();
+            return freeMemory;
+        }
+        return 0L;
     }
 
     /**

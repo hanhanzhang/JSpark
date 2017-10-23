@@ -113,11 +113,6 @@ public class ExternalAppendOnlyMap<K, V, C> extends Spillable<AppendOnlyMap<K, C
         return spilledMaps.size();
     }
 
-    @Override
-    public long spill(long size, MemoryConsumer trigger) throws IOException {
-        return 0;
-    }
-
     /**
      * Force to spilling the current in-memory collection to disk to release memory,
      * It will be called by TaskMemoryManager when there is not enough memory for the task.

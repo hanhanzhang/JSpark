@@ -10,7 +10,7 @@ import java.io.IOException;
  * */
 public abstract class MemoryConsumer {
 
-    private TaskMemoryManager taskMemoryManager;
+    protected TaskMemoryManager taskMemoryManager;
     private long pageSize;
     private MemoryMode mode;
     protected long used;

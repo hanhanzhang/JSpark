@@ -49,11 +49,6 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
     }
 
     @Override
-    public long spill(long size, MemoryConsumer trigger) throws IOException {
-        return 0;
-    }
-
-    @Override
     public boolean forceSpill() {
         return false;
     }
