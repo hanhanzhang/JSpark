@@ -415,8 +415,16 @@ public class BlockManager implements BlockDataManager, BlockEvictionHandler {
     public DiskBlockObjectWriter getDiskWriter(BlockId blockId,
                                                File file,
                                                SerializerInstance serializerInstance,
-                                               int buffsizee) {
-        throw new UnsupportedOperationException("");
+                                               int bufferSize) {
+        boolean syncWrites = conf.getBoolean("spark.shuffle.sync", false);
+        return new DiskBlockObjectWriter(
+                file,
+                serializerManager,
+                serializerInstance,
+                bufferSize,
+                syncWrites,
+                blockId
+        );
     }
 
     public boolean putBytes(BlockId blockId, ChunkedByteBuffer bytes, StorageLevel level) {
