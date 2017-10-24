@@ -1,5 +1,6 @@
 package com.sdu.spark.utils.colleciton;
 
+import com.google.common.base.Function;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.io.ByteStreams;
@@ -20,12 +21,10 @@ import java.io.*;
 import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.file.StandardOpenOption;
-import java.util.Comparator;
-import java.util.Iterator;
-import java.util.List;
-import java.util.NoSuchElementException;
+import java.util.*;
 import java.util.stream.Collectors;
 
+import static com.sdu.spark.utils.Utils.bytesToString;
 import static org.apache.commons.lang3.math.NumberUtils.toInt;
 
 /**
@@ -225,11 +224,14 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
     public boolean forceSpill() {
         if (isShuffleSort) {
             return false;
-        } else {
-            assert readingIterator != null;
-            // TODO:  
         }
-        return false;
+        assert readingIterator != null;
+        boolean isSpilled = readingIterator.spill();
+        if (isSpilled) {
+            map = null;
+            buffer = null;
+        }
+        return isSpilled;
     }
 
     @Override
@@ -355,14 +357,127 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
 
     private Iterator<Tuple2<K, C>> mergeSort(List<Iterator<Tuple2<K, C>>> iterators,
                                              Comparator<K> comparator) {
-        throw new UnsupportedOperationException("");
+        List<BufferedIterator<Tuple2<K, C>>> bufferedIterators = iterators.stream()
+                                                                          .filter(Iterator::hasNext)
+                                                                          .map(BufferedIterator::new)
+                                                                          .collect(Collectors.toList());
+        PriorityQueue<BufferedIterator<Tuple2<K, C>>> heap = new PriorityQueue<>((x, y) -> -comparator.compare(x.head()._1(), y.head()._1()));
+        bufferedIterators.forEach(heap::add);
+        return new Iterator<Tuple2<K, C>>() {
+            @Override
+            public boolean hasNext() {
+                return heap.size() > 0;
+            }
+
+            @Override
+            public Tuple2<K, C> next() {
+                if (hasNext()) {
+                    BufferedIterator<Tuple2<K, C>> firstBuf = heap.poll();
+                    Tuple2<K, C> firstPair = firstBuf.next();
+                    if (firstBuf.hasNext()) {
+                        heap.add(firstBuf);
+                    }
+                    return firstPair;
+                }
+                throw new NoSuchElementException();
+            }
+        };
     }
 
     private Iterator<Tuple2<K, C>> mergeWithAggregation(List<Iterator<Tuple2<K, C>>> iterators,
                                                         CollectionToOutput<C> mergeCombines,
                                                         Comparator<K> comparator,
                                                         boolean totalOrder) {
-        throw new UnsupportedOperationException("");
+        if (totalOrder) {
+            // We have a total ordering, so the objects with the same key are sequential.
+            return new Iterator<Tuple2<K, C>>() {
+
+                BufferedIterator<Tuple2<K, C>> sorted = new BufferedIterator<>(mergeSort(iterators, comparator));
+
+                @Override
+                public boolean hasNext() {
+                    return sorted.hasNext();
+                }
+
+                @Override
+                public Tuple2<K, C> next() {
+                    if (hasNext()) {
+                        Tuple2<K, C> elem = sorted.next();
+                        K key = elem._1();
+                        C collection = elem._2();
+                        while (sorted.hasNext() && sorted.head()._1().equals(key)) {
+                            Tuple2<K, C> pair = sorted.next();
+                            collection = mergeCombines.mergeCombiners(collection, pair._2());
+                        }
+                        return new Tuple2<>(key, collection);
+                    }
+                    throw new NoSuchElementException();
+                }
+            };
+        }
+
+        Iterator<Iterator<Tuple2<K, C>>> iterator = new Iterator<Iterator<Tuple2<K, C>>>() {
+            BufferedIterator<Tuple2<K, C>> sorted = new BufferedIterator<>(mergeSort(iterators, comparator));
+
+            List<K> keys = Lists.newArrayList();
+            List<C> combines = Lists.newArrayList();
+
+            @Override
+            public boolean hasNext() {
+                return sorted.hasNext();
+            }
+
+            @Override
+            public Iterator<Tuple2<K, C>> next() {
+                if (hasNext()) {
+                    keys.clear();
+                    combines.clear();
+
+                    Tuple2<K, C> firstPair = sorted.next();
+                    keys.add(firstPair._1());
+                    combines.add(firstPair._2());
+                    K key = firstPair._1();
+                    while (sorted.hasNext() && comparator.compare(sorted.head()._1(), key) == 0) {
+                        Tuple2<K, C> pair = sorted.next();
+                        int i = 0;
+                        boolean foundKey = false;
+                        while (i < keys.size() && !foundKey) {
+                            if (keys.get(i).equals(pair._1())) {
+                                C collection = combines.get(i);
+                                combines.set(i, mergeCombines.mergeCombiners(collection, pair._2()));
+                                foundKey = true;
+                            }
+                            ++i;
+                        }
+                        if (!foundKey) {
+                            keys.add(pair._1());
+                            combines.add(pair._2());
+                        }
+                    }
+                    return new Iterator<Tuple2<K, C>>() {
+                        Iterator<K> self = keys.iterator();
+                        Iterator<C> that = combines.iterator();
+
+                        @Override
+                        public boolean hasNext() {
+                            return self.hasNext() && that.hasNext();
+                        }
+
+                        @Override
+                        public Tuple2<K, C> next() {
+                            return new Tuple2<>(self.next(), that.next());
+                        }
+                    };
+                }
+                throw new NoSuchElementException();
+            }
+        };
+
+        List<Tuple2<K, C>> tupleList = Lists.newLinkedList();
+        while (iterator.hasNext()) {
+            Iterators.addAll(tupleList, iterator.next());
+        }
+        return tupleList.iterator();
     }
 
     private Iterator<Tuple2<Integer, Iterator<Tuple2<K, C>>>> partitionedIterator() {
@@ -574,20 +689,87 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
 
     private class SpillableIterator implements Iterator<Tuple2<Tuple2<Integer, K>, C>> {
 
+        private final Object SPILL_LOCK = new Object();
+
         Iterator<Tuple2<Tuple2<Integer, K>, C>> upStream;
 
-        public SpillableIterator(Iterator<Tuple2<Tuple2<Integer, K>, C>> upStream) {
+        Iterator<Tuple2<Tuple2<Integer, K>, C>> nextUpStream;
+
+        Tuple2<Tuple2<Integer, K>, C> cur;
+
+        boolean hasSpilled = false;
+
+        SpillableIterator(Iterator<Tuple2<Tuple2<Integer, K>, C>> upStream) {
             this.upStream = upStream;
+
+            cur = readNext();
+        }
+
+        boolean spill() {
+            synchronized (SPILL_LOCK) {
+                if (hasSpilled) {
+                    return false;
+                }
+                WritablePartitionedIterator inMemoryIterator = new WritablePartitionedIterator() {
+                    @Override
+                    public void writeNext(DiskBlockObjectWriter writer) {
+                        writer.write(cur._1(), cur._2());
+                        cur = upStream.hasNext() ? upStream.next() : null;
+                    }
+
+                    @Override
+                    public boolean hasNext() {
+                        return cur != null;
+                    }
+
+                    @Override
+                    public int nextPartition() {
+                        return cur._1()._1();
+                    }
+                };
+                LOGGER.info("Task {} force spilling in-memory map to disk and it will release {} memory",
+                            context.taskAttemptId(), bytesToString(getUsed()));
+                SpilledFile spillFile = spillMemoryIteratorToDisk(inMemoryIterator);
+                forceSpillFiles.add(spillFile);
+
+                SpillReader spillReader = new SpillReader(spillFile);
+                List<Tuple2<Tuple2<Integer, K>, C>> partitionKeyValues = Lists.newLinkedList();
+                for (int i = 0; i < numPartitions; ++i) {
+                    Iterator<Tuple2<K, C>> iterator = spillReader.readNextPartition();
+                    final int partitionId  = i;
+                    Iterator<Tuple2<Tuple2<Integer, K>, C>> it = Iterators.transform(iterator, input ->
+                            new Tuple2<>(new Tuple2<>(partitionId, input._1()), input._2())
+                    );
+                    Iterators.addAll(partitionKeyValues, it);
+                }
+
+                nextUpStream = partitionKeyValues.iterator();
+
+                hasSpilled = true;
+                return true;
+            }
         }
 
         @Override
         public boolean hasNext() {
-            return false;
+            return cur != null;
+        }
+
+        Tuple2<Tuple2<Integer, K>, C> readNext() {
+            synchronized (SPILL_LOCK) {
+                if (nextUpStream != null) {
+                    upStream = nextUpStream;
+                    nextUpStream = null;
+                }
+                return upStream.hasNext() ? upStream.next() : null;
+            }
         }
 
         @Override
         public Tuple2<Tuple2<Integer, K>, C> next() {
-            return null;
+            Tuple2<Tuple2<Integer, K>, C> r = cur;
+            cur = readNext();
+            return r;
         }
     }
 
