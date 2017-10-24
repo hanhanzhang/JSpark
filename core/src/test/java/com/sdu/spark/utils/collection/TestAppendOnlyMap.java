@@ -1,19 +1,13 @@
 package com.sdu.spark.utils.collection;
 
+import com.sdu.spark.SparkTestUnit;
 import com.sdu.spark.utils.colleciton.AppendOnlyMap;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
 import org.junit.Test;
 
 /**
  * @author hanhan.zhang
  * */
-public class TestAppendOnlyMap {
-
-    @BeforeClass
-    public static void testStart() {
-        System.out.println("test start");
-    }
+public class TestAppendOnlyMap extends SparkTestUnit {
 
     @Test
     public void testInitialize() {
@@ -75,8 +69,4 @@ public class TestAppendOnlyMap {
 
     }
 
-    @AfterClass
-    public static void testFinish() {
-        System.out.println("test finished");
-    }
 }

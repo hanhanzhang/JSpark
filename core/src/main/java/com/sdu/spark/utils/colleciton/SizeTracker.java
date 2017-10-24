@@ -5,7 +5,6 @@ import com.sdu.spark.utils.SizeEstimator;
 
 import java.io.Serializable;
 import java.util.LinkedList;
-import java.util.List;
 
 /**
  * A general interface for collections to keep track of their estimated sizes in bytes.
