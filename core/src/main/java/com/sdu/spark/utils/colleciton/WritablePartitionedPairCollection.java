@@ -1,8 +1,10 @@
 package com.sdu.spark.utils.colleciton;
 
+import com.sdu.spark.SparkException;
 import com.sdu.spark.storage.DiskBlockObjectWriter;
 import com.sdu.spark.utils.scala.Tuple2;
 
+import java.io.IOException;
 import java.util.Comparator;
 import java.util.Iterator;
 
@@ -26,7 +28,11 @@ public interface WritablePartitionedPairCollection<K, V> {
 
             @Override
             public void writeNext(DiskBlockObjectWriter writer) {
-                writer.write(cur._1()._2(), cur._2());
+                try {
+                    writer.write(cur._1()._2(), cur._2());
+                } catch (IOException e) {
+                    throw new SparkException(String.format("Exception occurred when write (%s, %s) to disk", cur._1(), cur._2()), e);
+                }
                 cur = it.hasNext() ? it.next() : null;
             }
 

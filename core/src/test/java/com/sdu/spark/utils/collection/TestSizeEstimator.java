@@ -26,6 +26,10 @@ public class TestSizeEstimator extends SparkTestUnit {
 
         // 16 + 4 + 8
         size = SizeEstimator.estimate(new DummyClass2());
+    }
+
+    @Override
+    public void afterEach() {
 
     }
 }

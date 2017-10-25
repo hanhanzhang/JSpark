@@ -4,8 +4,9 @@ import com.google.common.collect.Lists;
 import com.sdu.spark.SparkException;
 import com.sdu.spark.executor.ExecutorExitCode;
 import com.sdu.spark.rpc.SparkConf;
-import com.sdu.spark.storage.BlockId.TempLocalBlockId;
-import com.sdu.spark.storage.BlockId.TempShuffleBlockId;
+import com.sdu.spark.utils.ShutdownHookManager;
+import com.sdu.spark.utils.ShutdownHookManager.*;
+import com.sdu.spark.utils.Utils;
 import com.sdu.spark.utils.scala.Tuple2;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,8 +39,8 @@ public class DiskBlockManager {
     private File[][] subDirs;
     public int subDirsPerLocalDir;
 
-    // TODO: ShutdownHook
-    
+    private SparkShutdownHook shutdownHook;
+
     public DiskBlockManager(SparkConf conf, boolean deleteFilesOnStop) {
         this.conf = conf;
         this.deleteFilesOnStop = deleteFilesOnStop;
@@ -57,6 +58,9 @@ public class DiskBlockManager {
         for (int i = 0; i < localDirs.length; ++i) {
             subDirs[i] = new File[subDirsPerLocalDir];
         }
+
+        // Shutdown hook
+        this.shutdownHook = addShutdownHook();
     }
 
     private File[] createLocalDirs(SparkConf conf) {
@@ -92,6 +96,14 @@ public class DiskBlockManager {
             subDir = old;
         }
         return new File(subDir, filename);
+    }
+
+    private SparkShutdownHook addShutdownHook() {
+        LOGGER.debug("Adding shutdown hook");
+        return ShutdownHookManager.get().add(ShutdownHookManager.TEMP_DIR_SHUTDOWN_PRIORITY + 1, () -> {
+            LOGGER.info("Shutdown hook called");
+            DiskBlockManager.this.doStop();
+        });
     }
 
     public File getFile(BlockId blockId) {
@@ -150,4 +162,24 @@ public class DiskBlockManager {
         return new Tuple2<>(blockId, getFile(blockId));
     }
 
+    public void stop() {
+        ShutdownHookManager.get().removeShutdownHook(shutdownHook);
+        doStop();
+    }
+
+    private void doStop() {
+        if (deleteFilesOnStop) {
+            for (File localDir : localDirs) {
+                if (localDir.isDirectory() && localDir.exists()) {
+                    try {
+                        if (!ShutdownHookManager.get().hasRootAsShutdownDeleteDir(localDir)) {
+                            Utils.deleteRecursively(localDir);
+                        }
+                    } catch (Exception e) {
+                        LOGGER.error("Exception while deleting local spark dir: {}", localDir, e);
+                    }
+                }
+            }
+        }
+    }
 }

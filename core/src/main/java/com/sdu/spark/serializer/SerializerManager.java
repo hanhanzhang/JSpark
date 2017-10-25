@@ -11,6 +11,16 @@ import java.io.OutputStream;
 import java.util.Iterator;
 
 /**
+ * {@link SerializerManager}职责
+ *
+ * 1: 负责Input/Output Stream数据流压缩
+ *
+ *   1' {@link #wrapStream(BlockId, InputStream)}输入数据流解压缩
+ *
+ *   2' {@link #wrapStream(BlockId, OutputStream)}输出数据流压缩
+ *
+ * 2:
+ *
  * @author hanhan.zhang
  * */
 public class SerializerManager {

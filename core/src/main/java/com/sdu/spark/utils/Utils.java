@@ -352,13 +352,17 @@ public class Utils {
                 file.setExecutable(true, true);
     }
 
+    public static File createTempDir() throws IOException {
+        return createTempDir("spark");
+    }
+
     private static File createTempDir(String namePrefix) throws IOException {
         return createTempDir(System.getProperty("java.io.tmpdir"), namePrefix);
     }
 
     public static File createTempDir(String root, String namePrefix) throws IOException {
         File dir = createDirectory(root, namePrefix);
-//        ShutdownHookManager.registerShutdownDeleteDir(dir)
+        ShutdownHookManager.get().registerShutdownDeleteDir(dir);
         return dir;
     }
 
@@ -453,7 +457,7 @@ public class Utils {
                     File[] childFiles = listFilesSafely(file);
                     for (int i = 0; i < childFiles.length; ++i) {
                         try {
-                            deleteRecursively(file);
+                            deleteRecursively(childFiles[i]);
                         } catch (IOException e) {
                             savedIOException = e;
                         }
@@ -461,7 +465,7 @@ public class Utils {
                     if (savedIOException != null) {
                         throw savedIOException;
                     }
-//                    ShutdownHookManager.removeShutdownDeleteDir(file)
+                    ShutdownHookManager.get().removeShutdownDeleteDir(file);
                 }
             } finally {
                 if (file.delete()) {

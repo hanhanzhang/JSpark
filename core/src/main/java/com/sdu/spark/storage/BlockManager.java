@@ -438,7 +438,7 @@ public class BlockManager implements BlockDataManager, BlockEvictionHandler {
     }
 
     public void stop() {
-        throw new UnsupportedOperationException("");
+        diskBlockManager.stop();
     }
 
     private boolean doPutBytes(BlockId blockId, ChunkedByteBuffer bytes, StorageLevel level,

@@ -27,6 +27,8 @@ import static com.sdu.spark.utils.Utils.bytesToString;
 import static org.apache.commons.lang3.math.NumberUtils.toInt;
 
 /**
+ * {@link ExternalSorter}
+ *
  * @author hanhan.zhang
  * */
 public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCollection<K, C>> {
@@ -184,7 +186,11 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
                 if (tuple._2().hasNext()) {
                     while (tuple._2().hasNext()) {
                         Tuple2<K, C> kv = tuple._2().next();
-                        writer.write(kv._1(), kv._2());
+                        try {
+                            writer.write(kv._1(), kv._2());
+                        } catch (IOException e) {
+                            throw new SparkException(String.format("Exception occurred when write (%s, %s) to disk", kv._1(), kv._2()), e);
+                        }
                     }
                     FileSegment segment = writer.commitAndGet();
                     lengths[tuple._1()] = segment.length;
@@ -712,7 +718,11 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
                 WritablePartitionedIterator inMemoryIterator = new WritablePartitionedIterator() {
                     @Override
                     public void writeNext(DiskBlockObjectWriter writer) {
-                        writer.write(cur._1(), cur._2());
+                        try {
+                            writer.write(cur._1(), cur._2());
+                        } catch (IOException e) {
+                            throw new SparkException(String.format("Exception occurred when write (%s, %s) to disk", cur._1(), cur._2()), e);
+                        }
                         cur = upStream.hasNext() ? upStream.next() : null;
                     }
 

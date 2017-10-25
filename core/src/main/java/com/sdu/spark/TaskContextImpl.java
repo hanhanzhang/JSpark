@@ -5,16 +5,24 @@ import com.google.common.collect.Lists;
 import com.sdu.spark.memory.TaskMemoryManager;
 import com.sdu.spark.shuffle.FetchFailedException;
 import com.sdu.spark.utils.TaskCompletionListener;
+import com.sdu.spark.utils.TaskCompletionListenerException;
 import com.sdu.spark.utils.TaskFailureListener;
 import org.apache.commons.lang3.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.Properties;
 
 /**
+ *
+ * TODO: Task Metric / Metric System
  * @author hanhan.zhang
  * */
 public class TaskContextImpl extends TaskContext {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(TaskContextImpl.class);
+
     public int stageId;
     public int partitionId;
     public long taskAttemptId;
@@ -30,10 +38,8 @@ public class TaskContextImpl extends TaskContext {
 
 
 
-    /**
-     * Task运行状态
-     * */
-    private String reasonIfKilled;
+    /**Task运行状态*/
+    private volatile String reasonIfKilled;
     private boolean completed = false;
     private boolean failed = false;
     private Throwable failure = null;
@@ -54,10 +60,8 @@ public class TaskContextImpl extends TaskContext {
     }
 
     @Override
-    public boolean isCompleted() {
-        synchronized (this) {
-            return completed;
-        }
+    public synchronized boolean isCompleted() {
+        return completed;
     }
 
     @Override
@@ -73,27 +77,23 @@ public class TaskContextImpl extends TaskContext {
     }
 
     @Override
-    public TaskContext addTaskCompletionListener(TaskCompletionListener listener) {
-        synchronized (this) {
-            if (completed) {
-                listener.onTaskCompletion(this);
-            } else {
-                onCompleteCallbacks.add(listener);
-            }
-            return this;
+    public synchronized TaskContext addTaskCompletionListener(TaskCompletionListener listener) {
+        if (completed) {
+            listener.onTaskCompletion(this);
+        } else {
+            onCompleteCallbacks.add(listener);
         }
+        return this;
     }
 
     @Override
-    public TaskContext addTaskFailureListener(TaskFailureListener listener) {
-        synchronized (this) {
-            if (failed) {
-                listener.onTaskFailure(this, failure);
-            } else {
-                onFailureCallbacks.add(listener);
-            }
-            return this;
+    public synchronized TaskContext addTaskFailureListener(TaskFailureListener listener) {
+        if (failed) {
+            listener.onTaskFailure(this, failure);
+        } else {
+            onFailureCallbacks.add(listener);
         }
+        return this;
     }
 
     @Override
@@ -148,36 +148,52 @@ public class TaskContextImpl extends TaskContext {
         reasonIfKilled = reason;
     }
 
-    public void markTaskCompleted() {
-        synchronized (this) {
-            if (completed) {
-                return;
+    public synchronized void markTaskCompleted() {
+        if (completed) {
+            return;
+        }
+        completed = true;
+        invokeListeners(onCompleteCallbacks,
+                        "TaskCompletionListener",
+                        null,
+                        listener -> listener.onTaskCompletion(this));
+    }
+
+    public synchronized void markTaskFailed(Throwable error) {
+        if (failed) {
+            return;
+        }
+        failed = true;
+        failure = error;
+        invokeListeners(onFailureCallbacks,
+                        "TaskFailureListener",
+                        error,
+                        listener -> listener.onTaskFailure(this, error));
+    }
+
+
+    private <T> void invokeListeners(List<T> listeners,
+                                     String name,
+                                     Throwable error,
+                                     TaskStatusCallback<T> callback) {
+        List<String> errorMsg = Lists.newArrayList();
+        // 按照注册顺序调用
+        Lists.reverse(listeners).forEach(listener -> {
+            try {
+                callback.call(listener);
+            } catch (Throwable e) {
+                errorMsg.add(e.getMessage());
+                LOGGER.error("Exception occurred when invoke {} listener", name, e);
             }
-            completed = true;
-            invokeTaskCompleteListener();
+        });
+        if (errorMsg.size() > 0) {
+            throw new TaskCompletionListenerException(errorMsg);
         }
     }
 
-    public void markTaskFailed(Throwable error) {
-        synchronized (this) {
-            if (failed) {
-                return;
-            }
-            failed = true;
-            failure = error;
-            invokeTaskFailureListener();
-        }
-    }
+    private interface TaskStatusCallback<T> {
 
-    private void invokeTaskFailureListener() {
-        if (onFailureCallbacks != null) {
-            onFailureCallbacks.forEach(listener -> listener.onTaskFailure(this, failure));
-        }
-    }
+        void call(T listener);
 
-    private void invokeTaskCompleteListener() {
-        if (onCompleteCallbacks != null) {
-            onCompleteCallbacks.forEach(listener -> listener.onTaskCompletion(this));
-        }
     }
 }

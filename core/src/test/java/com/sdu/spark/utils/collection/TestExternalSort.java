@@ -8,8 +8,18 @@ import org.junit.Test;
  * */
 public class TestExternalSort extends SparkTestUnit {
 
+    @Override
+    public void beforeEach() {
+
+    }
+
     @Test
     public void test() {
+
+    }
+
+    @Override
+    public void afterEach() {
 
     }
 }

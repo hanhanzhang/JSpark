@@ -9,6 +9,11 @@ import org.junit.Test;
  * */
 public class TestAppendOnlyMap extends SparkTestUnit {
 
+    @Override
+    public void beforeEach() {
+
+    }
+
     @Test
     public void testInitialize() {
         AppendOnlyMap<Integer, Integer> appendOnlyMap = new AppendOnlyMap<>(33);
@@ -69,4 +74,8 @@ public class TestAppendOnlyMap extends SparkTestUnit {
 
     }
 
+    @Override
+    public void afterEach() {
+
+    }
 }
