@@ -22,7 +22,7 @@ public abstract class Task<T> {
     public String appId;
     private String appAttemptId;
 
-    public TaskMemoryManager taskMemoryManager;
+    private TaskMemoryManager taskMemoryManager;
 
     // TaskSetManager设置
     public long epoch;
@@ -103,7 +103,7 @@ public abstract class Task<T> {
             context.markInterrupted(reason);
         }
         if (interruptThread && taskThread != null) {
-            taskThread.interrupt();;
+            taskThread.interrupt();
         }
     }
 

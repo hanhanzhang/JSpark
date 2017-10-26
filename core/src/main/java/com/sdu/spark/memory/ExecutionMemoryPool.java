@@ -53,6 +53,20 @@ public class ExecutionMemoryPool extends MemoryPool {
         return memoryForTask.getOrDefault(taskAttemptId, 0L);
     }
 
+    public long acquireMemory(long numBytes, long taskAttemptId) throws InterruptedException {
+        return acquireMemory(numBytes, taskAttemptId, new ExecutionMemoryCalculate() {
+            @Override
+            public void maybeGrowPool(long additionalSpaceNeeded) {
+                // 不做任何处理
+            }
+
+            @Override
+            public long computeMaxPoolSize() {
+                return poolSize();
+            }
+        });
+    }
+
     public long acquireMemory(long numBytes, long taskAttemptId, ExecutionMemoryCalculate calculate) throws InterruptedException {
         synchronized (lock) {
             assert numBytes > 0 : String.format("invalid number of bytes requested: %d", numBytes);

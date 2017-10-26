@@ -15,7 +15,9 @@ public abstract class MemoryConsumer {
     private MemoryMode mode;
     protected long used;
 
-    protected MemoryConsumer(TaskMemoryManager taskMemoryManager, long pageSize, MemoryMode mode) {
+    protected MemoryConsumer(TaskMemoryManager taskMemoryManager,
+                             long pageSize,
+                             MemoryMode mode) {
         this.taskMemoryManager = taskMemoryManager;
         this.pageSize = pageSize;
         this.mode = mode;

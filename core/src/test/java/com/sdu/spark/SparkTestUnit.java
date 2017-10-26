@@ -29,6 +29,9 @@ public abstract class SparkTestUnit {
 
         // 指定压缩算法(lz4更高效)
         conf.set("spark.io.compression.codec", "lz4");
+
+        // Execution/Storage使用内存类型(堆内存、非堆内存)
+        conf.set("spark.memory.offHeap.enabled", "false");
     }
 
     @BeforeClass

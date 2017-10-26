@@ -219,7 +219,7 @@ public class Executor {
                 // 序列化运行Task
                 task = ser.deserialize(taskDescription.serializedTask, Thread.currentThread().getContextClassLoader());
                 task.localProperties = taskDescription.properties;
-                task.taskMemoryManager = taskMemoryManager;
+                task.setTaskMemoryManager(taskMemoryManager);
 
                 if (reasonIfKilled != null) {
                     throw new TaskKilledException(reasonIfKilled);

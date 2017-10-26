@@ -79,9 +79,9 @@ public class StaticMemoryManager extends MemoryManager {
         try {
             switch (memoryMode) {
                 case OFF_HEAP:
-                    return offHeapExecutionMemoryPool.acquireMemory(numBytes, taskAttemptId, null);
+                    return offHeapExecutionMemoryPool.acquireMemory(numBytes, taskAttemptId);
                 case ON_HEAP:
-                    return onHeapExecutionMemoryPool.acquireMemory(numBytes, taskAttemptId, null);
+                    return onHeapExecutionMemoryPool.acquireMemory(numBytes, taskAttemptId);
                 default:
                     throw new IllegalArgumentException("Unsupported memory mode : " + memoryMode);
             }

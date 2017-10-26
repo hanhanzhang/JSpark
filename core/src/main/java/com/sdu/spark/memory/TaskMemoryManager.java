@@ -13,7 +13,11 @@ import java.util.*;
 import static com.sdu.spark.utils.Utils.bytesToString;
 
 /**
- * 每个Task会初始化一个TaskMemoryManager
+ * {@link TaskMemoryManager}职责:
+ *
+ * 1:
+ *
+ * 2:
  *
  * @author hanhan.zhang
  * */
@@ -176,6 +180,7 @@ public class TaskMemoryManager {
     public MemoryBlock allocatePage(long size, MemoryConsumer consumer) {
         assert(consumer != null);
         assert(consumer.getMode() == tungstenMemoryMode);
+        // 申请内存量必须小于内存页
         if (size > MAXIMUM_PAGE_SIZE_BYTES) {
             throw new IllegalArgumentException(
                     "Cannot allocate a page with more than " + MAXIMUM_PAGE_SIZE_BYTES + " bytes");
