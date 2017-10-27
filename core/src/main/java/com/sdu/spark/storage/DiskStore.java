@@ -49,7 +49,7 @@ public class DiskStore {
 
     }
 
-    public void put(BlockId blockId, DiskBlockDataWriter blockWriter) throws IOException {
+    public void put(BlockId blockId, SpillDataToDisk blockWriter) throws IOException {
         if (contains(blockId)) {
             throw new IllegalStateException("Block $blockId is already present in the disk store");
         }
@@ -59,7 +59,7 @@ public class DiskStore {
         CountingWritableChannel out = new CountingWritableChannel(openForWrite(file));
         boolean threwException = true;
         try {
-            blockWriter.writeBlockData(out);
+            blockWriter.writeDisk(out);
             blockSizes.put(blockId.name(), out.getCount());
             threwException = false;
         } finally {
@@ -181,7 +181,7 @@ public class DiskStore {
         }
     }
 
-    public interface DiskBlockDataWriter {
-        void writeBlockData(WritableByteChannel channel);
+    public interface SpillDataToDisk {
+        void writeDisk(WritableByteChannel channel);
     }
 }

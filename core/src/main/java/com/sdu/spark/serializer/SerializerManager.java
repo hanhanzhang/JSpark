@@ -101,6 +101,12 @@ public class SerializerManager {
         throw new UnsupportedOperationException("");
     }
 
+    public <T> void dataSerializeStream(BlockId blockId,
+                                        OutputStream outputStream,
+                                        Iterator<T> values) {
+
+    }
+
     private CompressionCodec compressionCodec() {
         if (compressionCodec == null) {
             synchronized (this) {

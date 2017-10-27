@@ -6,12 +6,13 @@ import com.sdu.spark.utils.ChunkedByteBuffer;
 /**
  * @author hanhan.zhang
  * */
-public class SerializedMemoryEntry implements MemoryEntry {
+public class SerializedMemoryEntry implements MemoryEntry<ChunkedByteBuffer> {
 
     public ChunkedByteBuffer buffer;
     public MemoryMode memoryMode;
 
-    public SerializedMemoryEntry(ChunkedByteBuffer buffer, MemoryMode memoryMode) {
+    public SerializedMemoryEntry(ChunkedByteBuffer buffer,
+                                 MemoryMode memoryMode) {
         this.buffer = buffer;
         this.memoryMode = memoryMode;
     }
@@ -24,5 +25,10 @@ public class SerializedMemoryEntry implements MemoryEntry {
     @Override
     public MemoryMode memoryMode() {
         return memoryMode;
+    }
+
+    @Override
+    public Class<ChunkedByteBuffer> classTag() {
+        return ChunkedByteBuffer.class;
     }
 }

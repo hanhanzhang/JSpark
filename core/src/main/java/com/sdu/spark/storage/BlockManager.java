@@ -28,12 +28,18 @@ import com.sdu.spark.storage.memory.MemoryStore;
 import com.sdu.spark.unfase.Platform;
 import com.sdu.spark.utils.ChunkedByteBuffer;
 import com.sdu.spark.utils.IdGenerator;
+import com.sdu.spark.utils.scala.Either;
+import com.sdu.spark.utils.scala.Left;
+import com.sdu.spark.utils.scala.Right;
 import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.io.IOException;
+import java.io.OutputStream;
 import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
 import java.util.*;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -45,7 +51,11 @@ import static com.sdu.spark.utils.Utils.classForName;
 import static org.apache.commons.lang3.math.NumberUtils.toInt;
 
 /**
+ * {@link BlockManager}职责:
  *
+ * 1: {@link com.sdu.spark.memory.StorageMemoryPool}申请存储内存时, 若没有足够内存则会将内存中Block数据Spill到磁盘
+ *
+ *    实现方法: {@link #dropFromMemory(BlockId, Either)}
  *
  * @author hanhan.zhang
  * */
@@ -441,8 +451,11 @@ public class BlockManager implements BlockDataManager, BlockEvictionHandler {
         diskBlockManager.stop();
     }
 
-    private boolean doPutBytes(BlockId blockId, ChunkedByteBuffer bytes, StorageLevel level,
-                               boolean tellMaster, boolean keepReadLock) {
+    private boolean doPutBytes(BlockId blockId,
+                               ChunkedByteBuffer bytes,
+                               StorageLevel level,
+                               boolean tellMaster,
+                               boolean keepReadLock) {
         return doPut(blockId, level, tellMaster, keepReadLock, blockInfo -> {
             long startTimeMs = System.currentTimeMillis();
             Future<?> replicationFuture = null;
@@ -681,6 +694,67 @@ public class BlockManager implements BlockDataManager, BlockEvictionHandler {
             }
             return cachedPeers;
         }
+    }
+
+    /**
+     *
+     * */
+    @Override
+    public <T> StorageLevel dropFromMemory(BlockId blockId, Either<List<T>, ChunkedByteBuffer> data) {
+        LOGGER.info("Dropping block {} from memory", blockId);
+        // 确保当前Block处于写状态
+        BlockInfo blockInfo = blockInfoManager.assertBlockIsLockedForWriting(blockId);
+        boolean blockIsUpdated = false;
+        StorageLevel level = blockInfo.storageLevel;
+
+        // Spill到磁盘
+        if (level.useDisk && !diskStore.contains(blockId)) {
+            LOGGER.info("Writing block {} to disk", blockId);
+            if (data instanceof Left) {
+                Left<List<T>, ChunkedByteBuffer> elements = (Left<List<T>, ChunkedByteBuffer>) data;
+                try {
+                    diskStore.put(blockId, channel -> {
+                        OutputStream out = Channels.newOutputStream(channel);
+                        serializerManager.dataSerializeStream(
+                                blockId,
+                                out,
+                                elements.e.iterator()
+                        );
+                    });
+                    blockIsUpdated = true;
+                } catch (IOException e) {
+                    throw new SparkException("spill block " + blockId + " from memory to disk failure", e);
+                }
+            } else if (data instanceof Right) {
+                Right<List<T>, ChunkedByteBuffer> elements = (Right<List<T>, ChunkedByteBuffer>) data;
+                diskStore.putBytes(blockId, elements.e);
+                blockIsUpdated = true;
+            }
+        }
+
+        // 实际释放内存并在内存中移除
+        long droppedMemorySize = memoryStore.contains(blockId) ? memoryStore.getSize(blockId) : 0L;
+        // MemoryStore移除Block并周知MemoryManager释放内存容量, 其调用连:
+        //  MemoryStore.remove()
+        //          |
+        //          +----> MemoryManager.releaseStorageMemory()
+        //                          |
+        //                          +----> MemoryPool.releaseMemory()
+        boolean blockIsRemoved = memoryStore.remove(blockId);
+        if (blockIsRemoved) {
+            blockIsUpdated = true;
+        } else {
+            LOGGER.warn("Block {} could not be dropped from memory as it does not exist", blockId);
+        }
+
+        BlockStatus status = getCurrentBlockStatus(blockId, blockInfo);
+        if (blockInfo.tellMaster) {
+            reportBlockStatus(blockId, status, droppedMemorySize);
+        }
+        if (blockIsUpdated) {
+            // TODO: Block Update Metric
+        }
+        return status.storageLevel;
     }
 
     interface BlockDataConvert<T> {

@@ -7,7 +7,8 @@ import java.io.Serializable;
 /**
  * @author hanhan.zhang
  * */
-public interface MemoryEntry extends Serializable {
+public interface MemoryEntry<T> extends Serializable {
     long size();
     MemoryMode memoryMode();
+    Class<T> classTag();
 }

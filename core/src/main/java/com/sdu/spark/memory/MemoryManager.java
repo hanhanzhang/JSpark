@@ -10,9 +10,9 @@ import com.sdu.spark.unfase.memory.MemoryAllocator;
 import static com.google.common.base.Preconditions.checkArgument;
 
 /**
- * {@link MemoryManager}负责Execution和Storage内存申请、及Execution内存动态扩容
+ * {@link MemoryManager}职责:
  *
- * todo: 操作系统内存页管理
+ * 1:
  *
  * @author hanhan.zhang
  * */
@@ -25,7 +25,7 @@ public abstract class MemoryManager {
     // Storage内存存储量
     long onHeapStorageMemory;
     // Execution计算内存存储量
-    long onHeapExecutionMemory;
+    protected long onHeapExecutionMemory;
 
     // 最大非堆内存存储量
     long maxOffHeapMemory;

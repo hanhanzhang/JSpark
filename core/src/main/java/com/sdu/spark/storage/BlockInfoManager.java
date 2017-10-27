@@ -157,6 +157,10 @@ public class BlockInfoManager {
         assert lockOutcome != null;
     }
 
+    public synchronized void unlock(BlockId blockId) {
+        unlock(blockId, currentTaskAttemptId());
+    }
+
     /**
      * Release a lock on the given block.
      * In case a TaskContext is not propagated properly to all child threads for the task, we fail to

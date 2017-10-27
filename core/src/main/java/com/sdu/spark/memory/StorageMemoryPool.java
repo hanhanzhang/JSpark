@@ -25,6 +25,7 @@ public class StorageMemoryPool extends MemoryPool {
     private MemoryMode memoryMode;
     private String poolname;
 
+    // 标识当前存储内存池已使用量(确保线程安全)
     private long memoryUsed = 0L;
     private MemoryStore memoryStore;
 
@@ -63,15 +64,18 @@ public class StorageMemoryPool extends MemoryPool {
     }
 
     public boolean acquireMemory(BlockId blockId, int numBytes) {
+        // synchronized支持可重性
         synchronized (lock) {
+            // StorageMemoryPool需要释放内存量(也就是说, 当前StorageMemoryPool可用内侧不足以满足当前Block内存需求)
             long numBytesToFree = Math.max(0, numBytes - memoryFree());
             return acquireMemory(blockId, numBytes, numBytesToFree);
         }
     }
 
     /**
-     * @param numBytesToAcquire: 申请的存储空间
-     * @param numBytesToFree : Storage内存需扩容内存空间(也就是说, numBytesToAcquire已超过空闲内存, Storage内存池需扩容)
+     * @param blockId: 数据块
+     * @param numBytesToAcquire: blockId申请的内存容量
+     * @param numBytesToFree: 当前可用内存容量不能满足内存申请量, 内存池需释放的内存量
      * */
     public boolean acquireMemory(BlockId blockId, long numBytesToAcquire, long numBytesToFree) {
         synchronized (lock) {
@@ -80,13 +84,21 @@ public class StorageMemoryPool extends MemoryPool {
             assert(memoryUsed <= poolSize());
 
             if (numBytesToFree > 0) {
-                // 没有足够的JVM内存, 需清空内存[内存清除后, MemoryPool被告知且修改可用内存]
+                // 内存中Block可Spill到Disk条件:
+                //  1: Block存储MemoryModel与memoryMode相同
+                //  2: Block无其他进程读取(BlockInfoManager记录Block读取状态信息)
+                // 调用连:
+                //  MemoryStore.evictBlocksToFreeSpace()【选择可将从内存逐出到磁盘的BlockId】
+                //       |
+                //       +----> BlockEvictionHandler.dropFromMemory()【BlockManager是该接口唯一实现】
+                //                  |
+                //                  +---> MemoryStore.remove()
+                //                          |
+                //                          +----> MemoryManager.releaseStorageMemory()
+                //                                       |
+                //                                       +----> StorageMemoryPool.releaseMemory()
                 memoryStore.evictBlocksToFreeSpace(blockId, numBytesToFree, memoryMode);
             }
-
-            // NOTE: If the memory store evicts blocks, then those evictions will synchronously call
-            // back into this StorageMemoryPool in order to free memory. Therefore, these variables
-            // should have been updated.
             boolean enoughMemory = numBytesToAcquire <= memoryFree();
             if (enoughMemory) {
                 memoryUsed += numBytesToAcquire;
@@ -98,7 +110,7 @@ public class StorageMemoryPool extends MemoryPool {
     public void releaseMemory(long size) {
         synchronized (lock) {
             if (size > memoryUsed) {
-                LOGGER.warn("Attempted to release $size bytes of storage memory when we only have {} bytes", memoryUsed);
+                LOGGER.warn("Attempted to release {} bytes of storage memory when we only have {} bytes", size, memoryUsed);
                 memoryUsed = 0;
             } else {
                 memoryUsed -= size;

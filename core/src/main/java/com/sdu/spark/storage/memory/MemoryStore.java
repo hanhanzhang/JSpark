@@ -1,29 +1,34 @@
 package com.sdu.spark.storage.memory;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.sdu.spark.memory.MemoryManager;
 import com.sdu.spark.memory.MemoryMode;
 import com.sdu.spark.rpc.SparkConf;
 import com.sdu.spark.serializer.SerializerManager;
-import com.sdu.spark.storage.BlockData;
 import com.sdu.spark.storage.BlockId;
 import com.sdu.spark.storage.BlockInfoManager;
+import com.sdu.spark.storage.StorageLevel;
 import com.sdu.spark.utils.ChunkedByteBuffer;
-import com.sdu.spark.utils.colleciton.Either;
+import com.sdu.spark.utils.scala.Either;
+import com.sdu.spark.utils.scala.Left;
+import com.sdu.spark.utils.scala.Right;
 import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.nio.ByteBuffer;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.sdu.spark.utils.Utils.bytesToString;
 
 /**
- * Block数据落地JVM内存
+ * {@link MemoryStore}职责:
+ *
+ *  1: {@link #entries}记录内存中存储的Block的数据信息
  *
  * todo: putIteratorAsValues、 putIteratorAsBytes、evictBlocksToFreeSpace方法尚未实现
  *
@@ -36,11 +41,11 @@ public class MemoryStore {
     public SparkConf conf;
     private BlockInfoManager blockInfoManager;
     private SerializerManager serializerManager;
-    private MemoryManager memoryManager;
+    private final MemoryManager memoryManager;
     private BlockEvictionHandler blockEvictionHandler;
 
     // key = BlockId, value = 存储空间(jvm内存或直接内存)
-    private final Map<BlockId, MemoryEntry> entries;
+    private final Map<BlockId, MemoryEntry<?>> entries;
     // key = taskId, value = 存储的jvm空间大小
     private Map<Long, Long> onHeapUnrollMemoryMap;
     // key = taskId, value = 存储的堆外空间大小
@@ -48,8 +53,10 @@ public class MemoryStore {
 
     private long unrollMemoryThreshold;
 
-    public MemoryStore(SparkConf conf, BlockInfoManager blockInfoManager,
-                       SerializerManager serializerManager, MemoryManager memoryManager,
+    public MemoryStore(SparkConf conf,
+                       BlockInfoManager blockInfoManager,
+                       SerializerManager serializerManager,
+                       MemoryManager memoryManager,
                        BlockEvictionHandler blockEvictionHandler) {
         this.conf = conf;
         this.blockInfoManager = blockInfoManager;
@@ -120,7 +127,10 @@ public class MemoryStore {
         }
     }
 
-    public boolean putBytes(BlockId blockId, long size, MemoryMode memoryMode, ChunkedByteBufferAllocator allocator) {
+    public boolean putBytes(BlockId blockId,
+                                long size,
+                                MemoryMode memoryMode,
+                                ChunkedByteBufferAllocator allocator) {
         checkArgument(contains(blockId), String.format("Block %s is already present in the MemoryStore", blockId));
 
         if (memoryManager.acquireStorageMemory(blockId, size, memoryMode)) {
@@ -202,9 +212,80 @@ public class MemoryStore {
         }
     }
 
+    private int getRddId(BlockId blockId) {
+        return blockId.asRDDId().rddId;
+    }
+
+    private boolean blockIsEvictable(BlockId blockId, MemoryEntry<?> entry, int acquireMemoryRddId, MemoryMode needFreeMemoryModel) {
+        return needFreeMemoryModel == entry.memoryMode() &&
+                acquireMemoryRddId != getRddId(blockId);
+    }
+
+    private <T> void dropBlock(BlockId blockId, MemoryEntry<T> entry) {
+        Either<List<T>, ChunkedByteBuffer> data = null;
+        if (entry instanceof DeserializedMemoryEntry) {
+            DeserializedMemoryEntry<T> deserializedMemoryEntry = (DeserializedMemoryEntry<T>) entry;
+            data = new Left<>(deserializedMemoryEntry.array);
+        } else if (entry instanceof SerializedMemoryEntry) {
+            SerializedMemoryEntry serializedMemoryEntry = (SerializedMemoryEntry) entry;
+            data = new Right<>(serializedMemoryEntry.buffer);
+        }
+        StorageLevel newEffectiveStorageLevel = blockEvictionHandler.dropFromMemory(blockId, data);
+        if (newEffectiveStorageLevel.isValid()) {
+            // The block is still present in at least one store, so release the lock
+            // but don't delete the block info
+            blockInfoManager.unlock(blockId);
+        } else {
+            // The block isn't present in any store, so delete the block info so that the
+            // block can be stored again
+            blockInfoManager.removeBlock(blockId);
+        }
+    }
 
     public long evictBlocksToFreeSpace(BlockId blockId, long space, MemoryMode memoryMode) {
-        throw new UnsupportedOperationException("");
+        assert space > 0;
+        synchronized (memoryManager) {
+            // 已释放内存容量
+            long freedMemory = 0L;
+            int rddId = getRddId(blockId);
+
+            // 选择可释放内存BlockId
+            List<BlockId> selectedBlocks = Lists.newArrayList();
+            synchronized (entries) {
+                Iterator<BlockId> iterator = entries.keySet().iterator();
+                while (iterator.hasNext() && freedMemory < space) {
+                    BlockId candidateBlockId = iterator.next();
+                    MemoryEntry candidateMemoryEntry = entries.get(candidateBlockId);
+                    if (blockIsEvictable(candidateBlockId, candidateMemoryEntry, rddId, memoryMode)) {
+                        // 可释放的BlockId需确保无其他进程读取数据
+                        if (blockInfoManager.lockForWriting(candidateBlockId, false) != null) {
+                            selectedBlocks.add(candidateBlockId);
+                            freedMemory += candidateMemoryEntry.size();
+                        }
+                    }
+                }
+            }
+
+            // Block数据Spill到磁盘
+            if (freedMemory >= space) {
+                LOGGER.info("{} blocks selected for dropping {} bytes", selectedBlocks.size(), bytesToString(freedMemory));
+                selectedBlocks.forEach(freeBlockId -> {
+                    MemoryEntry<?> entry = null;
+                    synchronized (entries) {
+                        entry = entries.get(freeBlockId);
+                    }
+                    if (entry != null) {
+                        dropBlock(freeBlockId, entry);
+                    }
+                });
+                LOGGER.info("After dropping {} blocks, free memory is {}", selectedBlocks.size(), bytesToString(maxMemory() - blocksMemoryUsed()));
+                return freedMemory;
+            }
+            // 释放内存失败
+            LOGGER.info("will not store {}", blockId);
+            selectedBlocks.forEach(blockInfoManager::unlock);
+            return 0L;
+        }
     }
 
     public void releaseUnrollMemoryForThisTask(MemoryMode memoryMode) {
