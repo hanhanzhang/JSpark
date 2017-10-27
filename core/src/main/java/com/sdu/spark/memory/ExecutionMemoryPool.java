@@ -56,10 +56,11 @@ public class ExecutionMemoryPool extends MemoryPool {
     }
 
     public long acquireMemory(long numBytes, long taskAttemptId) throws InterruptedException {
-        return acquireMemory(numBytes, taskAttemptId, new ExecutionMemoryPredict() {
+        return acquireMemory(numBytes, taskAttemptId, new DynamicMemoryAdjust() {
             @Override
             public void maybeGrowPool(long additionalSpaceNeeded) {
                 // 不做任何处理
+                LOGGER.info("StaticMemoryManager not supported dynamic adjust execution memory capacity");
             }
 
             @Override
@@ -69,7 +70,7 @@ public class ExecutionMemoryPool extends MemoryPool {
         });
     }
 
-    public long acquireMemory(long numBytes, long taskAttemptId, ExecutionMemoryPredict calculate) throws InterruptedException {
+    public long acquireMemory(long numBytes, long taskAttemptId, DynamicMemoryAdjust calculate) throws InterruptedException {
         synchronized (lock) {
             assert numBytes > 0 : String.format("invalid number of bytes requested: %d", numBytes);
 
@@ -81,30 +82,26 @@ public class ExecutionMemoryPool extends MemoryPool {
                 lock.notifyAll();
             }
 
-            // Keep looping until we're either sure that we don't want to grant this request (because this
-            // task would have more than 1 / numActiveTasks of the memory) or we have enough free
-            // memory to give it (we always let each task get at least 1 / (2 * numActiveTasks)).
+            // 对应当前N个Task, 确保每个Task分配Execution内存比例: 1/2N <= X <= 1/N
             while (true) {
                 long numActiveTasks = memoryForTask.keySet().size();
                 long curMem = memoryForTask.get(taskAttemptId);
 
-                // In every iteration of this loop, we should first try to reclaim any borrowed execution
-                // space from storage. This is necessary because of the potential race condition where new
-                // storage blocks may steal the free execution memory that this task was waiting for.
+                // 动态调整Execution内存
+                // StaticMemoryManager不支持将Storage内存转为Execution内存, 故为空方法
+                // UnifiedMemoryManager支持将Storage内存转为Execution内存, 具体实现由UnifiedMemoryManager实现
                 calculate.maybeGrowPool(numBytes - memoryFree());
 
-                // Maximum size the pool would have after potentially growing the pool.
-                // This is used to compute the upper bound of how much memory each task can occupy. This
-                // must take into account potential free memory as well as the amount this pool currently
-                // occupies. Otherwise, we may run into SPARK-12155 where, in unified memory management,
-                // we did not take into account space that could have been freed by evicting cached blocks.
+                // 每个Task分配最大内存(1/N * maxPoolSize)、最小内存(1/2N * poolSize)
                 long maxPoolSize = calculate.computeMaxPoolSize();
                 long maxMemoryPerTask = maxPoolSize / numActiveTasks;
                 long minMemoryPerTask = poolSize() / (2 * numActiveTasks);
 
-                // How much we can grant this task; keep its share within 0 <= X <= 1 / numActiveTasks
+                // 若是Task已分配maxMemoryPerTask, 则需要分配内存容量0
+                // 若是Task分配内存尚未达到maxMemoryPerTask, 则最大分配内存取(maxMemoryPerTask - curMem, numBytes)最小
+                // 值, 保证Task最大分配内存为maxMemoryPerTask
                 long maxToGrant = Math.min(numBytes, Math.max(0, maxMemoryPerTask - curMem));
-                // Only give it as much memory as is free, which might be none if it reached 1 / numTasks
+                // 当前可分配的内存
                 long toGrant = Math.min(maxToGrant, memoryFree());
 
                 // We want to let each task get at least 1 / (2 * numActiveTasks) before blocking;
@@ -155,7 +152,7 @@ public class ExecutionMemoryPool extends MemoryPool {
         }
     }
 
-    public interface ExecutionMemoryPredict {
+    public interface DynamicMemoryAdjust {
         /**
          * @param additionalSpaceNeeded : Execution内存扩容量
          * */

@@ -20,7 +20,7 @@ import static com.google.common.base.Preconditions.checkArgument;
  *
  *        Execution与Storage非堆内存分配比例由参数'spark.memory.storageFraction'决定
  *
- * 2: 申请Storage内存(实质上检测内存池是否有足够内存可用于分配, 若满足可分配内存返回true, 否则返回false)
+ * 2: 申请/释放Storage内存(实质上检测内存池是否有足够内存可用于分配, 若满足可分配内存返回true, 否则返回false)
  *
  *   1': {@link #acquireStorageMemory(BlockId, long, MemoryMode)}
  *
@@ -46,11 +46,32 @@ import static com.google.common.base.Preconditions.checkArgument;
  *
  *  2': {@link #releaseStorageMemory(long, MemoryMode)}
  *
- * 3: 申请Execution内存(实质上检测内存池是否有足够内存可用于分配, 若满足可分配内存返回true, 否则返回false)
+ * 3: 申请/释放Execution内存(Execution申请过程中, 由于可用内存不满足此次内存申请会阻塞当前线程)
  *
  *  1': {@link #acquireExecutionMemory(long, long, MemoryMode)}
  *
- *      a: {@link StaticMemoryManager}支持堆内存和非堆内存,
+ *      申请Execution内存时, 确保每个Task至少分配1/2N * poolSize内存, 最大分配1/N * maxPoolSize内存
+ *
+ *      a: {@link StaticMemoryManager}申请计算内存, 不支持Execution内存动态调整, 其申请调用链:
+ *
+ *          StaticMemoryManager.acquireExecutionMemory()
+ *                  |
+ *                  +-------> ExecutionMemoryPool.acquireExecutionMemory()【不支持将Storage内存转为Execution内存且
+ *                                                                          在ExecutionMemoryPool内存分配过程中未
+ *                                                                          达到内存最大及最小分配条件会阻塞当前线程】
+ *
+ *      b: {@link UnifiedMemoryManager}申请计算内存, 支持Execution内存动态调整(即将Storage内存转为Execution内存),
+ *
+ *         其调用链:
+ *
+ *          UnifiedMemoryManager.acquireExecutionMemory()
+ *                  |
+ *                  +------> ExecutionMemoryPool.acquireExecutionMemory()【支持将Storage内存转为Execution内存且
+ *                                                                         在ExecutionMemoryPool内存分配过程中未
+ *                                                                         达到内存最大及最小分配条件会阻塞当前线程】
+ *
+ *  2': {@link #releaseExecutionMemory(long, long, MemoryMode)}
+ *
  *
  * @author hanhan.zhang
  * */

@@ -117,10 +117,10 @@ public class UnifiedMemoryManager extends MemoryManager {
 
     @Override
     public long acquireExecutionMemory(long numBytes, long taskAttemptId, MemoryMode memoryMode) {
-        SimpleExecutionMemoryPredict memoryCalculate;
+        SimpleDynamicMemoryAdjust memoryCalculate;
         switch (memoryMode) {
             case OFF_HEAP:
-                memoryCalculate = new SimpleExecutionMemoryPredict(
+                memoryCalculate = new SimpleDynamicMemoryAdjust(
                         offHeapStorageMemoryPool,
                         offHeapExecutionMemoryPool,
                         offHeapStorageMemory,
@@ -128,7 +128,7 @@ public class UnifiedMemoryManager extends MemoryManager {
                 );
                 break;
             case ON_HEAP:
-                memoryCalculate = new SimpleExecutionMemoryPredict(
+                memoryCalculate = new SimpleDynamicMemoryAdjust(
                         onHeapStorageMemoryPool,
                         onHeapExecutionMemoryPool,
                         onHeapStorageRegionSize,
@@ -180,15 +180,15 @@ public class UnifiedMemoryManager extends MemoryManager {
         return (long) (usableMemory * memoryFraction);
     }
 
-    private class SimpleExecutionMemoryPredict implements ExecutionMemoryPool.ExecutionMemoryPredict {
+    private class SimpleDynamicMemoryAdjust implements ExecutionMemoryPool.DynamicMemoryAdjust {
 
         StorageMemoryPool storagePool;
         ExecutionMemoryPool executionPool;
         long storageRegionSize;
         long maxMemory;
 
-        public SimpleExecutionMemoryPredict(StorageMemoryPool storagePool, ExecutionMemoryPool executionPool,
-                                            long storageRegionSize, long maxMemory) {
+        public SimpleDynamicMemoryAdjust(StorageMemoryPool storagePool, ExecutionMemoryPool executionPool,
+                                         long storageRegionSize, long maxMemory) {
             this.storagePool = storagePool;
             this.executionPool = executionPool;
             this.storageRegionSize = storageRegionSize;
