@@ -23,7 +23,7 @@ import static com.google.common.base.Preconditions.checkArgument;
  *
  * 3: 内存池申请和释放需确保线程安全({@link #lock}确保单线程访问)
  *
- * 4: TODO 内存池容量初始化
+ * 4: {@link MemoryManager}负责对{@link #poolSize}初始化
  *
  * @author hanhan.zhang
  * */

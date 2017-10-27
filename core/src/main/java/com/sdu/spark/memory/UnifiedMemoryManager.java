@@ -8,7 +8,13 @@ import org.slf4j.LoggerFactory;
 import static com.google.common.base.Preconditions.checkArgument;
 
 /**
- * 可动态调整Storage内存和Execution内存:
+ * {@link UnifiedMemoryManager}职责:
+ *
+ * 1: 申请Storage或Execution内存时, 当可用内存不足内存分配申请时, 则会收缩Execution或Storage内存, 故:
+ *
+ *   MaxStorageMemory和MaxExecutionMemory的数值不是固定的, 而是动态变化的
+ *
+ * 2:
  *
  * 1: {@link #acquireExecutionMemory(long, long, MemoryMode)} 动态调整Execution内存
  *
@@ -66,27 +72,32 @@ public class UnifiedMemoryManager extends MemoryManager {
         ExecutionMemoryPool executionPool;
         long maxMemory;
 
+        // Storage和Execution内存可动态调整, 顾最大内存需实时计算
         switch (memoryMode) {
             case OFF_HEAP:
                 storagePool = offHeapStorageMemoryPool;
                 executionPool = offHeapExecutionMemoryPool;
-                maxMemory = maxOffHeapMemory;
+                maxMemory = maxOnHeapStorageMemory();
                 break;
             case ON_HEAP:
                 storagePool = onHeapStorageMemoryPool;
                 executionPool = onHeapExecutionMemoryPool;
-                maxMemory = maxHeapMemory;
+                maxMemory = maxOnHeapStorageMemory();
                 break;
             default:
                 throw new IllegalArgumentException("Unsupported memory model : " + memoryMode);
         }
 
+        // 申请内存超出最大内存, 则返回False
         if (numBytes > maxMemory) {
             // Fail fast if the block simply won't fit
             LOGGER.info("Will not store $blockId as the required space ({} bytes) exceeds our " +
                         "memory limit ({} bytes)", numBytes, maxMemory);
             return false;
         }
+
+        // 申请Storage内存超出可用内存时, 则收缩Execution内存, 扩容Storage内存
+        // 当Execution收缩内存后, Storage还不能分配足够内存时, 则此时Storage申请同StaticMemoryManager Storage内存申请
         if (numBytes > storagePool.memoryFree()) {
             // 动态调整Storage内存: 取Execution可用内存、Storage不足内存最小值
             long memoryBorrowedFromExecution = Math.min(executionPool.memoryFree(),
@@ -106,10 +117,10 @@ public class UnifiedMemoryManager extends MemoryManager {
 
     @Override
     public long acquireExecutionMemory(long numBytes, long taskAttemptId, MemoryMode memoryMode) {
-        SimpleExecutionMemoryCalculate memoryCalculate;
+        SimpleExecutionMemoryPredict memoryCalculate;
         switch (memoryMode) {
             case OFF_HEAP:
-                memoryCalculate = new SimpleExecutionMemoryCalculate(
+                memoryCalculate = new SimpleExecutionMemoryPredict(
                         offHeapStorageMemoryPool,
                         offHeapExecutionMemoryPool,
                         offHeapStorageMemory,
@@ -117,7 +128,7 @@ public class UnifiedMemoryManager extends MemoryManager {
                 );
                 break;
             case ON_HEAP:
-                memoryCalculate = new SimpleExecutionMemoryCalculate(
+                memoryCalculate = new SimpleExecutionMemoryPredict(
                         onHeapStorageMemoryPool,
                         onHeapExecutionMemoryPool,
                         onHeapStorageRegionSize,
@@ -169,15 +180,15 @@ public class UnifiedMemoryManager extends MemoryManager {
         return (long) (usableMemory * memoryFraction);
     }
 
-    private class SimpleExecutionMemoryCalculate implements ExecutionMemoryPool.ExecutionMemoryCalculate {
+    private class SimpleExecutionMemoryPredict implements ExecutionMemoryPool.ExecutionMemoryPredict {
 
         StorageMemoryPool storagePool;
         ExecutionMemoryPool executionPool;
         long storageRegionSize;
         long maxMemory;
 
-        public SimpleExecutionMemoryCalculate(StorageMemoryPool storagePool, ExecutionMemoryPool executionPool,
-                                              long storageRegionSize, long maxMemory) {
+        public SimpleExecutionMemoryPredict(StorageMemoryPool storagePool, ExecutionMemoryPool executionPool,
+                                            long storageRegionSize, long maxMemory) {
             this.storagePool = storagePool;
             this.executionPool = executionPool;
             this.storageRegionSize = storageRegionSize;

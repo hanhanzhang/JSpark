@@ -7,7 +7,9 @@ import org.slf4j.LoggerFactory;
 import java.util.Map;
 
 /**
- * Task计算内存池(记录内存使用信息, Task内存分配信息)
+ * {@link ExecutionMemoryPool}职责:
+ *
+ * 1: {@link #memoryForTask}记录每个Task分配的Execution内存量
  *
  * @author hanhan.zhang
  * */
@@ -54,7 +56,7 @@ public class ExecutionMemoryPool extends MemoryPool {
     }
 
     public long acquireMemory(long numBytes, long taskAttemptId) throws InterruptedException {
-        return acquireMemory(numBytes, taskAttemptId, new ExecutionMemoryCalculate() {
+        return acquireMemory(numBytes, taskAttemptId, new ExecutionMemoryPredict() {
             @Override
             public void maybeGrowPool(long additionalSpaceNeeded) {
                 // 不做任何处理
@@ -67,7 +69,7 @@ public class ExecutionMemoryPool extends MemoryPool {
         });
     }
 
-    public long acquireMemory(long numBytes, long taskAttemptId, ExecutionMemoryCalculate calculate) throws InterruptedException {
+    public long acquireMemory(long numBytes, long taskAttemptId, ExecutionMemoryPredict calculate) throws InterruptedException {
         synchronized (lock) {
             assert numBytes > 0 : String.format("invalid number of bytes requested: %d", numBytes);
 
@@ -153,7 +155,7 @@ public class ExecutionMemoryPool extends MemoryPool {
         }
     }
 
-    public interface ExecutionMemoryCalculate {
+    public interface ExecutionMemoryPredict {
         /**
          * @param additionalSpaceNeeded : Execution内存扩容量
          * */

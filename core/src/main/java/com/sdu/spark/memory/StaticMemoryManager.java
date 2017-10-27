@@ -8,7 +8,11 @@ import org.slf4j.LoggerFactory;
 import static com.google.common.base.Preconditions.checkArgument;
 
 /**
- * 不支持动态调整Storage和Execution内存
+ * {@link StaticMemoryManager}特点:
+ *
+ * 1: 不支持Storage和Execution内存容量动态扩容和缩容
+ *
+ * 2: 不支持使用非堆Storage内存
  *
  * @author hanhan.zhang
  * */

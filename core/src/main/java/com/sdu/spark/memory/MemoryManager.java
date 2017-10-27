@@ -12,16 +12,54 @@ import static com.google.common.base.Preconditions.checkArgument;
 /**
  * {@link MemoryManager}职责:
  *
- * 1:
+ * 1: 初始化ExecutionMemoryPool/StorageMemoryPool内存池
+ *
+ *    1': 堆内存池容量的由构造函数传入
+ *
+ *    2': 非堆内存池容量最大容量由参数'spark.memory.offHeap.size'指定
+ *
+ *        Execution与Storage非堆内存分配比例由参数'spark.memory.storageFraction'决定
+ *
+ * 2: 申请Storage内存(实质上检测内存池是否有足够内存可用于分配, 若满足可分配内存返回true, 否则返回false)
+ *
+ *   1': {@link #acquireStorageMemory(BlockId, long, MemoryMode)}
+ *
+ *      a: {@link StaticMemoryManager}仅支持对堆内存容量申请, 若是当前可用内存不足此次内存容量申请, 则将内存中可Spill到Disk的
+ *
+ *         Block数据Spill到磁盘, 具体调用链:
+ *
+ *          StaticMemoryManager.acquireStorageMemory()
+ *              |
+ *              +-----> StorageMemoryPool.acquireMemory()
+ *                          |
+ *                          +-----> MemoryStore.evictBlocksToFreeSpace()【Block Spill磁盘后, StorageMemoryPool可用内存扩容】
+ *
+ *      b: {@link UnifiedMemoryManager}申请Storage内存时, 若是当前可用内存不足此次内存容量申请, 则会收缩Execution内存然后扩容
+ *
+ *         Storage内存, 当Execution收缩内存后尚未满足此次内存申请则接下来Storage内存申请同StaticMemoryManager, 具体调用链:
+ *
+ *          UnifiedMemoryManager.acquireStorageMemory()
+ *              |
+ *              +------> ExecutionMemoryPool.decrementPoolSize()/StorageMemoryPool.incrementPoolSize()
+ *                          |
+ *                          +-------> StorageMemoryPool.acquireMemory()【此时申请逻辑同StaticMemoryManager】
+ *
+ *  2': {@link #releaseStorageMemory(long, MemoryMode)}
+ *
+ * 3: 申请Execution内存(实质上检测内存池是否有足够内存可用于分配, 若满足可分配内存返回true, 否则返回false)
+ *
+ *  1': {@link #acquireExecutionMemory(long, long, MemoryMode)}
+ *
+ *      a: {@link StaticMemoryManager}支持堆内存和非堆内存,
  *
  * @author hanhan.zhang
  * */
 public abstract class MemoryManager {
 
-    private static int MIN_MEMORY_BYTES = 32 * 1024 * 1024;
+    private final static int MIN_MEMORY_BYTES = 32 * 1024 * 1024;
 
     public SparkConf conf;
-    int numCores;
+    protected int numCores;
     // Storage内存存储量
     long onHeapStorageMemory;
     // Execution计算内存存储量
@@ -37,12 +75,15 @@ public abstract class MemoryManager {
     final ExecutionMemoryPool onHeapExecutionMemoryPool = new ExecutionMemoryPool(this, MemoryMode.ON_HEAP);
     final ExecutionMemoryPool offHeapExecutionMemoryPool = new ExecutionMemoryPool(this, MemoryMode.OFF_HEAP);
 
-    MemoryMode tungstenMemoryMode;
-    long pageSizeBytes;
+    final MemoryMode tungstenMemoryMode;
+    protected long pageSizeBytes;
     // 分配分配
-    MemoryAllocator tungstenMemoryAllocator;
+    protected final MemoryAllocator tungstenMemoryAllocator;
 
-    public MemoryManager(SparkConf conf, int numCores, long onHeapStorageMemory, long onHeapExecutionMemory) {
+    public MemoryManager(SparkConf conf,
+                         int numCores,
+                         long onHeapStorageMemory,
+                         long onHeapExecutionMemory) {
         this.conf = conf;
         this.numCores = numCores;
         this.onHeapStorageMemory = onHeapStorageMemory;
@@ -79,7 +120,7 @@ public abstract class MemoryManager {
     }
 
     private long calculatePageSize(SparkConf conf) {
-        long minPageSize = 1024 * 1024L;   // 1MB
+        long minPageSize = 1024 * 1024L;      // 1MB
         long maxPageSize = 64 * minPageSize;  // 64MB
         int cores = numCores > 0 ? numCores : Runtime.getRuntime().availableProcessors();
         // Because of rounding to next power of 2, we may have safetyFactor as 8 in worst case
@@ -154,7 +195,6 @@ public abstract class MemoryManager {
     public final synchronized long storageMemoryUsed() {
         return onHeapStorageMemoryPool.memoryUsed() + offHeapStorageMemoryPool.memoryUsed();
     }
-
 
 
     public abstract long acquireExecutionMemory(long numBytes, long taskAttemptId, MemoryMode memoryMode);
