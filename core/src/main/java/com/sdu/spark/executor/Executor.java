@@ -1,6 +1,7 @@
 package com.sdu.spark.executor;
 
 import com.google.common.collect.Maps;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.sdu.spark.HeartBeatReceiver;
 import com.sdu.spark.MapOutputTrackerWorker;
 import com.sdu.spark.SparkEnv;
@@ -18,6 +19,8 @@ import com.sdu.spark.storage.BlockId.TaskResultBlockId;
 import com.sdu.spark.storage.StorageLevel;
 import com.sdu.spark.utils.ChunkedByteBuffer;
 import com.sdu.spark.utils.SparkUncaughtExceptionHandler;
+import com.sdu.spark.utils.UninterruptibleThread;
+import com.sdu.spark.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -29,9 +32,7 @@ import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 
 import static com.sdu.spark.scheduler.TaskState.FINISHED;
 import static com.sdu.spark.scheduler.TaskState.RUNNING;
@@ -41,25 +42,30 @@ import static com.sdu.spark.utils.ThreadUtils.newDaemonSingleThreadScheduledExec
 import static com.sdu.spark.utils.Utils.computeTotalGcTime;
 
 /**
- * {@link Executor}Spark Task执行器,
+ * {@link Executor}Spark Task执行器
  *
  * @author hanhan.zhang
  * */
 public class Executor {
     private static final Logger LOGGER = LoggerFactory.getLogger(Executor.class);
+
     private ByteBuffer EMPTY_BYTE_BUFFER = ByteBuffer.wrap(new byte[0]);
 
     /****************************Spark运行环境*******************************/
     private boolean isLocal;
     private String executorId;
-    private String executorHostname;
     private SparkEnv env;
     private SparkConf conf;
+
     private URL[] userClassPath;
+    // Application dependencies (added through SparkContext) that we've fetched so far on this node.
+    // Each map holds the master's timestamp for the version of that file or JAR we got.
+    private Map<String, Long> currentFiles = Maps.newHashMap();
+    private Map<String, Long> currentJars = Maps.newHashMap();
 
     /****************************Spark Task*********************************/
     // 任务线程
-    private ThreadPoolExecutor threadPool = newDaemonCachedThreadPool("Executor task launch worker-%d", Integer.MAX_VALUE, 60);
+    private ThreadPoolExecutor threadPool;
     // 任务取消线程
     private ThreadPoolExecutor taskReaperPool = newDaemonCachedThreadPool("Task reaper");
     // 运行中任务集合[key = taskId, value = TaskRunner]
@@ -85,10 +91,38 @@ public class Executor {
         this(executorId, executorHostname, env, false, userClassPath, new SparkUncaughtExceptionHandler());
     }
 
-    public Executor(String executorId, String executorHostname, SparkEnv env, boolean isLocal,
-                    URL[] userClassPath, Thread.UncaughtExceptionHandler uncaughtExceptionHandler) {
+    public Executor(String executorId,
+                    String executorHostname,
+                    SparkEnv env,
+                    boolean isLocal,
+                    URL[] userClassPath,
+                    Thread.UncaughtExceptionHandler uncaughtExceptionHandler) {
+        LOGGER.info("Starting executor Id {} on host {}", executorId, executorHostname);
+        Utils.checkHost(executorHostname);
+        // must not have port specified
+        assert Utils.parseHostPort(executorHostname)._2() == 0;
+        // Make sure the local hostname we report matches the cluster scheduler's name for this host
+        Utils.setCustomHostname(executorHostname);
+
+        if (!isLocal) {
+            // Setup an uncaught exception handler for non-local mode.
+            // Make any thread terminations due to uncaught exceptions kill the entire
+            // executor process to avoid surprising stalls.
+            Thread.setDefaultUncaughtExceptionHandler(uncaughtExceptionHandler);
+        }
+
+        ThreadFactory threadFactory = new ThreadFactoryBuilder().setDaemon(true)
+                                                                .setNameFormat("Executor task launch worker-%d")
+                                                                .setThreadFactory(r -> {
+                                                                    // Use UninterruptibleThread to run tasks so that we can allow running codes without being
+                                                                    // interrupted by `Thread.interrupt()`. Some issues, such as KAFKA-1894, HADOOP-10622,
+                                                                    // will hang forever if some methods are interrupted.
+                                                                    return new UninterruptibleThread(r, "unused");
+                                                                })
+                                                                .build();
+        this.threadPool = (ThreadPoolExecutor) Executors.newCachedThreadPool(threadFactory);
+
         this.executorId = executorId;
-        this.executorHostname = executorHostname;
         this.env = env;
         this.conf = env.conf;
         this.isLocal = isLocal;
@@ -101,6 +135,7 @@ public class Executor {
         if (!isLocal) {
             this.env.blockManager.initialize(this.conf.getAppId());
         }
+
         startDriverHeartbeat();
     }
 

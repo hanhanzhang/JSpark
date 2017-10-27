@@ -1,9 +1,11 @@
 package com.sdu.spark.utils;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Maps;
 import com.sdu.spark.SparkException;
 import com.sdu.spark.rpc.RpcCallContext;
 import com.sdu.spark.rpc.SparkConf;
+import com.sdu.spark.utils.scala.Tuple2;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.SystemUtils;
 import org.apache.logging.log4j.util.Strings;
@@ -23,16 +25,15 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Paths;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Locale;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+
+import static org.apache.commons.lang3.math.NumberUtils.toInt;
 
 /**
  * @author hanhan.zhang
@@ -56,6 +57,42 @@ public class Utils {
                                                                                     .build();
 
     private static volatile String[] localRootDirs = null;
+
+    private static Map<String, Tuple2<String, Integer>> hostPortParseResults = Maps.newConcurrentMap();
+    private static String customHostname = System.getenv("SPARK_LOCAL_HOSTNAME");
+
+    public static void checkHost(String host) {
+        assert host != null && host.indexOf(':') == -1 :
+                String.format("Expected hostname (not IP) but got %s", host);
+    }
+
+    public static void setCustomHostname(String hostname) {
+        // DEBUG code
+        Utils.checkHost(hostname);
+        customHostname = hostname;
+    }
+
+    public static Tuple2<String, Integer> parseHostPort(String hostPort) {
+        // Check cache first.
+        Tuple2<String, Integer> cached = hostPortParseResults.get(hostPort);
+        if (cached != null) {
+            return cached;
+        }
+
+        int index = hostPort.lastIndexOf(':');
+        // This is potentially broken - when dealing with ipv6 addresses for example, sigh ...
+        // but then hadoop does not support ipv6 right now.
+        // For now, we assume that if port exists, then it is valid - not check if it is an int > 0
+        if (-1 == index) {
+            Tuple2<String, Integer> retval = new Tuple2<>(hostPort, 0);
+            hostPortParseResults.put(hostPort, retval);
+            return retval;
+        }
+
+        Tuple2<String, Integer> retval = new Tuple2<>(hostPort.substring(0, index).trim(), toInt(hostPort.substring(index + 1).trim()));
+        hostPortParseResults.putIfAbsent(hostPort, retval);
+        return hostPortParseResults.get(hostPort);
+    }
 
     public static int terminateProcess(Process process, long timeoutMs)  {
         try {
