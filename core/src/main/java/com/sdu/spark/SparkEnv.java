@@ -47,7 +47,6 @@ public class SparkEnv {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(SparkEnv.class);
 
-    /**每个JVM进程中只有一个SparkContext*/
     public static volatile SparkEnv env;
 
     private static final String driverSystemName = "sparkDriver";

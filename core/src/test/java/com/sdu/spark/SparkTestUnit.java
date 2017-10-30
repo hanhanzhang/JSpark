@@ -17,6 +17,10 @@ public abstract class SparkTestUnit {
         System.setProperty("java.io.tmpdir", "/Users/hanhan.zhang/tmp");
 
         conf = new SparkConf();
+
+        // driver进程只允许启动一个SparkContext
+        conf.set("spark.driver.allowMultipleContexts", "false");
+
         // Spark Shuffle根目录、子目录数
         conf.set("spark.local.dir", "/Users/hanhan.zhang/tmp");
         conf.set("spark.diskStore.subDirectories", "64");

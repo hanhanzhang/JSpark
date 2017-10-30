@@ -8,6 +8,7 @@ import com.sdu.spark.rpc.SparkConf;
 import com.sdu.spark.scheduler.*;
 import com.sdu.spark.scheduler.cluster.StandaloneSchedulerBackend;
 import com.sdu.spark.utils.CallSite;
+import com.sdu.spark.utils.scala.Tuple2;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
@@ -18,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static com.sdu.spark.SparkApp.TaskSchedulerIsSet;
 import static com.sdu.spark.SparkMasterRegex.SPARK_REGEX;
@@ -75,16 +77,25 @@ import static com.sdu.spark.utils.Utils.isLocalMaster;
 public class SparkContext {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(SparkContext.class);
+
+    private static final Object SPARK_CONTEXT_CONSTRUCTOR_LOCK = new Object();
+    private static AtomicReference<SparkContext> activeContext = new AtomicReference<>(null);
+
     public static final String DRIVER_IDENTIFIER = "driver";
     public static final String LEGACY_DRIVER_IDENTIFIER = "<driver>";
+
+    private boolean allowMultipleContexts;
+    private long startTime;
     public AtomicBoolean stopped = new AtomicBoolean(false);
+    // TODO: CallSite
+
 
     public SparkConf conf;
     public SparkEnv env;
     public LiveListenerBus listenerBus;
     public SchedulerBackend schedulerBackend;
     public TaskScheduler taskScheduler;
-    private DAGScheduler dagScheduler;
+    private volatile DAGScheduler dagScheduler;
     private RpcEndPointRef heartbeatReceiver;
     private List<String> jars;
     private int executorMemory;
@@ -101,6 +112,12 @@ public class SparkContext {
     }
 
     private void init() {
+        // SparkContext启动时间
+        this.startTime = System.currentTimeMillis();
+        // jvm进程中是否允许多个SparkContext
+        this.allowMultipleContexts = this.conf.getBoolean("spark.driver.allowMultipleContexts", false);
+        SparkContext.markPartiallyConstructed(this, this.allowMultipleContexts);
+
         if (!this.conf.contains("spark.master")) {
             throw new IllegalStateException("A master URL must be set in your configuration");
         }
@@ -124,14 +141,14 @@ public class SparkContext {
         SparkEnv.env = env;
 
         executorMemory = conf.getInt("spark.executor.memory", 1024);
-        executorEnvs.put("SPARK_EXECUTOR_MEMORY", String.format("%sm", executorMemory));
+        executorEnvs.put("SPARK_EXECUTOR_MEMORY", String.format("%dm", executorMemory));
 
         heartbeatReceiver = env.rpcEnv.setRpcEndPointRef(HeartBeatReceiver.ENDPOINT_NAME,
                                                          new HeartBeatReceiver(this));
 
-        Pair<TaskScheduler, SchedulerBackend> tuple = createTaskScheduler(this, master, deployMode());
-        taskScheduler = tuple.getLeft();
-        schedulerBackend = tuple.getRight();
+        Tuple2<TaskScheduler, SchedulerBackend> tuple = createTaskScheduler(this, master, deployMode());
+        taskScheduler = tuple._1();
+        schedulerBackend = tuple._2();
         dagScheduler = new DAGScheduler(this);
         boolean isSet = getFutureResult(heartbeatReceiver.ask(new TaskSchedulerIsSet()));
         if (isSet) {
@@ -173,12 +190,12 @@ public class SparkContext {
      *
      * todo: Spark Cluster(local, standalone, mesos, yarn)
      * */
-    private Pair<TaskScheduler, SchedulerBackend> createTaskScheduler(SparkContext sc, String master, String deployMode) {
+    private Tuple2<TaskScheduler, SchedulerBackend> createTaskScheduler(SparkContext sc, String master, String deployMode) {
         if (SPARK_REGEX(master)) {
             TaskSchedulerImpl scheduler = new TaskSchedulerImpl(sc);
             SchedulerBackend backend = new StandaloneSchedulerBackend(scheduler, sc, master);
             scheduler.initialize(backend);
-            return new ImmutablePair<>(scheduler, backend);
+            return new Tuple2<>(scheduler, backend);
         }
         throw new UnsupportedOperationException("Unsupported spark cluster : " + master);
     }
@@ -204,4 +221,35 @@ public class SparkContext {
         return nextRddId.getAndIncrement();
     }
 
+    private void assertNotStopped() {
+        if (stopped.get()) {
+            // TODO: Active SparkContext CallSite Message
+            throw new IllegalStateException("Cannot call methods on a stopped SparkContext");
+        }
+    }
+
+    private static void markPartiallyConstructed(SparkContext sc, boolean allowMultipleContexts) {
+        synchronized (SPARK_CONTEXT_CONSTRUCTOR_LOCK) {
+            assertNoOtherContextIsRunning(sc, allowMultipleContexts);
+            activeContext.set(sc);
+        }
+    }
+
+    private static void assertNoOtherContextIsRunning(SparkContext sc, boolean allowMultipleContexts) {
+        synchronized (SPARK_CONTEXT_CONSTRUCTOR_LOCK) {
+            SparkContext activeSparkContext = activeContext.get();
+            if (activeSparkContext != null && !activeSparkContext.equals(sc)) {
+                String errMsg = "Only one SparkContext may be running in this JVM (see SPARK-2243). " +
+                                "To ignore this error, set spark.driver.allowMultipleContexts = true. ";
+                SparkException exception = new SparkException(errMsg);
+                if (allowMultipleContexts) {
+                    LOGGER.warn("Multiple running SparkContexts detected in the same JVM!", exception);
+                } else {
+                    throw exception;
+                }
+            }
+        }
+
+        // TODO: contextBeingConstructed
+    }
 }

@@ -21,6 +21,16 @@ public class SparkConf implements Serializable {
 
     private Map<String, String> settings = Maps.newConcurrentMap();
 
+    public SparkConf setMaster(String master) {
+        set("spark.master", master);
+        return this;
+    }
+
+    public SparkConf setAppName(String name) {
+        set("spark.app.name", name);
+        return this;
+    }
+
     public void set(String key, String value) {
         settings.put(key, value);
     }
