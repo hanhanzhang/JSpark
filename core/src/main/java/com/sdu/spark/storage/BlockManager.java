@@ -110,10 +110,16 @@ public class BlockManager implements BlockDataManager, BlockEvictionHandler {
     private Future<?> asyncReregisterTask = null;
     private final Object asyncReregisterLock = new Object();
 
-    public BlockManager(String executorId, RpcEnv rpcEnv, BlockManagerMaster master,
-                        SerializerManager serializerManager, SparkConf conf, MemoryManager memoryManager,
-                        MapOutputTracker mapOutputTracker, ShuffleManager shuffleManager,
-                        BlockTransferService blockTransferService, SecurityManager securityManager,
+    public BlockManager(String executorId,
+                        RpcEnv rpcEnv,
+                        BlockManagerMaster master,
+                        SerializerManager serializerManager,
+                        SparkConf conf,
+                        MemoryManager memoryManager,
+                        MapOutputTracker mapOutputTracker,
+                        ShuffleManager shuffleManager,
+                        BlockTransferService blockTransferService,
+                        SecurityManager securityManager,
                         int numUsableCores) {
         this.executorId = executorId;
         this.rpcEnv = rpcEnv;

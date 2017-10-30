@@ -13,9 +13,11 @@ import java.util.*;
 import static com.sdu.spark.utils.Utils.bytesToString;
 
 /**
- * {@link TaskMemoryManager}职责:
+ * {@link TaskMemoryManager}职责(每个Task对应一个TaskMemoryManager):
  *
- * 1:
+ * 1: {@link #acquireExecutionMemory(long, MemoryConsumer)}申请Execution内存
+ *
+ *
  *
  * 2:
  *
@@ -60,7 +62,9 @@ public class TaskMemoryManager {
         MemoryMode memoryMode = consumer.getMode();
 
         synchronized (this) {
+            // 当前可申请到Execution内存(申请Execution内存过程中会阻塞当前线程)
             long got = memoryManager.acquireExecutionMemory(required, taskAttemptId, memoryMode);
+            // 每个Task分配内存范围: 1/N * poolSize <= X <= 1/2N * maxCapacity, 故有可能尚未满足申请需求
             if (got < required) {
                 // 分配的内存小于申请的内存, 则看是否能够释放其他Task已分配内存, 以此减少Spill到文件
                 TreeMap<Long, List<MemoryConsumer>> sortedConsumers = new TreeMap<>();

@@ -30,8 +30,14 @@ public abstract class SparkTestUnit {
         // 指定压缩算法(lz4更高效)
         conf.set("spark.io.compression.codec", "lz4");
 
+        // 指定内存池参数
+        // StaticMemoryManager仅支持Execution使用非堆内存, UnifiedMemoryManager支持Storage和Execution都使用非堆内存
+        conf.set("spark.memory.offHeap.size", "10240");
+        // 设置Storage内存占offHeap的比例(仅在UnifiedMemoryManager下生效)
+        conf.set("spark.memory.storageFraction", "0.5");
         // Execution/Storage使用内存类型(堆内存、非堆内存)
         conf.set("spark.memory.offHeap.enabled", "false");
+
     }
 
     @BeforeClass
