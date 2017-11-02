@@ -12,23 +12,21 @@ import java.util.regex.Pattern;
 public class SparkMasterRegex {
 
     // Regular expression used for local[N] and local[*] master formats
-    private static String LOCAL_N_REGEX = "local\\[([0-9]+|\\*)\\]";
+    private static Pattern LOCAL_N_REGEX = Pattern.compile("local\\[([0-9]+|\\*)\\]");
     // Regular expression for local[N, maxRetries], used in tests with failing tasks
-    private static String LOCAL_N_FAILURES_REGEX = "local\\[([0-9]+|\\*)\\s*,\\s*([0-9]+)\\]";
+    private static Pattern LOCAL_N_FAILURES_REGEX = Pattern.compile("local\\[([0-9]+|\\*)\\s*,\\s*([0-9]+)\\]");
     // Regular expression for simulating a Spark cluster of [N, cores, memory] locally
-    private static String LOCAL_CLUSTER_REGEX = "local-cluster\\[\\s*([0-9]+)\\s*,\\s*([0-9]+)\\s*,\\s*([0-9]+)\\s*]";
+    private static Pattern LOCAL_CLUSTER_REGEX = Pattern.compile("local-cluster\\[\\s*([0-9]+)\\s*,\\s*([0-9]+)\\s*,\\s*([0-9]+)\\s*]");
     // Regular expression for connecting to Spark deploy clusters
-    private static String SPARK_REGEX = "spark://(.*)";
+    private static Pattern SPARK_REGEX = Pattern.compile("spark://(.*)");
 
     public static boolean LOCAL_N_REGEX(String master) {
-        Pattern p = Pattern.compile(LOCAL_N_REGEX);
-        Matcher m = p.matcher(master);
+        Matcher m = LOCAL_N_REGEX.matcher(master);
         return m.matches();
     }
 
     public static int LOCAL_N_REGEX_THREAD(String master) {
-        Pattern p = Pattern.compile(LOCAL_N_REGEX);
-        Matcher m = p.matcher(master);
+        Matcher m = LOCAL_N_REGEX.matcher(master);
         if (m.find()) {
             return NumberUtils.toInt(m.group(1));
         }
@@ -36,14 +34,12 @@ public class SparkMasterRegex {
     }
 
     public static boolean LOCAL_N_FAILURES_REGEX(String master) {
-        Pattern p = Pattern.compile(LOCAL_N_FAILURES_REGEX);
-        Matcher m = p.matcher(master);
+        Matcher m = LOCAL_N_FAILURES_REGEX.matcher(master);
         return m.matches();
     }
 
     public static int[] LOCAL_N_FAILURES_REGEX_R(String master) {
-        Pattern p = Pattern.compile(LOCAL_N_FAILURES_REGEX);
-        Matcher m = p.matcher(master);
+        Matcher m = LOCAL_N_FAILURES_REGEX.matcher(master);
         if (m.find()) {
             int[] r = new int[2];
             r[0] = NumberUtils.toInt(m.group(1));
@@ -55,14 +51,12 @@ public class SparkMasterRegex {
     }
 
     public static boolean LOCAL_CLUSTER_REGEX(String master) {
-        Pattern p = Pattern.compile(LOCAL_CLUSTER_REGEX);
-        Matcher m = p.matcher(master);
+        Matcher m = LOCAL_CLUSTER_REGEX.matcher(master);
         return m.matches();
     }
 
     public static boolean SPARK_REGEX(String master) {
-        Pattern p = Pattern.compile(SPARK_REGEX);
-        Matcher m = p.matcher(master);
+        Matcher m = SPARK_REGEX.matcher(master);
         return m.matches();
     }
 
