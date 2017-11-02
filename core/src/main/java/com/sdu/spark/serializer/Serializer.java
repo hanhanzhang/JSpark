@@ -1,6 +1,8 @@
 package com.sdu.spark.serializer;
 
 /**
+ * TODO: KryoSerializer
+ *
  * @author hanhan.zhang
  * */
 public interface Serializer {
