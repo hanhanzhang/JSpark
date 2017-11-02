@@ -11,6 +11,8 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import static com.sdu.spark.SecurityManager.SPARK_AUTH_SECRET_CONF;
+import static com.sdu.spark.utils.Utils.byteStringAsKb;
+import static com.sdu.spark.utils.Utils.byteStringAsMb;
 import static com.sdu.spark.utils.Utils.timeStringAs;
 
 /**
@@ -107,11 +109,11 @@ public class SparkConf implements Serializable {
         return JavaUtils.byteStringAsBytes(get(key, defaultValue));
     }
 
-    public String getSizeAsKb(String key, String defaultValue) {
-        throw new UnsupportedOperationException("");
+    public long getSizeAsKb(String key, String defaultValue) {
+        return byteStringAsKb(get(key, defaultValue));
     }
 
     public long getSizeAsMb(String key, String defaultValue) {
-        throw new UnsupportedOperationException("");
+        return byteStringAsMb(get(key, defaultValue));
     }
 }

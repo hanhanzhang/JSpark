@@ -19,6 +19,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import static com.sdu.spark.utils.Utils.bytesToString;
 import static org.apache.commons.lang3.StringUtils.split;
 
 /**
@@ -109,7 +110,7 @@ public class StandaloneSchedulerBackend extends CoarseGrainedSchedulerBackend im
 
     @Override
     public void connected(String appId) {
-        LOGGER.info("Spark App[appId = {}]注册成功", appId);
+        LOGGER.info("Connected to Spark cluster with app ID {}", appId);
         notifyContext();
         this.appId = appId;
         launcherBackend.setAppId(appId);
@@ -119,7 +120,7 @@ public class StandaloneSchedulerBackend extends CoarseGrainedSchedulerBackend im
     public void disconnected() {
         notifyContext();
         if (!stopping.get()) {
-            LOGGER.info("Spark Master断开连接, 等待重新注册...");
+            LOGGER.info("Disconnected from Spark cluster! Waiting for reconnection ...");
         }
     }
 
@@ -128,7 +129,7 @@ public class StandaloneSchedulerBackend extends CoarseGrainedSchedulerBackend im
         notifyContext();
         if (!stopping.get()) {
             launcherBackend.setState(State.KILLED);
-            LOGGER.error("Spark App[appId = {}]被杀死, 原因: {}", appId, reason);
+            LOGGER.error("Application {} has been killed. Reason: {}", appId, reason);
             try {
                 scheduler.error(reason);
             } finally {
@@ -140,19 +141,19 @@ public class StandaloneSchedulerBackend extends CoarseGrainedSchedulerBackend im
 
     @Override
     public void executorAdded(String fullId, String workerId, String hostPort, int cores, int memory) {
-        LOGGER.info("Worker[host = {}]启动Executor[fullId = {}]: cores = {}, memory = {}",
-                hostPort, fullId, cores, memory);
+        LOGGER.info("Granted executor ID {} on hostPort {} with {} cores, {} RAM",
+                fullId, hostPort, cores, bytesToString(memory * 1024 * 1024));
     }
 
     @Override
     public void executorRemove(String fullId, String message, int exitStatus, boolean workerLost) {
-        LOGGER.info("Executor[fullId = {}]被移除, 原因: {}", fullId, message);
+        LOGGER.info("Executor {} removed: {}", fullId, message);
         removeExecutor(fullId.split("/")[1], message);
     }
 
     @Override
     public void workerRemoved(String workerId, String host, String message) {
-        LOGGER.info("Worker[workerId = {}, host = {}]被移除, 原因: {}", workerId, host, message);
+        LOGGER.info("Worker {} removed: {}", workerId, host, message);
         removeWorker(workerId, host, message);
     }
 

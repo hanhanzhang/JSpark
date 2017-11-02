@@ -3,6 +3,8 @@ package com.sdu.spark.utils;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
 import com.sdu.spark.SparkException;
+import com.sdu.spark.network.utils.ByteUnit;
+import com.sdu.spark.network.utils.JavaUtils;
 import com.sdu.spark.rpc.RpcCallContext;
 import com.sdu.spark.rpc.SparkConf;
 import com.sdu.spark.utils.scala.Tuple2;
@@ -304,6 +306,14 @@ public class Utils {
         } else {
            return InetAddress.getLocalHost();
         }
+    }
+
+    public static long byteStringAsMb(String str) {
+        return JavaUtils.byteStringAs(str, ByteUnit.MiB);
+    }
+
+    public static long byteStringAsKb(String str) {
+        return JavaUtils.byteStringAs(str, ByteUnit.KiB);
     }
 
     public static String bytesToString(long size) {

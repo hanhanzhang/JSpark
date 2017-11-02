@@ -97,7 +97,7 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
         this.serializerManager = SparkEnv.env.serializerManager;
         this.serInstance = serializer.newInstance();
 
-        this.fileBufferSize = toInt(conf.getSizeAsKb("spark.shuffle.file.buffer", "32K")) * 1024;
+        this.fileBufferSize = (int) conf.getSizeAsKb("spark.shuffle.file.buffer", "32K") * 1024;
         this.serializerBatchSize = conf.getLong("spark.shuffle.spill.batchSize", 10000);
 
         this.map = new PartitionedAppendOnlyMap<>();

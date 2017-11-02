@@ -141,26 +141,26 @@ public class StandaloneAppClient {
                 markDead(String.format("Master removed our application: %s", applicationRemoved.message));
                 stop();
             } else if (msg instanceof ExecutorAdded) {
-                ExecutorAdded executorAdded = (ExecutorAdded) msg;
-                String fullId = appId + "/" + executorAdded.execId;
-                LOGGER.info("Master在工作节点Worker[workerId = {}, host = {}]启动Executor[fullId = {}, cores = {}]",
-                            executorAdded.workerId, executorAdded.host, fullId, executorAdded.cores);
-                listener.executorAdded(fullId, executorAdded.workerId, executorAdded.host, executorAdded.cores, executorAdded.memory);
+                ExecutorAdded executor = (ExecutorAdded) msg;
+                String fullId = appId + "/" + executor.execId;
+                LOGGER.info("Executor added: {} on {} ({}) with {} cores",
+                            fullId, executor.workerId, executor.host, executor.cores);
+                listener.executorAdded(fullId, executor.workerId, executor.host, executor.cores, executor.memory);
             } else if (msg instanceof ExecutorUpdated) {
                 ExecutorUpdated executor = (ExecutorUpdated) msg;
                 String fullId = appId + "/" + executor.id;
-                LOGGER.info("Executor[fullId = {}]状态更新: state = {}, message = {}",
-                        fullId, executor.state, executor.message);
+
+                LOGGER.info("Executor updated: {} is now {}({})", fullId, executor.state, executor.message);
                 if (ExecutorState.isFinished(executor.state)) {
                     listener.executorRemove(fullId, executor.message, executor.exitStatus, executor.workerLost);
                 }
             } else if (msg instanceof WorkerRemoved) {
                 WorkerRemoved workerRemoved = (WorkerRemoved) msg;
-                LOGGER.info("Master移除工作节点Worker[workerId = {}]: {}", workerRemoved.id, workerRemoved.message);
+                LOGGER.info("Master removed worker {}: {}", workerRemoved.id, workerRemoved.message);
                 listener.workerRemoved(workerRemoved.id, workerRemoved.host, workerRemoved.message);
             } else if (msg instanceof MasterChanged) {
                 MasterChanged masterChanged = (MasterChanged) msg;
-                LOGGER.info("Master地址发生变更, 新地址: {}", masterChanged.master.address().toSparkURL());
+                LOGGER.info("Master has changed, new master is at ", masterChanged.master.address().toSparkURL());
                 master = masterChanged.master;
                 alreadyDisconnected = false;
                 master.send(new MasterChangeAcknowledged(appId.get()));
@@ -178,14 +178,14 @@ public class StandaloneAppClient {
                 if (master != null) {
                     askAndReplyAsync(master, context, msg);
                 } else {
-                    LOGGER.info("Spark App注册Master后尝试申请Executor");
+                    LOGGER.info("Attempted to request executors before registering with Master.");
                     context.reply(false);
                 }
             } else if (msg instanceof KillExecutors) {
                 if (master != null) {
                     askAndReplyAsync(master, context, msg);
                 } else {
-                    LOGGER.info("Spark App注册Master后尝试关闭Executor");
+                    LOGGER.info("Attempted to kill executors before registering with Master.");
                     context.reply(false);
                 }
             }
@@ -218,7 +218,7 @@ public class StandaloneAppClient {
                 if (registered.get()) {
                     return;
                 }
-                LOGGER.info("AppClient向Master注册Spark App[name = {}]", appDescription.name);
+                LOGGER.info("Connecting to master {} ...", masterAddress.toSparkURL());
                 RpcEndPointRef masterRef = rpcEnv.setRpcEndPointRef(Master.ENDPOINT_NAME, masterAddress);
                 masterRef.send(new RegisterApplication(appDescription, self()));
             });
@@ -229,7 +229,7 @@ public class StandaloneAppClient {
             if (master != null) {
                 master.send(message);
             } else {
-                LOGGER.error("由于Master[address = {}]尚未连接丢弃消息: {}", masterAddress, message);
+                LOGGER.error("Drop {} because has not yet connected to master", message);
             }
         }
 
