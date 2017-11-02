@@ -197,7 +197,7 @@ public class SparkEnv {
         Serializer serializer = instantiateClassFromConf(conf,
                                                          isDriver,
                                                          "spark.closureSerializer",
-                                                         "com.sdu.spark.closureSerializer.JavaSerializer");
+                                                         "com.sdu.spark.serializer.JavaSerializer");
         LOGGER.debug("Using closureSerializer: {}", serializer.getClass());
         SerializerManager serializerManager = new SerializerManager(serializer, conf, ioEncryptionKey);
         JavaSerializer closureSerializer = new JavaSerializer(conf);
@@ -317,8 +317,10 @@ public class SparkEnv {
         }
     }
 
-    private static <T> T instantiateClassFromConf(SparkConf conf, boolean isDriver,
-                                                  String propertyName, String defaultClassName) {
+    private static <T> T instantiateClassFromConf(SparkConf conf,
+                                                  boolean isDriver,
+                                                  String propertyName,
+                                                  String defaultClassName) {
         return instantiateClass(conf, isDriver, conf.get(propertyName, defaultClassName));
     }
 

@@ -148,12 +148,9 @@ public class SparkContext {
         taskScheduler = tuple._1();
         schedulerBackend = tuple._2();
         dagScheduler = new DAGScheduler(this);
-        boolean isSet = getFutureResult(heartbeatReceiver.ask(new TaskSchedulerIsSet()));
-        if (isSet) {
-            LOGGER.info("HeartbeatReceiver初始TaskScheduler成功");
-        } else {
-            LOGGER.info("HeartbeatReceiver初始TaskScheduler失败");
-        }
+
+        //
+        heartbeatReceiver.ask(new TaskSchedulerIsSet());
 
         // 启动TaskScheduler
         taskScheduler.start();

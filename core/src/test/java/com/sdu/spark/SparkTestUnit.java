@@ -67,6 +67,8 @@ public abstract class SparkTestUnit {
 
         // 指定内存池参数
         // StaticMemoryManager仅支持Execution使用非堆内存, UnifiedMemoryManager支持Storage和Execution都使用非堆内存
+        // 使用UnifiedMemoryManager
+        conf.set("spark.memory.useLegacyMode", "true");
         conf.set("spark.memory.offHeap.size", "10240");
         // 设置Storage内存占offHeap的比例(仅在UnifiedMemoryManager下生效)
         conf.set("spark.memory.storageFraction", "0.5");

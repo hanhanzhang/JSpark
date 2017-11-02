@@ -72,7 +72,7 @@ public class SparkConf implements Serializable {
         if (Strings.isNullOrEmpty(value)) {
             return defaultValue;
         }
-        return Boolean.valueOf(key);
+        return Boolean.valueOf(value);
     }
 
     public long getTimeAsMs(String key, String defaultValue) {
