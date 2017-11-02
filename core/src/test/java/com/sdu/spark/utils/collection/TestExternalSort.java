@@ -1,12 +1,12 @@
 package com.sdu.spark.utils.collection;
 
-import com.google.common.collect.Interner;
 import com.google.common.collect.Lists;
 import com.sdu.spark.*;
-import com.sdu.spark.Partitioner.*;
+import com.sdu.spark.Partitioner.HashPartitioner;
 import com.sdu.spark.memory.TaskMemoryManager;
 import com.sdu.spark.utils.colleciton.ExternalSorter;
 import com.sdu.spark.utils.scala.Tuple2;
+import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.Comparator;
@@ -29,7 +29,7 @@ public class TestExternalSort extends SparkTestUnit {
         SparkContext sc = new SparkContext(conf);
         // TaskContext
         TaskContext context = fakeTaskContext(sc.env);
-        // 数据聚合运算
+        // 数据聚合运算(计算相同KEY的VALUE和)
         Aggregator<Integer, Integer, Integer> aggregator = new Aggregator<>(
                 x -> x, (x, y) -> x + y, (x, y) -> x + y
         );
@@ -39,9 +39,9 @@ public class TestExternalSort extends SparkTestUnit {
         @SuppressWarnings("unchecked")
         List<Tuple2<Integer, Integer>> elements = Lists.newArrayList(
                 new Tuple2<>(1, 1),
-                new Tuple2<>(2, 2),
+                new Tuple2<>(1, 2),
                 new Tuple2<>(5, 5),
-                new Tuple2<>(6, 6),
+                new Tuple2<>(5, 6),
                 new Tuple2<>(7, 7),
                 new Tuple2<>(9, 3)
         );
@@ -54,9 +54,26 @@ public class TestExternalSort extends SparkTestUnit {
                 comparator
         );
         sorter.insertAll(elements.iterator());
-        sorter.partitionedIterator();
-
+        Iterator<Tuple2<Integer, Integer>> iterator = sorter.iterator();
+        while (iterator.hasNext()) {
+            Tuple2<Integer, Integer> tuple2 = iterator.next();
+            switch (tuple2._1()) {
+                case 1:
+                    assert tuple2._2() == 3;
+                    break;
+                case 5:
+                    assert tuple2._2() == 11;
+                    break;
+                case 7:
+                    assert tuple2._2() == 7;
+                    break;
+                case 9:
+                    assert tuple2._2() == 3;
+                    break;
+            }
+        }
         // 数据聚合
+
     }
 
     @Override

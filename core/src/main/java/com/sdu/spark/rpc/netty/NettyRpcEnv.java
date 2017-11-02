@@ -10,7 +10,9 @@ import com.sdu.spark.network.client.RpcResponseCallback;
 import com.sdu.spark.network.client.TransportClient;
 import com.sdu.spark.network.client.TransportClientBootstrap;
 import com.sdu.spark.network.client.TransportClientFactory;
+import com.sdu.spark.network.crypto.AuthClientBootstrap;
 import com.sdu.spark.network.crypto.AuthServerBootstrap;
+import com.sdu.spark.network.netty.SparkTransportConf;
 import com.sdu.spark.network.server.StreamManager;
 import com.sdu.spark.network.server.TransportServer;
 import com.sdu.spark.network.server.TransportServerBootstrap;
@@ -92,12 +94,12 @@ public class NettyRpcEnv extends RpcEnv {
     private JavaSerializerInstance javaSerializerInstance;
     // RpcEnv网络数据监听
     private TransportServer server;
+    private TransportConf transportConf;
     // 网络数据通信
     private TransportContext transportContext;
     // 客户端连接
     private TransportClientFactory clientFactory;
     public ThreadPoolExecutor clientConnectionExecutor;
-
 
 
     private AtomicBoolean stopped = new AtomicBoolean(false);
@@ -109,14 +111,15 @@ public class NettyRpcEnv extends RpcEnv {
                        int numUsableCores) {
         super(conf);
         this.host = host;
+        this.securityManager = securityManager;
+        this.javaSerializerInstance = serializerInstance;
         this.dispatcher = new Dispatcher(this, numUsableCores);
         this.streamManager = new NettyStreamManager(this);
         this.clientConnectionExecutor = newDaemonCachedThreadPool("netty-rpc-connect-%d", conf.getInt("spark.rpc.connect.threads", 64), 60);
         this.deliverMessageExecutor = newDaemonCachedThreadPool("rpc-deliver-message-%d", conf.getInt("spark.rpc.deliver.message.threads", 64), 60);
-        this.transportContext = new TransportContext(fromSparkConf(conf), new NettyRpcHandler(streamManager, this.dispatcher, this));
+        this.transportConf = SparkTransportConf.fromSparkConf(conf, "rpc", conf.getInt("spark.rpc.io.threads", 0));
+        this.transportContext = new TransportContext(transportConf, new NettyRpcHandler(streamManager, this.dispatcher, this));
         this.clientFactory = this.transportContext.createClientFactory(createClientBootstraps());
-        this.javaSerializerInstance = serializerInstance;
-        this.securityManager = securityManager;
     }
 
     @Override
@@ -226,7 +229,7 @@ public class NettyRpcEnv extends RpcEnv {
     public void startServer(String host, int port) {
         List<TransportServerBootstrap> bootstraps;
         if (securityManager.isAuthenticationEnabled()) {
-            bootstraps = Lists.newArrayList(new AuthServerBootstrap(fromSparkConf(conf), securityManager));
+            bootstraps = Lists.newArrayList(new AuthServerBootstrap(transportConf, securityManager));
         } else {
             bootstraps = Collections.emptyList();
         }
@@ -324,27 +327,10 @@ public class NettyRpcEnv extends RpcEnv {
         return null;
     }
 
-
-    private TransportConf fromSparkConf(SparkConf conf) {
-        return new TransportConf(IOModel.NIO.name(), new ConfigProvider() {
-            @Override
-            public String get(String name) {
-                return conf.get(name);
-            }
-
-            @Override
-            public String get(String name, String defaultValue) {
-                return conf.get(name, defaultValue);
-            }
-
-            @Override
-            public Map<String, String> getAll() {
-                return conf.getAll();
-            }
-        });
-    }
-
     private List<TransportClientBootstrap> createClientBootstraps() {
+        if (securityManager.isAuthenticationEnabled()) {
+            return Lists.newArrayList(new AuthClientBootstrap(transportConf, securityManager.getSaslUser(), securityManager));
+        }
         return Collections.emptyList();
     }
 

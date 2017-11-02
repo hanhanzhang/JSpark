@@ -1,5 +1,6 @@
 package com.sdu.spark.utils.colleciton;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.io.ByteStreams;
@@ -69,6 +70,12 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
 
     private Comparator<K> keyComparator;
 
+    public ExternalSorter(TaskContext context,
+                          Aggregator<K, V, C> aggregator,
+                          Partitioner partitioner,
+                          Comparator<K> ordering) {
+        this(context, aggregator, partitioner, ordering, SparkEnv.env.serializer);
+    }
 
     public ExternalSorter(TaskContext context,
                           Aggregator<K, V, C> aggregator,
@@ -485,6 +492,7 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
         return tupleList.iterator();
     }
 
+    @VisibleForTesting
     private Iterator<Tuple2<Integer, Iterator<Tuple2<K, C>>>> partitionedIterator() {
         boolean usingMap = aggregator != null;
         WritablePartitionedPairCollection<K, C> collection = usingMap ? map : buffer;

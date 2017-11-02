@@ -100,7 +100,7 @@ public class TransportServer implements Closeable {
     }
 
     public int getPort() {
-        assert port == -1 : "Server not initialized";
+        assert port != -1 : "Server not initialized";
         return port;
     }
 

@@ -61,6 +61,11 @@ public class Utils {
     private static Map<String, Tuple2<String, Integer>> hostPortParseResults = Maps.newConcurrentMap();
     private static String customHostname = System.getenv("SPARK_LOCAL_HOSTNAME");
 
+    public static int nonNegativeMod(int x, int mod) {
+        int rawMod = x % mod;
+        return rawMod + rawMod < 0 ? mod : 0;
+    }
+
     public static void checkHost(String host) {
         assert host != null && host.indexOf(':') == -1 :
                 String.format("Expected hostname (not IP) but got %s", host);

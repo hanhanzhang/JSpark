@@ -37,8 +37,6 @@ import static com.sdu.spark.utils.Utils.isLocalMaster;
  *
  *   DAGScheduler根据是否是宽依赖划分Stage, Stage可分为两类: ShuffleMapStage和ResultStage
  *
- *
- *
  * 3: 初始化{@link SchedulerBackend}
  *
  *   SchedulerBackend负责创建Cluster Master的客】、户端(注册SparkApp, 申请Executor资源等)
@@ -119,13 +117,13 @@ public class SparkContext {
         SparkContext.markPartiallyConstructed(this, this.allowMultipleContexts);
 
         if (!this.conf.contains("spark.master")) {
-            throw new IllegalStateException("A master URL must be set in your configuration");
+            throw new SparkException("A master URL must be set in your configuration");
         }
         if (!this.conf.contains("spark.app.name")) {
-            throw new IllegalStateException("An application name must be set in your configuration");
+            throw new SparkException("An application name must be set in your configuration");
         }
 
-        LOGGER.info("提交Spark应用: {}", appName());
+        LOGGER.info("submit spark application {}", appName());
 
         String master = master();
         String deployMode = deployMode();
@@ -201,7 +199,7 @@ public class SparkContext {
     }
 
 
-    /**************************Spark Transaction Action触发Job提交***************************/
+    /**************************Spark Transaction Action触发Job提交 ***************************/
     public <T, U> void runJob(RDD<T> rdd,
                               Transaction<Pair<TaskContext, Iterator<T>>, Void> func,
                               List<Integer> partitions,

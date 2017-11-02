@@ -36,6 +36,10 @@ public class SecurityManager implements SecretKeyHolder {
                 conf.getBoolean("spark.authenticate.enableSaslEncryption", false);
     }
 
+    public String getSaslUser() {
+        return "sparkSaslUser";
+    }
+
     @Override
     public String getSaslUser(String appId) {
         return null;

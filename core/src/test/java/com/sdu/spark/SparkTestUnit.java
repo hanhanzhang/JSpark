@@ -1,29 +1,60 @@
 package com.sdu.spark;
 
 import com.sdu.spark.rpc.SparkConf;
+import com.sdu.spark.serializer.JavaSerializer;
+import com.sdu.spark.serializer.KryoSerializer;
+import com.sdu.spark.utils.Utils;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
+
+import static com.sdu.spark.network.utils.NettyUtils.getIpV4;
 
 /**
  * @author hanhan.zhang
  * */
 public abstract class SparkTestUnit {
 
-    public static final SparkConf conf;
+    protected static final SparkConf conf;
 
     static {
         System.setProperty("java.io.tmpdir", "/Users/hanhan.zhang/tmp");
+        conf = createSparkConf(false, false);
+    }
 
-        conf = new SparkConf();
+    private static SparkConf createSparkConf(boolean loadDefaults, boolean kryo) {
+        SparkConf conf = new SparkConf();
 
-        // driver进程只允许启动一个SparkContext
+        // Spark Master
+        conf.set("spark.master", String.format("spark://%s:%d", getIpV4(), 6712));
+
+        // Spark AppName
+        conf.set("spark.app.name", "test");
+
+        // Spark Driver配置
+        conf.set("spark.driver.host", getIpV4());
+        conf.set("spark.driver.bindAddress", getIpV4());
+        conf.set("spark.driver.port", "9001");
         conf.set("spark.driver.allowMultipleContexts", "false");
 
+        // 设置Spark序列化
+        if (kryo) {
+            conf.set("spark.serializer", KryoSerializer.class.getName());
+        } else {
+            // 默认使用Java序列化框架
+            conf.set("spark.serializer.objectStreamReset", "1");
+            conf.set("spark.serializer", JavaSerializer.class.getName());
+        }
+
+        // Spark Shuffle Manager
+        conf.set("spark.shuffle.manager", "sort");
         // Spark Shuffle根目录、子目录数
         conf.set("spark.local.dir", "/Users/hanhan.zhang/tmp");
         conf.set("spark.diskStore.subDirectories", "64");
+        // Spark Shuffle Spill数据量
+        conf.set("spark.shuffle.spill.batchSize", "10");
+        conf.set("spark.shuffle.spill.initialMemoryThreshold", "512");
 
         // 网络数据传输压缩
         conf.set("spark.broadcast.compress", "true");
@@ -42,6 +73,7 @@ public abstract class SparkTestUnit {
         // Execution/Storage使用内存类型(堆内存、非堆内存)
         conf.set("spark.memory.offHeap.enabled", "false");
 
+        return conf;
     }
 
     @BeforeClass
