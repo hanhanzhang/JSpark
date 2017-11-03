@@ -65,7 +65,7 @@ public class Utils {
 
     public static int nonNegativeMod(int x, int mod) {
         int rawMod = x % mod;
-        return rawMod + rawMod < 0 ? mod : 0;
+        return rawMod + (rawMod < 0 ? mod : 0);
     }
 
     public static void checkHost(String host) {

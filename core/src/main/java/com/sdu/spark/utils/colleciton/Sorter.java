@@ -7,10 +7,10 @@ import java.util.Comparator;
  * */
 public class Sorter<K, Buffer> {
 
-    private final TimeSort<K, Buffer> timeSort;
+    private final TimSort<K, Buffer> timeSort;
 
     public Sorter(SortDataFormat<K, Buffer> s) {
-        this.timeSort = new TimeSort<>(s);
+        this.timeSort = new TimSort<>(s);
     }
 
     /**

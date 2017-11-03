@@ -267,7 +267,7 @@ public class AppendOnlyMap<K, V> implements Iterable<Tuple2<K, V>>, Serializable
         while (index < capacity) {
             if (data[2 * index] != null) {
                 data[2 * newIndex] = data[2 * index];
-                data[2 * newIndex + 1] = data[2 * index];
+                data[2 * newIndex + 1] = data[2 * index + 1];
                 ++newIndex;
             }
             ++index;

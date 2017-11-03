@@ -93,7 +93,7 @@ public class ExternalAppendOnlyMap<K, V, C> extends Spillable<AppendOnlyMap<K, C
         this.ser = serializer.newInstance();
 
         this.serializerBatchSize = sparkConf.getLong("spark.shuffle.spill.batchSize", 10000);
-        this.fileBufferSize = NumberUtils.toInt(sparkConf.getSizeAsKb("spark.shuffle.file.buffer", "32k")) * 1024;
+        this.fileBufferSize = (int) sparkConf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024;
         this.keyComparator = new HashComparator();
     }
 

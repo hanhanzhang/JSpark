@@ -30,6 +30,25 @@ public abstract class Product2<T1, T2> implements Product {
         return 2;
     }
 
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+
+        Product2<?, ?> product2 = (Product2<?, ?>) o;
+
+        if (!_1.equals(product2._1)) return false;
+        return _2.equals(product2._2);
+
+    }
+
+    @Override
+    public int hashCode() {
+        int result = _1.hashCode();
+        result = 31 * result + _2.hashCode();
+        return result;
+    }
+
     public T1 _1() {
         return _1;
     }
