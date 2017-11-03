@@ -35,7 +35,7 @@ public class SortShuffleManager implements ShuffleManager {
     private static final int MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE = MAXIMUM_PARTITION_ID + 1;
 
     /**
-     * A mapping from shuffle ids to the number of mappers producing output for those shuffles
+     * A mapping from shuffle ids to the number of mappers producing combiner for those shuffles
      * */
     private ConcurrentMap<Integer, Integer> numMapsForShuffle = new ConcurrentHashMap<>();
 

@@ -54,8 +54,10 @@ public class TestExternalSorter extends SparkTestUnit {
                 comparator
         );
         sorter.insertAll(elements.iterator());
+        int readElements = 0;
         Iterator<Tuple2<Integer, Integer>> iterator = sorter.iterator();
         while (iterator.hasNext()) {
+            readElements += 1;
             Tuple2<Integer, Integer> tuple2 = iterator.next();
             switch (tuple2._1()) {
                 case 1:
@@ -72,6 +74,9 @@ public class TestExternalSorter extends SparkTestUnit {
                     break;
             }
         }
+
+        assert readElements == elements.size();
+
         // 数据聚合
 
     }

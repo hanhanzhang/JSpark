@@ -63,7 +63,7 @@ public class SortShuffleWriter<K, V, C> implements ShuffleWriter<K, V>{
         }
         sorter.insertAll(records);
 
-        // Don't bother including the time to open the merged output file in the shuffle write time,
+        // Don't bother including the time to open the merged combiner file in the shuffle write time,
         // because it just opens a single file, so is typically too fast to measure accurately
         // (see SPARK-3570).
         File output = shuffleBlockResolver.getDataFile(dep.shuffleId(), mapId);

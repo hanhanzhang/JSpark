@@ -57,6 +57,8 @@ import static org.apache.commons.lang3.math.NumberUtils.toInt;
  * 3: {@link #spill(WritablePartitionedPairCollection)}内存数据Spill到磁盘
  *
  *
+ * TODO: 读取Spill数据并遍历分区数据
+ *
  * @author hanhan.zhang
  * */
 public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCollection<K, C>> {
@@ -370,16 +372,18 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
                                                    .collect(Collectors.toList());
         BufferedIterator<Tuple2<Tuple2<Integer, K>, C>> inMemoryBuffered = new BufferedIterator<>(inMemory);
         List<Tuple2<Integer, Iterator<Tuple2<K, C>>>> partitionKeyValues = Lists.newLinkedList();
+
+        // 将内存数据与磁盘数据按照分区聚合
         for (int p = 0; p < numPartitions; ++p) {
-            // 逐个分区聚合
             IteratorForPartition inMemIterator = new IteratorForPartition(p, inMemoryBuffered);
-            List<Iterator<Tuple2<K, C>>> iterators = readers.stream().map(SpillReader::readNextPartition)
-                    .collect(Collectors.toList());
+            List<Iterator<Tuple2<K, C>>> iterators = readers.stream()
+                                                            .map(SpillReader::readNextPartition)
+                                                            .collect(Collectors.toList());
             iterators.add(inMemIterator);
 
             if (aggregator != null) {
                 partitionKeyValues.add(new Tuple2<>(p, mergeWithAggregation(
-                        iterators, aggregator.output, keyComparator, ordering != null
+                        iterators, aggregator.combiner, keyComparator, ordering != null
                 )));
             } else if (ordering != null) {
                 partitionKeyValues.add(new Tuple2<>(p, mergeSort(
@@ -580,6 +584,7 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
 
         // 计算每个Batch在Shuffle File中偏移量
         long[] batchOffsets;
+        // Batch序号
         int batchId = 0;
 
         // Track which partition and which batch stream we're in. These will be the indices of
@@ -601,21 +606,25 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
         SpillReader(SpilledFile spill) {
             this.spill = spill;
 
-            // 计算每个Batch在Shuffle File中偏移量
-            batchOffsets = new long[spill.serializerBatchSizes.size()];
+            // 计算每个Batch在Shuffle File中偏移量(记录serializerBatchSizes.size()的下个位置偏移量)
+            batchOffsets = new long[spill.serializerBatchSizes.size() + 1];
             long offset = 0L;
-            for (int i = 0; i < spill.serializerBatchSizes.size(); ++i) {
+            int i = 0;
+            for (; i < spill.serializerBatchSizes.size(); ++i) {
                 batchOffsets[i] = offset;
                 offset += spill.serializerBatchSizes.get(i);
             }
+            batchOffsets[i] = offset;
 
+            // step1: 选择要读取的分区
             skipToNextPartition();
-
+            // step2:
             deserializeStream = nextBatchStream();
         }
 
         DeserializationStream nextBatchStream() {
             try {
+                // batchOffsets多记录下Batch的Offset
                 if (batchId < batchOffsets.length - 1) {
                     if (deserializeStream != null) {
                         deserializeStream.close();
@@ -645,6 +654,7 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
         }
 
         // 跳到下个分区读取数据
+        // 若是分区Spill Element数 == 分区已读取数, 则需要开始读取下个分区
         private void skipToNextPartition() {
             while (partitionId < numPartitions &&
                     indexInPartition == spill.elementsPerPartition[partitionId]) {
@@ -653,6 +663,7 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
             }
         }
 
+        // TODO: readNextItem是否按照分区读取
         private Tuple2<K, C> readNextItem() {
             if (finished || deserializeStream == null) {
                 return null;
@@ -689,6 +700,7 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
         int nextPartitionToRead = 0;
 
         Iterator<Tuple2<K, C>> readNextPartition() {
+            // myPartition表示要读取Spill文件分区的数据
             int myPartition = nextPartitionToRead;
             nextPartitionToRead += 1;
             return new Iterator<Tuple2<K, C>>() {
@@ -700,7 +712,7 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
                             return false;
                         }
                     }
-                    assert lastPartitionId >= myPartition;
+
                     return lastPartitionId == myPartition;
                 }
 
@@ -820,7 +832,9 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
     private class SpilledFile implements Serializable {
         File file;
         BlockId blockId;
+        // 记录Spill Batch Size: 用于计算在file中偏移量
         List<Long> serializerBatchSizes;
+        // 记录每个分区Spill的元素数
         long[] elementsPerPartition;
 
         public SpilledFile(File file,

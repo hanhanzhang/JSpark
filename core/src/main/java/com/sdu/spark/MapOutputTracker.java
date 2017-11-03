@@ -84,7 +84,7 @@ public abstract class MapOutputTracker {
 
     public abstract void stop();
 
-    // Serialize an array of map output locations into an efficient byte format so that we can send
+    // Serialize an array of map combiner locations into an efficient byte format so that we can send
     // it to reduce tasks. We do this by compressing the serialized bytes using GZIP. They will
     // generally be pretty compressible because many map outputs will be on the same hostname.
     public static Pair<byte[], Broadcast<byte[]>> serializeMapStatuses(MapStatus[] statuses, BroadcastManager broadcastManager,
@@ -156,7 +156,7 @@ public abstract class MapOutputTracker {
         for (int i = 0; i < statuses.length; ++i) {
             MapStatus status = statuses[i];
             if (status == null) {
-                String errorMessage = String.format("Missing an output location for shuffle %d", shuffleId);
+                String errorMessage = String.format("Missing an combiner location for shuffle %d", shuffleId);
                 LOGGER.error(errorMessage);
                 throw new MetadataFetchFailedException(shuffleId, startPartition, errorMessage);
             }

@@ -160,7 +160,7 @@ public class DAGScheduler {
 
         ActiveJob job = new ActiveJob(jobId, finalStage, callSite, listener, properties);
 //        clearCacheLocs();
-//        logInfo("Got job %s (%s) with %d output partitions".format(
+//        logInfo("Got job %s (%s) with %d combiner partitions".format(
 //                job.jobId, callSite.shortForm, partitions.length))
 //        logInfo("Final stage: " + finalStage + " (" + finalStage.name + ")")
 //        logInfo("Parents of final stage: " + finalStage.parents)
@@ -366,7 +366,7 @@ public class DAGScheduler {
         updateJobIdStageIdMaps(jobId, Lists.newArrayList(stage));
 
         if (!mapOutputTracker.containsShuffle(shuffleDep.shuffleId())) {
-            // Kind of ugly: need to register RDDs with the cache and map output tracker here
+            // Kind of ugly: need to register RDDs with the cache and map combiner tracker here
             // since we can't do it in the RDD constructor because # of partitions is unknown
             LOGGER.info("注册RDD[rddId = {}, callSite = {}]", rdd.id, rdd.creationSite.shortForm);
             mapOutputTracker.registerShuffle(shuffleDep.shuffleId(), rdd.partitions().size());

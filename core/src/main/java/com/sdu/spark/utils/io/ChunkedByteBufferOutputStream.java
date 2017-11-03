@@ -80,7 +80,7 @@ public class ChunkedByteBufferOutputStream extends OutputStream {
         if (lastChunkIndex == -1) {
             return new ChunkedByteBuffer(chunks.toArray(new ByteBuffer[chunks.size()]));
         } else {
-            // Copy the first n-1 chunks to the output, and then create an array that fits the last chunk.
+            // Copy the first n-1 chunks to the combiner, and then create an array that fits the last chunk.
             // An alternative would have been returning an array of ByteBuffers, with the last buffer
             // bounded to only the last chunk's position. However, given our use case in Spark (to put
             // the chunks in block manager), only limiting the view bound of the buffer would still

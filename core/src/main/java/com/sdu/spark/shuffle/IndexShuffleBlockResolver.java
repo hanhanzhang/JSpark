@@ -160,7 +160,7 @@ public class IndexShuffleBlockResolver implements ShuffleBlockResolver {
 
     /**
      * Write an index file with the offsets of each block, plus a final offset at the end for the
-     * end of the output file. This will be used by getBlockData to figure out where each block
+     * end of the combiner file. This will be used by getBlockData to figure out where each block
      * begins and ends.
      *
      * It will commit the data and index file as an atomic operation, use the existing ones, or

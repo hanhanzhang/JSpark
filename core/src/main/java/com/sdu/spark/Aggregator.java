@@ -18,14 +18,14 @@ public class Aggregator<K, V, C> implements Serializable {
 
     public Initializer<V, C> initializer;
     public AppendValue<V, C> appendValue;
-    public Combiner<C> output;
+    public Combiner<C> combiner;
 
     public Aggregator(Initializer<V, C> initializer,
                       AppendValue<V, C> appendValue,
-                      Combiner<C> output) {
+                      Combiner<C> combiner) {
         this.initializer = initializer;
         this.appendValue = appendValue;
-        this.output = output;
+        this.combiner = combiner;
     }
 
     /**
@@ -33,7 +33,7 @@ public class Aggregator<K, V, C> implements Serializable {
      * */
     public Iterator<Tuple2<K, C>> combineValueByKey(Iterator<Product2<K, V>> iter,
                                                     TaskContext context) {
-        ExternalAppendOnlyMap<K, V, C> combiners = new ExternalAppendOnlyMap<>(initializer, appendValue, output);
+        ExternalAppendOnlyMap<K, V, C> combiners = new ExternalAppendOnlyMap<>(initializer, appendValue, combiner);
         combiners.insertAll(iter);
         updateMetrics(context, combiners);
         return combiners.iterator();
@@ -47,9 +47,9 @@ public class Aggregator<K, V, C> implements Serializable {
                                                         TaskContext context) {
         // Scala.identity即原样输出输入内容
         Initializer<C, C> identity = (val) -> val;
-        AppendValue<C, C> merge = this.output::mergeCombiners;
+        AppendValue<C, C> merge = this.combiner::mergeCombiners;
 
-        ExternalAppendOnlyMap<K, C, C> combiners = new ExternalAppendOnlyMap<>(identity, merge, output);
+        ExternalAppendOnlyMap<K, C, C> combiners = new ExternalAppendOnlyMap<>(identity, merge, combiner);
         combiners.insertAll(iter);
         updateMetrics(context, combiners);
         return combiners.iterator();

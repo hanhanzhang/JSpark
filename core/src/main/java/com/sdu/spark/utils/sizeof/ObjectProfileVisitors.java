@@ -41,7 +41,7 @@ abstract class ObjectProfileVisitors
     }
     
     /**
-     * Factory method for creating the XML output visitor. To create a valid
+     * Factory method for creating the XML combiner visitor. To create a valid
      * XML document, start the traversal on the profile root node. It is up to
      * the caller to buffer 'out'.
      * 
@@ -86,7 +86,7 @@ abstract class ObjectProfileVisitors
     
  
     /**
-     * This visitor prints out a node in plain text format. The output is
+     * This visitor prints out a node in plain text format. The combiner is
      * indented according to the length of the node's path within its
      * profile tree.
      */

@@ -34,7 +34,7 @@ public class SerializableBuffer implements Serializable {
     private void writeObject(ObjectOutputStream out) throws IOException {
         out.writeInt(buffer.limit());
         if (Channels.newChannel(out).write(buffer) != buffer.limit()) {
-            throw new IOException("Could not fully write buffer to output stream");
+            throw new IOException("Could not fully write buffer to combiner stream");
         }
         buffer.rewind(); // Allow us to write it again later
     }

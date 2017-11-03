@@ -31,7 +31,7 @@ public class MapOutputTrackerMasterEndPoint extends RpcEndPoint {
         if (msg instanceof GetMapOutputStatuses) {
             GetMapOutputStatuses statuses = (GetMapOutputStatuses) msg;
             String hostPort = context.senderAddress().hostPort();
-            LOGGER.info("Asked to send map output locations for shuffle {} to {}", statuses.shuffleId, hostPort);
+            LOGGER.info("Asked to send map combiner locations for shuffle {} to {}", statuses.shuffleId, hostPort);
             tracker.post(new GetMapOutputMessage(statuses.shuffleId, context));
         } else if (msg instanceof StopMapOutputTracker) {
             LOGGER.info("MapOutputTrackerMasterEndpoint stopped!");
