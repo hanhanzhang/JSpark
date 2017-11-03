@@ -3,9 +3,9 @@ package com.sdu.spark.utils.colleciton;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.io.ByteStreams;
-import com.sdu.spark.Aggregator.InitialCollection;
+import com.sdu.spark.Aggregator.Initializer;
 import com.sdu.spark.Aggregator.AppendValue;
-import com.sdu.spark.Aggregator.CollectionToOutput;
+import com.sdu.spark.Aggregator.Combiner;
 import com.sdu.spark.SparkEnv;
 import com.sdu.spark.SparkException;
 import com.sdu.spark.TaskContext;
@@ -20,7 +20,6 @@ import com.sdu.spark.utils.Utils;
 import com.sdu.spark.utils.scala.Product2;
 import com.sdu.spark.utils.scala.Tuple2;
 import org.apache.commons.lang3.StringUtils;
-import org.apache.commons.lang3.math.NumberUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -49,9 +48,9 @@ public class ExternalAppendOnlyMap<K, V, C> extends Spillable<AppendOnlyMap<K, C
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ExternalAppendOnlyMap.class);
 
-    private InitialCollection<V, C> initial;
+    private Initializer<V, C> initial;
     private AppendValue<V, C> merge;
-    private CollectionToOutput<C> output;
+    private Combiner<C> output;
 
     private Serializer serializer;
     private BlockManager blockManager;
@@ -72,9 +71,9 @@ public class ExternalAppendOnlyMap<K, V, C> extends Spillable<AppendOnlyMap<K, C
     private Comparator<K> keyComparator;
     private SpillableIterator readingIterator;
 
-    public ExternalAppendOnlyMap(InitialCollection<V, C> initial,
+    public ExternalAppendOnlyMap(Initializer<V, C> initial,
                                  AppendValue<V, C> merge,
-                                 CollectionToOutput<C> output) {
+                                 Combiner<C> output) {
         super(TaskContext.get().taskMemoryManager());
 
         this.initial = initial;

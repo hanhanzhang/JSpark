@@ -6,6 +6,12 @@ import java.util.Comparator;
 import java.util.Iterator;
 
 /**
+ * {@link PartitionedAppendOnlyMap}职责:
+ *
+ *  1: 聚合同一分区下相同Key的Value值
+ *
+ *  2: Key的聚合操作由{@link com.sdu.spark.Aggregator}实现
+ *
  * @author hanhan.zhang
  * */
 public class PartitionedAppendOnlyMap<K, V> extends SizeTrackingAppendOnlyMap<Tuple2<Integer, K>, V> implements WritablePartitionedPairCollection<K, V>{

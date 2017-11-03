@@ -52,7 +52,9 @@ public abstract class SparkTestUnit {
         // Spark Shuffle根目录、子目录数
         conf.set("spark.local.dir", "/Users/hanhan.zhang/tmp");
         conf.set("spark.diskStore.subDirectories", "64");
-        // Spark Shuffle Spill数据量
+        // Spark Shuffle Spill控制参数
+        // 每读取3个元素将内存数据Spill到磁盘
+        conf.set("spark.shuffle.spill.numElementsForceSpillThreshold", "3");
         conf.set("spark.shuffle.spill.batchSize", "10");
         conf.set("spark.shuffle.spill.initialMemoryThreshold", "512");
 

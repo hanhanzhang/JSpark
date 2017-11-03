@@ -16,14 +16,14 @@ import java.util.Iterator;
  * */
 public class Aggregator<K, V, C> implements Serializable {
 
-    public InitialCollection<V, C> initialCollection;
+    public Initializer<V, C> initializer;
     public AppendValue<V, C> appendValue;
-    public CollectionToOutput<C> output;
+    public Combiner<C> output;
 
-    public Aggregator(InitialCollection<V, C> initialCollection,
+    public Aggregator(Initializer<V, C> initializer,
                       AppendValue<V, C> appendValue,
-                      CollectionToOutput<C> output) {
-        this.initialCollection = initialCollection;
+                      Combiner<C> output) {
+        this.initializer = initializer;
         this.appendValue = appendValue;
         this.output = output;
     }
@@ -33,7 +33,7 @@ public class Aggregator<K, V, C> implements Serializable {
      * */
     public Iterator<Tuple2<K, C>> combineValueByKey(Iterator<Product2<K, V>> iter,
                                                     TaskContext context) {
-        ExternalAppendOnlyMap<K, V, C> combiners = new ExternalAppendOnlyMap<>(initialCollection, appendValue, output);
+        ExternalAppendOnlyMap<K, V, C> combiners = new ExternalAppendOnlyMap<>(initializer, appendValue, output);
         combiners.insertAll(iter);
         updateMetrics(context, combiners);
         return combiners.iterator();
@@ -46,7 +46,7 @@ public class Aggregator<K, V, C> implements Serializable {
     public Iterator<Tuple2<K, C>> combineCombinersByKey(Iterator<? extends Product2<K, C>> iter,
                                                         TaskContext context) {
         // Scala.identity即原样输出输入内容
-        InitialCollection<C, C> identity = (val) -> val;
+        Initializer<C, C> identity = (val) -> val;
         AppendValue<C, C> merge = this.output::mergeCombiners;
 
         ExternalAppendOnlyMap<K, C, C> combiners = new ExternalAppendOnlyMap<>(identity, merge, output);
@@ -60,9 +60,9 @@ public class Aggregator<K, V, C> implements Serializable {
     }
     
     /**
-     * create the initialCollection value of the aggregation.
+     * create the initializer value of the aggregation.
      * */
-    public interface InitialCollection<V, C> {
+    public interface Initializer<V, C> {
         C createCollection(V val);
     }
 
@@ -76,7 +76,7 @@ public class Aggregator<K, V, C> implements Serializable {
     /**
      * appendValue outputs from multiple appendValue function.
      * */
-    public interface CollectionToOutput<C> {
+    public interface Combiner<C> {
         C mergeCombiners(C collection1, C collection2);
     }
 

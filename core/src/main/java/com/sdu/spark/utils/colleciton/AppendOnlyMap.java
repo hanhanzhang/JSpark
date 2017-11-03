@@ -54,7 +54,7 @@ public class AppendOnlyMap<K, V> implements Iterable<Tuple2<K, V>>, Serializable
     public AppendOnlyMap(int initialCapacity) {
 
         checkArgument(initialCapacity <= MAXIMUM_CAPACITY, String.format("Can't make capacity bigger than %d elements", MAXIMUM_CAPACITY));
-        checkArgument(initialCapacity >= 1, "Invalid initialCollection capacity");
+        checkArgument(initialCapacity >= 1, "Invalid initializer capacity");
 
         this.capacity = nextPowerOf2(initialCapacity);
         this.mask = capacity -1;

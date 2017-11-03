@@ -5,7 +5,7 @@ import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.io.ByteStreams;
 import com.sdu.spark.*;
-import com.sdu.spark.Aggregator.CollectionToOutput;
+import com.sdu.spark.Aggregator.Combiner;
 import com.sdu.spark.rpc.SparkConf;
 import com.sdu.spark.serializer.DeserializationStream;
 import com.sdu.spark.serializer.Serializer;
@@ -28,7 +28,34 @@ import static com.sdu.spark.utils.Utils.bytesToString;
 import static org.apache.commons.lang3.math.NumberUtils.toInt;
 
 /**
- * {@link ExternalSorter}
+ * {@link ExternalSorter}职责:
+ *
+ * 1: {@link #insertAll(Iterator)}聚合数据
+ *
+ *  1': 若是{@link Aggregator}不空, 使用{@link PartitionedAppendOnlyMap}聚合同一分区相同Key的Value值
+ *
+ *      若是{@link Aggregator}空, 使用{@link PartitionedPairBuffer}只负责数据追加
+ *
+ *  2': 数据聚合调用链(以PartitionedAppendOnlyMap为例):
+ *
+ *     ExternalSorter.insertAll()
+ *          |
+ *          +------> {@link Spillable#addElementsRead()} 记录Spill前已读取数据数
+ *          |
+ *          +------> {@link Partitioner#getPartition(Object)} 对Key分区
+ *          |
+ *          +------> {@link Aggregator}对同一分区相同Key的数据聚合
+ *          |
+ *          +------> {@link #maybeSpillCollection(boolean)}是否将内存中数据落地磁盘
+ *
+ *                   具体实现：{@link #spill(WritablePartitionedPairCollection)}
+ *
+ * 2: {@link #iterator()}读取聚合的数据
+ *
+ *  1':
+ *
+ * 3: {@link #spill(WritablePartitionedPairCollection)}内存数据Spill到磁盘
+ *
  *
  * @author hanhan.zhang
  * */
@@ -129,7 +156,7 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
                     if (hadValue) {
                         return aggregator.appendValue.appendValue(kv._2(), value);
                     } else {
-                        return aggregator.initialCollection.createCollection(kv._2());
+                        return aggregator.initializer.createCollection(kv._2());
                     }
                 });
                 // 是否Spill数据
@@ -147,7 +174,7 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
     }
 
     private void maybeSpillCollection(boolean usingMap) {
-        long estimatedSize = 0L;
+        long estimatedSize;
         if (usingMap) {
             estimatedSize = map.estimateSize();
             if (maybeSpill(map, estimatedSize)) {
@@ -268,7 +295,7 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
         try {
             while (inMemoryIterator.hasNext()) {
                 int partitionId = inMemoryIterator.nextPartition();
-                assert partitionId < 0 || partitionId >= numPartitions :
+                assert partitionId >= 0 && partitionId < numPartitions :
                         String.format("partition Id: %d should be in the range [0, %d)", partitionId, numPartitions);
                 inMemoryIterator.writeNext(writer);
                 long elements = elementsPerPartition[partitionId];
@@ -397,7 +424,7 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
     }
 
     private Iterator<Tuple2<K, C>> mergeWithAggregation(List<Iterator<Tuple2<K, C>>> iterators,
-                                                        CollectionToOutput<C> mergeCombines,
+                                                        Combiner<C> mergeCombines,
                                                         Comparator<K> comparator,
                                                         boolean totalOrder) {
         if (totalOrder) {

@@ -7,6 +7,10 @@ import java.util.Iterator;
 import java.util.NoSuchElementException;
 
 /**
+ * {@link PartitionedPairBuffer}与{@link PartitionedAppendOnlyMap}区别:
+ *
+ * 1: PartitionedPairBuffer不聚合同一分区下相同Key的Value值
+ *
  * @author hanhan.zhang
  * */
 public class PartitionedPairBuffer<K, V> extends SizeTracker implements WritablePartitionedPairCollection<K, V> {
@@ -28,7 +32,7 @@ public class PartitionedPairBuffer<K, V> extends SizeTracker implements Writable
 
         assert initialCapacity <= MAXIMUM_CAPACITY :
                 "Can't make capacity bigger than " + MAXIMUM_CAPACITY + " elements";
-        assert initialCapacity >= 1 : "Invalid initialCollection capacity";
+        assert initialCapacity >= 1 : "Invalid initializer capacity";
         this.initialCapacity = initialCapacity;
         this.capacity = initialCapacity;
         this.data = new Object[2 * initialCapacity];
