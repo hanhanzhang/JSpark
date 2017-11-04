@@ -22,12 +22,18 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static com.sdu.spark.SparkApp.TaskSchedulerIsSet;
-import static com.sdu.spark.SparkMasterRegex.SPARK_REGEX;
+import static com.sdu.spark.SparkMasterRegex.*;
 import static com.sdu.spark.utils.Utils.getFutureResult;
 import static com.sdu.spark.utils.Utils.isLocalMaster;
+import static org.apache.commons.lang3.math.NumberUtils.toInt;
 
 /**
  * {@link SparkContext}职责:
+ *
+ * 1: {@link #init()} 初始化组件
+ *
+ *  1':
+ *
  *
  * 1: 创建{@link HeartBeatReceiver}
  *
@@ -174,17 +180,28 @@ public class SparkContext {
         throw new UnsupportedOperationException("");
     }
 
+    private static int convertToInt(String threads) {
+        return threads.equals("*") ? Runtime.getRuntime().availableProcessors() : toInt(threads);
+    }
+
+    private static int numDriverCores(String master) {
+        if (master.equals("local")) {
+            return 1;
+        } else if (LOCAL_N_REGEX(master)) {
+            return convertToInt(LOCAL_N_REGEX_THREAD(master));
+        } else if (LOCAL_N_FAILURES_REGEX(master)) {
+            return convertToInt(LOCAL_N_FAILURES_REGEX_R(master)[0]);
+        } else {
+            return 0;
+        }
+    }
 
     private static SparkEnv createSparkEnv(SparkConf conf, boolean isLocal, LiveListenerBus listenerBus) {
-        int cores = Runtime.getRuntime().availableProcessors();
+        int cores = numDriverCores(conf.get("spark.master"));
         return SparkEnv.createDriverEnv(conf, isLocal, listenerBus, cores, null);
     }
 
-    /**
-     * 仅仅实现Standalone模式
-     *
-     * todo: Spark Cluster(local, standalone, mesos, yarn)
-     * */
+
     private Tuple2<TaskScheduler, SchedulerBackend> createTaskScheduler(SparkContext sc, String master, String deployMode) {
         if (SPARK_REGEX(master)) {
             TaskSchedulerImpl scheduler = new TaskSchedulerImpl(sc);
@@ -192,6 +209,7 @@ public class SparkContext {
             scheduler.initialize(backend);
             return new Tuple2<>(scheduler, backend);
         }
+        // TODO: Spark Cluster(local, standalone, mesos, yarn)
         throw new UnsupportedOperationException("Unsupported spark cluster : " + master);
     }
 

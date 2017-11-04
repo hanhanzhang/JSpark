@@ -13,17 +13,8 @@ public class TestSparkContext extends SparkTestUnit {
     }
 
     @Test
-    public void testOnlySparkContext() {
-        conf.setAppName("test").setMaster("local");
+    public void testSparkContext() {
 
-        SparkContext sc = new SparkContext(conf);
-        SparkEnv beforeEnv = sc.env;
-
-        new SparkContext(conf);
-
-        SparkEnv afterEnv = sc.env;
-
-        assert beforeEnv == afterEnv;
     }
 
     @Override

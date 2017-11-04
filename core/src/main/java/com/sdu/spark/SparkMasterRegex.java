@@ -25,12 +25,12 @@ public class SparkMasterRegex {
         return m.matches();
     }
 
-    public static int LOCAL_N_REGEX_THREAD(String master) {
+    public static String LOCAL_N_REGEX_THREAD(String master) {
         Matcher m = LOCAL_N_REGEX.matcher(master);
         if (m.find()) {
-            return NumberUtils.toInt(m.group(1));
+            return m.group(1);
         }
-        return Runtime.getRuntime().availableProcessors();
+        return "*";
     }
 
     public static boolean LOCAL_N_FAILURES_REGEX(String master) {
@@ -38,16 +38,16 @@ public class SparkMasterRegex {
         return m.matches();
     }
 
-    public static int[] LOCAL_N_FAILURES_REGEX_R(String master) {
+    public static String[] LOCAL_N_FAILURES_REGEX_R(String master) {
         Matcher m = LOCAL_N_FAILURES_REGEX.matcher(master);
         if (m.find()) {
-            int[] r = new int[2];
-            r[0] = NumberUtils.toInt(m.group(1));
-            r[1] = NumberUtils.toInt(m.group(2));
+            String[] r = new String[2];
+            r[0] = m.group(1);
+            r[1] = m.group(2);
             return r;
         }
 
-        return new int[] {Runtime.getRuntime().availableProcessors(), 1};
+        return new String[] {"*", "1"};
     }
 
     public static boolean LOCAL_CLUSTER_REGEX(String master) {
@@ -64,7 +64,7 @@ public class SparkMasterRegex {
         System.out.println(LOCAL_N_REGEX("local[1]"));
         System.out.println(LOCAL_N_REGEX_THREAD("local[2]"));
         System.out.println(LOCAL_N_FAILURES_REGEX("local[1, 3]"));
-        int[] r = LOCAL_N_FAILURES_REGEX_R("local[1, 3]");
+        String[] r = LOCAL_N_FAILURES_REGEX_R("local[1, 3]");
         System.out.println(StringUtils.join(r, ','));
         System.out.println(LOCAL_CLUSTER_REGEX("local-cluster[10, 1, 1024]"));
         System.out.println(SPARK_REGEX("spark://test"));

@@ -32,11 +32,10 @@ public class OutputCommitCoordinatorEndPoint extends RpcEndPoint {
     @Override
     public void receiveAndReply(Object msg, RpcCallContext context) {
         if (msg instanceof AskPermissionToCommitOutput) {
-            AskPermissionToCommitOutput toCommitOutput = (AskPermissionToCommitOutput) msg;
-            context.reply(outputCommitCoordinator.handleAskPermissionToCommit(
-                    toCommitOutput.stageId,
-                    toCommitOutput.partition,
-                    toCommitOutput.attemptNumber
+            AskPermissionToCommitOutput output = (AskPermissionToCommitOutput) msg;
+            context.reply(outputCommitCoordinator.handleAskPermissionToCommit(output.stageId,
+                                                                              output.partition,
+                                                                              output.attemptNumber
             ));
         }
     }
