@@ -65,7 +65,6 @@ public abstract class EventLoop<E> {
     }
 
 
-
     public void stop() {
         if (stopped.compareAndSet(false, true)) {
             eventThread.interrupt();

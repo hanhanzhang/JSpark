@@ -62,7 +62,7 @@ public class SparkEnv {
     public ShuffleManager shuffleManager;
     private BroadcastManager broadcastManager;
     public SerializerManager serializerManager;
-    private OutputCommitCoordinator outputCommitCoordinator;
+    public OutputCommitCoordinator outputCommitCoordinator;
     public BlockManager blockManager;
     public MemoryManager memoryManager;
     public Serializer serializer;

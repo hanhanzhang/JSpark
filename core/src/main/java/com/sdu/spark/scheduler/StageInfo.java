@@ -1,13 +1,15 @@
 package com.sdu.spark.scheduler;
 
-import com.sdu.spark.rdd.RDD;
 import com.sdu.spark.storage.RDDInfo;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.Collections;
 import java.util.List;
 import java.util.stream.Collectors;
 
 /**
+ * TODO: TaskMetric
+ *
  * @author hanhan.zhang
  * */
 public class StageInfo {
@@ -21,7 +23,18 @@ public class StageInfo {
     public String details;
     public List<TaskLocation> taskLocalityPreferences;
 
-    public StageInfo(int stageId, int attemptId, String name, int numTasks, List<RDDInfo> rddInfos,
+    /** When this stage was submitted from the DAGScheduler to a TaskScheduler. */
+    private long submissionTime = -1;
+    /** Time when all tasks in the stage completed or when the stage was cancelled. */
+    private long completionTime = -1;
+    /** If the stage failed, the reason why. */
+    private String failureReason;
+
+    public StageInfo(int stageId,
+                     int attemptId,
+                     String name,
+                     int numTasks,
+                     List<RDDInfo> rddInfos,
                      List<Integer> parentIds, String details) {
         this(stageId, attemptId, name, numTasks, rddInfos, parentIds, details, Collections.emptyList());
     }
@@ -39,7 +52,34 @@ public class StageInfo {
         this.taskLocalityPreferences = taskLocalityPreferences;
     }
 
-    public static StageInfo fromStage(Stage stage, int attemptId, int numTasks,
+    public long submissionTime() {
+        return submissionTime;
+    }
+
+    public void setCompletionTime(long time) {
+        completionTime = time;
+    }
+
+    public void stageFailed(String reason) {
+        failureReason = reason;
+        completionTime = System.currentTimeMillis();
+    }
+
+    public String getStatusString() {
+        if (completionTime > 0) {
+            if (StringUtils.isNotEmpty(failureReason)) {
+                return "failed";
+            } else {
+                return "succeeded";
+            }
+        } else {
+            return "running";
+        }
+    }
+
+    public static StageInfo fromStage(Stage stage,
+                                      int attemptId,
+                                      int numTasks,
                                       List<TaskLocation> taskLocalityPreferences){
         List<RDDInfo> ancestorRddInfos = stage.rdd.getNarrowAncestors().stream()
                                                                         .map(RDDInfo::fromRDD)

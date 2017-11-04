@@ -1,13 +1,9 @@
 package com.sdu.spark.scheduler;
 
-import com.sdu.spark.TaskContext;
 import com.sdu.spark.rdd.RDD;
-import com.sdu.spark.rdd.Transaction;
+import com.sdu.spark.scheduler.action.RDDAction;
 import com.sdu.spark.utils.CallSite;
-import lombok.AllArgsConstructor;
-import org.apache.commons.lang3.tuple.Pair;
 
-import java.util.Iterator;
 import java.util.List;
 import java.util.Properties;
 
@@ -16,15 +12,40 @@ import java.util.Properties;
  * */
 public interface DAGSchedulerEvent {
 
-    @AllArgsConstructor
     class JobSubmitted<T, U> implements DAGSchedulerEvent {
         public int jobId;
         public RDD<T> finalRDD;
-        public Transaction<Pair<TaskContext, Iterator<T>>, U> func;
+        public RDDAction<T, U> rddAction;
         public List<Integer> partitions;
         public CallSite callSite;
         public JobListener listener;
         public Properties properties;
+
+        public JobSubmitted(int jobId,
+                            RDD<T> finalRDD,
+                            RDDAction<T, U> rddAction,
+                            List<Integer> partitions,
+                            CallSite callSite,
+                            JobListener listener,
+                            Properties properties) {
+            this.jobId = jobId;
+            this.finalRDD = finalRDD;
+            this.rddAction = rddAction;
+            this.partitions = partitions;
+            this.callSite = callSite;
+            this.listener = listener;
+            this.properties = properties;
+        }
+    }
+
+    class JobCancelled implements DAGSchedulerEvent {
+        public int jobId;
+        public String reason;
+
+        public JobCancelled(int jobId, String reason) {
+            this.jobId = jobId;
+            this.reason = reason;
+        }
     }
 
 }

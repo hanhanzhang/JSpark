@@ -12,6 +12,7 @@ import java.util.Set;
  *
  * @author hanhan.zhang
  * */
+@SuppressWarnings("unused")
 public abstract class Stage {
 
     public int id;
@@ -21,18 +22,22 @@ public abstract class Stage {
     public int firstJobId;
     public CallSite callSite;
 
-    public Set<Integer> jobIds = Sets.newHashSet();
-    private Set<Integer> fetchFailedAttemptIds = Sets.newHashSet();
+    private Set<Integer> jobIds = Sets.newHashSet();
     private int nextAttemptId = 0;
     public int numPartitions;
     public String name;
     public String details;
-    public StageInfo latestInfo;
+    private StageInfo latestInfo;
+    private Set<Integer> fetchFailedAttemptIds = Sets.newHashSet();
 
 
 
-    public Stage(int id, RDD<?> rdd, int numTasks, List<Stage> parents,
-                 int firstJobId, CallSite callSite) {
+    public Stage(int id,
+                 RDD<?> rdd,
+                 int numTasks,
+                 List<Stage> parents,
+                 int firstJobId,
+                 CallSite callSite) {
         this.id = id;
         this.rdd = rdd;
         this.numTasks = numTasks;
@@ -54,10 +59,20 @@ public abstract class Stage {
         makeNewStageAttempt(numPartitionsToCompute, Collections.emptyList());
     }
 
-    public void makeNewStageAttempt(int numPartitionsToCompute, List<TaskLocation> taskLocalityPreferences) {
+    public void makeNewStageAttempt(int numPartitionsToCompute,
+                                    List<TaskLocation> taskLocalityPreferences) {
+        // TODO: TaskMetric
         latestInfo = StageInfo.fromStage(
                 this, nextAttemptId, numPartitionsToCompute, taskLocalityPreferences);
         nextAttemptId += 1;
+    }
+
+    public StageInfo latestInfo() {
+        return latestInfo;
+    }
+
+    public Set<Integer> jobIds() {
+        return jobIds;
     }
 
     public abstract List<Integer> findMissingPartitions();

@@ -8,17 +8,28 @@ import java.util.Properties;
  * @author hanhan.zhang
  * */
 public class ActiveJob {
-    public int jobId;
-    public Stage finalStage;
-    public CallSite callSite;
-    public JobListener listener;
+    private int jobId;
+    private Stage finalStage;
+    private CallSite callSite;
+    private JobListener listener;
     public Properties properties;
 
     public int numPartitions = 0;
     public boolean[] finished;
 
-    public ActiveJob(int jobId, Stage finalStage, CallSite callSite,
-                     JobListener listener, Properties properties) {
+    /**
+     * @param jobId A unique ID for this job.
+     * @param finalStage The stage that this job computes (either a ResultStage for an action or a
+     *                   ShuffleMapStage for submitMapStage).
+     * @param callSite Where this job was initiated in the user's program (shown on UI).
+     * @param listener A listener to notify if tasks in this job finish or the job fails.
+     * @param properties Scheduling properties attached to the job, such as fair scheduler pool name.
+     * */
+    public ActiveJob(int jobId,
+                     Stage finalStage,
+                     CallSite callSite,
+                     JobListener listener,
+                     Properties properties) {
         this.jobId = jobId;
         this.finalStage = finalStage;
         this.callSite = callSite;
@@ -32,6 +43,18 @@ public class ActiveJob {
         }
 
         this.finished = new boolean[this.numPartitions];
+    }
+
+    public int jobId() {
+        return jobId;
+    }
+
+    public JobListener listener() {
+        return listener;
+    }
+
+    public Stage finalStage() {
+        return finalStage;
     }
 
     @Override

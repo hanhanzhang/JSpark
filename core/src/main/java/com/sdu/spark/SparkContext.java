@@ -82,6 +82,8 @@ public class SparkContext {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(SparkContext.class);
 
+    public static final String SPARK_JOB_INTERRUPT_ON_CANCEL = "spark.job.interruptOnCancel";
+
     private static final Object SPARK_CONTEXT_CONSTRUCTOR_LOCK = new Object();
     private static AtomicReference<SparkContext> activeContext = new AtomicReference<>(null);
 

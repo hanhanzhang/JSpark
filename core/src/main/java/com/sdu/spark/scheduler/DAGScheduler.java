@@ -4,10 +4,15 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.sdu.spark.*;
-import com.sdu.spark.scheduler.SparkListenerEvent.*;
 import com.sdu.spark.rdd.RDD;
-import com.sdu.spark.rdd.Transaction;
+import com.sdu.spark.scheduler.DAGSchedulerEvent.JobCancelled;
 import com.sdu.spark.scheduler.DAGSchedulerEvent.JobSubmitted;
+import com.sdu.spark.scheduler.JobResult.JobFailed;
+import com.sdu.spark.scheduler.SparkListenerEvent.SparkListenerJobEnd;
+import com.sdu.spark.scheduler.SparkListenerEvent.SparkListenerJobStart;
+import com.sdu.spark.scheduler.SparkListenerEvent.SparkListenerStageCompleted;
+import com.sdu.spark.scheduler.action.RDDAction;
+import com.sdu.spark.scheduler.action.ResultHandler;
 import com.sdu.spark.storage.BlockManagerMaster;
 import com.sdu.spark.storage.StorageLevel;
 import com.sdu.spark.utils.CallSite;
@@ -15,7 +20,8 @@ import com.sdu.spark.utils.Clock;
 import com.sdu.spark.utils.Clock.SystemClock;
 import com.sdu.spark.utils.EventLoop;
 import org.apache.commons.collections.CollectionUtils;
-import org.apache.commons.lang3.tuple.Pair;
+import org.apache.commons.lang3.ArrayUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -24,9 +30,16 @@ import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
-import static com.sdu.spark.utils.Utils.getFutureResult;
+import static com.sdu.spark.SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL;
+import static org.apache.commons.lang3.BooleanUtils.toBoolean;
 
 /**
+ * {@link DAGScheduler}职责:
+ *
+ * 1: {@link #runJob(RDD, RDDAction, List, CallSite, ResultHandler, Properties)}Stage划分及作业提交
+ *
+ * 2: {@link #cancelJob(int, String)}终止作业及Job关联的Stage信息
+ *
  * @author hanhan.zhang
  * */
 @SuppressWarnings("unchecked")
@@ -37,24 +50,25 @@ public class DAGScheduler {
     private SparkContext sc;
     private TaskScheduler taskScheduler;
     private LiveListenerBus listenerBus;
+    private OutputCommitCoordinator outputCommitCoordinator;
     private MapOutputTrackerMaster mapOutputTracker;
     private BlockManagerMaster blockManagerMaster;
     private SparkEnv env;
     private Clock clock;
 
     private AtomicInteger nextJobId = new AtomicInteger(0);
+    // key = stageId, value = ShuffleMapStage
     private Map<Integer, ShuffleMapStage> shuffleIdToMapStage = Maps.newHashMap();
     private AtomicInteger nextStageId = new AtomicInteger(0);
     private Map<Integer, Stage> stageIdToStage = Maps.newHashMap();
     private Set<Stage> waitingStages = Sets.newHashSet();
     private Set<Stage> runningStages = Sets.newHashSet();
     private Set<Stage> failedStages = Sets.newHashSet();
+    // JobId与Stage对应关系
     private Map<Integer, Set<Integer>> jobIdToStageIds = Maps.newHashMap();
     private Map<Integer, ActiveJob> jobIdToActiveJob = Maps.newHashMap();
     private Set<ActiveJob> activeJobs = Sets.newHashSet();
-    private Map<Integer, List<TaskLocation>> cacheLocs = Maps.newHashMap();
-
-
+    private final Map<Integer, List<TaskLocation>> cacheLocs = Maps.newHashMap();
 
 
 
@@ -75,15 +89,20 @@ public class DAGScheduler {
         this(sc, taskScheduler, listenerBus, mapOutputTracker, blockManagerMaster, env, new SystemClock());
     }
 
-    public DAGScheduler(SparkContext sc, TaskScheduler taskScheduler, LiveListenerBus listenerBus,
-                        MapOutputTrackerMaster mapOutputTracker, BlockManagerMaster blockManagerMaster,
-                        SparkEnv env, Clock clock) {
+    public DAGScheduler(SparkContext sc,
+                        TaskScheduler taskScheduler,
+                        LiveListenerBus listenerBus,
+                        MapOutputTrackerMaster mapOutputTracker,
+                        BlockManagerMaster blockManagerMaster,
+                        SparkEnv env,
+                        Clock clock) {
         this.sc = sc;
         this.taskScheduler = taskScheduler;
         this.listenerBus = listenerBus;
         this.mapOutputTracker = mapOutputTracker;
         this.blockManagerMaster = blockManagerMaster;
         this.env = env;
+        this.outputCommitCoordinator = this.env.outputCommitCoordinator;
         this.clock = clock;
         // 初始化
         this.eventProcessLoop = new DAGSchedulerEventProcessLoop(this);
@@ -92,48 +111,70 @@ public class DAGScheduler {
     }
 
     /********************************Spark DAG State调度*********************************/
+    /**
+     * @param rdd target RDD to run tasks on
+     * @param rddAction a function to run on each partition of the RDD
+     * @param partitions set of partitions to run on; some jobs may not want to compute on all
+     *                   partitions of the target RDD, e.g. for operations like first()
+     * @param callSite where in the user program this job was called
+     * @param resultHandler callback to pass each result to
+     * @param properties scheduler properties to attach to this job, e.g. fair scheduler pool name
+     * */
     public <T, U> void runJob(RDD<T> rdd,
-                              Transaction<Pair<TaskContext, Iterator<T>>, U> func,
+                              RDDAction<T, U> rddAction,
                               List<Integer> partitions,
                               CallSite callSite,
-                              Transaction<Pair<Integer, U>, Void> resultHandler,
-                              Properties properties) {
-        long start = System.currentTimeMillis();
-        JobWaiter<U> waiter = submitJob(rdd, func, partitions, callSite, resultHandler, properties);
+                              ResultHandler<U> resultHandler,
+                              Properties properties) throws Exception {
+        long start = System.nanoTime();
+        JobWaiter<U> waiter = submitJob(rdd, rddAction, partitions, callSite, resultHandler, properties);
         Future<Boolean> future = waiter.completionFuture();
-        boolean result = getFutureResult(future);
-        if (result) {
-            LOGGER.info("Spark Job[jobId = {}]完成: {}, 耗时{}ms",
-                        waiter.jobId,
-                        callSite,
-                        System.currentTimeMillis() - start);
-        } else {
-
+        try {
+            boolean success = future.get();
+            if (success) {
+                LOGGER.info("Job {} finished: {}, took {} s", waiter.jobId, callSite.shortForm,
+                            (System.nanoTime() - start) / 1e9);
+            }
+        } catch (Exception e) {
+            LOGGER.error("Job {} failed: {}, took {} s", waiter.jobId, callSite.shortForm,
+                        (System.nanoTime() - start) / 1e9);
+            // SPARK-8644: Include user stack trace in exceptions coming from DAGScheduler.
+            StackTraceElement[] stackTraces = Thread.currentThread().getStackTrace();
+            StackTraceElement callerStackTrace = stackTraces[stackTraces.length - 1];
+            StackTraceElement[] exceptionStackTrace = e.getStackTrace();
+            e.setStackTrace(ArrayUtils.add(exceptionStackTrace, callerStackTrace));
+            throw e;
         }
     }
+
     private <T, U> JobWaiter<U> submitJob(RDD<T> rdd,
-                                          Transaction<Pair<TaskContext, Iterator<T>>, U> func,
+                                          RDDAction<T, U> rddAction,
                                           List<Integer> partitions,
                                           CallSite callSite,
-                                          Transaction<Pair<Integer, U>, Void> resultHandler,
+                                          ResultHandler<U> resultHandler,
                                           Properties properties) {
+        // 校验传入RDD分区数是否正确
         int maxPartitions = rdd.partitions().size();
-        rdd.partitions().forEach(p -> {
-            if (p.index() < 0 || p.index() > maxPartitions) {
-                throw new IllegalArgumentException(String.format("Attempting to access a non-existent partition : %s, Total number of partitions: %s", p.index(), maxPartitions));
+        for (int partition : partitions) {
+            if (partition < 0 || partition >= maxPartitions) {
+                throw new IllegalArgumentException(String.format("Attempting to access a non-existent partition: %d. " +
+                                                                 "Total number of partitions: %d", partition, maxPartitions));
             }
-        });
+        }
 
+        // 生成JobId
         int jobId = nextJobId.getAndIncrement();
         if (partitions.size() == 0) {
             return new JobWaiter<>(this, jobId, 0, resultHandler);
         }
 
-        assert(partitions.size() > 0);
+        assert partitions.size() > 0;
         JobWaiter<U> waiter = new JobWaiter<>(this, jobId, partitions.size(), resultHandler);
+
+        // 提交作业事件
         eventProcessLoop.post(new JobSubmitted<>(jobId,
                                                  rdd,
-                                                 func,
+                                                 rddAction,
                                                  partitions,
                                                  callSite,
                                                  waiter,
@@ -143,7 +184,7 @@ public class DAGScheduler {
 
     private <T, U> void handleJobSubmitted(int jobId,
                                            RDD<T> finalRDD,
-                                           Transaction<Pair<TaskContext, Iterator<?>>, ?> func,
+                                           RDDAction<T, U> rddAction,
                                            List<Integer> partitions,
                                            CallSite callSite,
                                            JobListener listener,
@@ -152,7 +193,7 @@ public class DAGScheduler {
         try {
             // New stage creation may throw an exception if, for example, jobs are run on a
             // HadoopRDD whose underlying HDFS files have been deleted.
-            finalStage = createResultStage(finalRDD, func, partitions, jobId, callSite);
+            finalStage = createResultStage(finalRDD, rddAction, partitions, jobId, callSite);
         } catch (Exception e){
             listener.jobFailed(e);
             return;
@@ -172,9 +213,12 @@ public class DAGScheduler {
         finalStage.setActiveJob(job);
         Set<Integer> stageIds = jobIdToStageIds.get(jobId);
         List<StageInfo> stageInfos = stageIds.stream()
-                                             .map(id -> stageIdToStage.get(id).latestInfo)
+                                             .map(id -> stageIdToStage.get(id).latestInfo())
                                              .collect(Collectors.toList());
-        listenerBus.post(new SparkListenerJobStart(job.jobId, jobSubmissionTime, stageInfos, properties));
+        listenerBus.post(new SparkListenerJobStart(job.jobId(),
+                                                   jobSubmissionTime,
+                                                   stageInfos,
+                                                   properties));
         submitStage(finalStage);
     }
 
@@ -236,7 +280,11 @@ public class DAGScheduler {
         }
     }
 
-    private void visit(RDD<?> rdd, Stage stage, Set<RDD<?>> visited, Set<Stage> missing, Stack<RDD<?>> waitingForVisit) {
+    private void visit(RDD<?> rdd,
+                       Stage stage,
+                       Set<RDD<?>> visited,
+                       Set<Stage> missing,
+                       Stack<RDD<?>> waitingForVisit) {
         if (!visited.contains(rdd)) {
             visited.add(rdd);
             boolean rddHasUncachedPartitions = getCacheLocs(rdd).isEmpty();
@@ -271,7 +319,7 @@ public class DAGScheduler {
 
 
     private int activeJobForStage(Stage stage) {
-        List<Integer> jobsThatUseStage= Lists.newArrayList(stage.jobIds);
+        List<Integer> jobsThatUseStage= Lists.newArrayList(stage.jobIds());
         Collections.sort(jobsThatUseStage);
         for (int jobId : jobsThatUseStage) {
             if (jobIdToActiveJob.containsKey(jobId)) {
@@ -281,11 +329,20 @@ public class DAGScheduler {
         return -1;
     }
 
-    private ResultStage createResultStage(RDD<?> rdd,  Transaction<Pair<TaskContext, Iterator<?>>, ?> func,
-                                          List<Integer> partitions, int jobId, CallSite callSite) {
+    private ResultStage createResultStage(RDD<?> rdd,
+                                          RDDAction<?, ?> rddAction,
+                                          List<Integer> partitions,
+                                          int jobId,
+                                          CallSite callSite) {
         List<Stage> parents = getOrCreateParentStages(rdd, jobId);
         int id = nextStageId.getAndIncrement();
-        ResultStage stage = new ResultStage(id, rdd, func, partitions, parents, jobId, callSite);
+        ResultStage stage = new ResultStage(id,
+                                            rdd,
+                                            rddAction,
+                                            partitions,
+                                            parents,
+                                            jobId,
+                                            callSite);
         stageIdToStage.put(id, stage);
         updateJobIdStageIdMaps(jobId, Lists.newArrayList(stage));
         return stage;
@@ -374,10 +431,11 @@ public class DAGScheduler {
         return stage;
     }
 
-    private void updateJobIdStageIdMaps(int jobId, List<Stage> stages) {
+    private void updateJobIdStageIdMaps(int jobId,
+                                        List<Stage> stages) {
         if (CollectionUtils.isNotEmpty(stages)) {
             Stage s = stages.get(0);
-            s.jobIds.add(jobId);
+            s.jobIds().add(jobId);
             Set<Integer> stageIds = jobIdToStageIds.get(jobId);
             if (stageIds == null) {
                 stageIds = Sets.newHashSet();
@@ -385,10 +443,164 @@ public class DAGScheduler {
             }
             stageIds.add(s.id);
             List<Stage> parentsWithoutThisJobId = s.parents.stream()
-                                                           .filter(ps -> !ps.jobIds.contains(jobId))
+                                                           .filter(ps -> !ps.jobIds().contains(jobId))
                                                            .collect(Collectors.toList());
             updateJobIdStageIdMaps(jobId, parentsWithoutThisJobId);
         }
+    }
+
+    public void cancelJob(int jobId, String reason) {
+        LOGGER.info("Asked to cancel job {}", jobId);
+        eventProcessLoop.post(new JobCancelled(jobId, reason));
+    }
+
+    private void handleJobCancellation(int jobId, String reason) {
+        if (jobIdToStageIds.containsKey(jobId)) {
+            failJobAndIndependentStages(jobIdToActiveJob.get(jobId),
+                                        String.format("Job %d cancelled %s", jobId, reason == null ? "" : reason));
+        } else {
+            LOGGER.debug("Trying to cancel unregistered job {}", jobId);
+        }
+    }
+
+    /**Fails a job and all stages that are only used by that job, and cleans up relevant state*/
+    private void failJobAndIndependentStages(ActiveJob activeJob, String reason) {
+        failJobAndIndependentStages(activeJob, reason, null);
+    }
+
+    private void failJobAndIndependentStages(ActiveJob activeJob, String reason, Throwable e) {
+        SparkException error = new SparkException(reason, e);
+        boolean ableToCancelStages = true;
+
+        // 是否中断作业线程
+        boolean shouldInterruptThread = false;
+        if (activeJob.properties != null) {
+            shouldInterruptThread = toBoolean(activeJob.properties.getProperty(SPARK_JOB_INTERRUPT_ON_CANCEL, "false"));
+        }
+
+        // 当前Job依赖的所有Stage
+        Set<Integer> stages = jobIdToStageIds.get(activeJob.jobId());
+        if (stages == null || stages.isEmpty()) {
+            LOGGER.error("No stages registered for job {}", activeJob.jobId());
+            return;
+        }
+
+        // 取消依赖Stage的Task运行
+        for (int stageId : stages) {
+            Stage dependStage = stageIdToStage.get(stageId);
+            if (dependStage == null ||
+                    dependStage.jobIds() == null || !dependStage.jobIds().contains(activeJob.jobId())) {
+                // 依赖的Stage并不包含JobID
+                LOGGER.error("Job {} not registered for stage {} even though that stage was registered for the job",
+                             activeJob.jobId(), stageId);
+            } else if (dependStage.jobIds().size() == 1) {
+                if (!stageIdToStage.containsKey(stageId)) { // TODO: 多余?
+                    LOGGER.error("Missing Stage for stage with id {}", stageId);
+                } else {
+                    if (runningStages.contains(dependStage)) {
+                        try {
+                            taskScheduler.cancelTasks(stageId, shouldInterruptThread);
+                            markStageAsFinished(dependStage, reason);
+                        } catch (UnsupportedOperationException ex) {
+                            LOGGER.info("Could not cancel tasks for stage {}", stageId, e);
+                            ableToCancelStages = false;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (ableToCancelStages) {
+            // SPARK-15783 important to cleanup state first, just for tests where we have some asserts
+            // against the state.  Otherwise we have a *little* bit of flakiness in the tests.
+            cleanupStateForJobAndIndependentStages(activeJob);
+            activeJob.listener().jobFailed(error);
+            listenerBus.post(new SparkListenerJobEnd(activeJob.jobId(),
+                                                     clock.getTimeMillis(),
+                                                     new JobFailed(error)));
+        }
+    }
+
+    private void cleanupStateForJobAndIndependentStages(ActiveJob job) {
+        Set<Integer> registeredStages = jobIdToStageIds.get(job.jobId());
+        if (registeredStages == null || registeredStages.isEmpty()) {
+            LOGGER.error("No stages registered for job {}", job.jobId());
+        } else {
+            Iterator<Integer> iterator = stageIdToStage.keySet().iterator();
+            while (iterator.hasNext()) {
+                int stageId = iterator.next();
+                Stage stage = stageIdToStage.get(stageId);
+                if (!registeredStages.contains(stageId)) {
+                    continue;
+                }
+                Set<Integer> jobSet = stage.jobIds();
+                if (jobSet == null || !jobSet.contains(job.jobId())) {
+                    LOGGER.error("Job {} not registered for stage {} even though that stage was registered for the job",
+                            job.jobId(), stageId);
+                    continue;
+                }
+                jobSet.remove(job.jobId());
+                if (jobSet.isEmpty()) {
+                   // 删除Stage
+                    if (runningStages.contains(stage)) {
+                        LOGGER.debug("Removing running stage {}", stageId);
+                        runningStages.remove(stage);
+                    }
+                    ShuffleMapStage mapStage = shuffleIdToMapStage.get(stageId);
+                    if (mapStage != null) {
+                        shuffleIdToMapStage.remove(stageId);
+                    }
+                    if (waitingStages.contains(stage)) {
+                        LOGGER.debug("Removing stage {} from waiting set.", stageId);
+                        waitingStages.remove(stage);
+                    }
+                    if (failedStages.contains(stage)) {
+                        LOGGER.debug("Removing stage %d from failed set.", stageId);
+                        failedStages.remove(stage);
+                    }
+                    iterator.remove();
+                    // data structures based on StageId
+                    LOGGER.debug("After removal of stage {}, remaining stages = {}", stageId, stageIdToStage.size());
+                }
+            }
+        }
+        jobIdToStageIds.remove(job.jobId());
+        jobIdToActiveJob.remove(job.jobId());
+        activeJobs.remove(job);
+        if (job.finalStage() != null) {
+            if (job.finalStage() instanceof ResultStage) {
+                ResultStage resultStage = (ResultStage) job.finalStage();
+                resultStage.removeActiveJob();
+            } else if (job.finalStage() instanceof ShuffleMapStage) {
+                ShuffleMapStage shuffleMapStage = (ShuffleMapStage) job.finalStage();
+                shuffleMapStage.removeActiveJob(job);
+            }
+        }
+    }
+
+    private void markStageAsFinished(Stage stage, String errorMessage) {
+        String serviceTime = "Unknown";
+        if (stage.latestInfo().submissionTime() != -1) {
+            serviceTime = String.format("%.03f", (clock.getTimeMillis() - stage.latestInfo().submissionTime()) / 1000.0);
+        }
+
+        if (StringUtils.isNotEmpty(errorMessage)) {
+            LOGGER.info("{} ({}) finished in {} s", stage, stage.name, serviceTime);
+            stage.latestInfo().setCompletionTime(clock.getTimeMillis());
+
+            // Clear failure count for this stage, now that it's succeeded.
+            // We only limit consecutive failures of stage attempts,so that if a stage is
+            // re-used many times in a long-running job, unrelated failures don't eventually cause the
+            // stage to be aborted.
+            stage.clearFailures();
+        } else {
+            stage.latestInfo().stageFailed(errorMessage);
+            LOGGER.info("{} ({}) failed in {} s due to {}", stage, stage.name, serviceTime, errorMessage);
+        }
+
+        outputCommitCoordinator.stageEnd(stage.id);
+        listenerBus.post(new SparkListenerStageCompleted(stage.latestInfo()));
+        runningStages.remove(stage);
     }
 
     private class DAGSchedulerEventProcessLoop extends EventLoop<DAGSchedulerEvent> {
@@ -418,14 +630,20 @@ public class DAGScheduler {
 
         private void doOnReceive(DAGSchedulerEvent event) {
             if (event instanceof JobSubmitted) {
+                // Job生成
                 JobSubmitted jobSubmitted = (JobSubmitted) event;
                 dagScheduler.handleJobSubmitted(jobSubmitted.jobId,
                                                 jobSubmitted.finalRDD,
-                                                jobSubmitted.func,
+                                                jobSubmitted.rddAction,
                                                 jobSubmitted.partitions,
                                                 jobSubmitted.callSite,
                                                 jobSubmitted.listener,
                                                 jobSubmitted.properties);
+            } else if (event instanceof JobCancelled) {
+                // Job取消
+                JobCancelled jobCancelled = (JobCancelled) event;
+                dagScheduler.handleJobCancellation(jobCancelled.jobId,
+                                                   jobCancelled.reason);
             }
         }
     }

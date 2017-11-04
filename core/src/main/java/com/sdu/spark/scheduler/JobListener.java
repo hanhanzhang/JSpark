@@ -5,7 +5,7 @@ package com.sdu.spark.scheduler;
  * */
 public interface JobListener {
 
-    void taskSucceeded(Integer index, Object result);
+    void taskSucceeded(int index, Object result);
     void jobFailed(Exception exception);
 
 }
