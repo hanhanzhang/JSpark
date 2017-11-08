@@ -76,6 +76,7 @@ public abstract class RDD<T> implements Serializable {
     }
 
     public final LinkedList<Dependency<?>> dependencies() {
+        // TODO: 待实现
         throw new UnsupportedOperationException("");
     }
 

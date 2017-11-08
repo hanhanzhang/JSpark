@@ -36,7 +36,29 @@ import static org.apache.commons.lang3.BooleanUtils.toBoolean;
 /**
  * {@link DAGScheduler}职责:
  *
- * 1: {@link #runJob(RDD, RDDAction, List, CallSite, ResultHandler, Properties)}Stage划分及作业提交
+ * 1: {@link #runJob(RDD, RDDAction, List, CallSite, ResultHandler, Properties)}划分并提及Stage
+ *
+ *  DAGScheduler.runJob()
+ *    |
+ *    +----> DAGScheduler.submitJob()[向EventLoop投递JobSubmitEvent, 返回JobWaiter(Job运行结果)]
+ *
+ *  DAGScheduler.handleJobSubmitted()[EventLoop处理JobSubmitEvent事件]
+ *    |
+ *    +----> DAGScheduler.createResultStage()[根据DAG Final RDD生成ResultStage]
+ *              |
+ *              +----> DAGScheduler.submitStage()[提交ResultStage]
+ *
+ *  Note:
+ *
+ *    DAGScheduler划分Stage过程主要有:
+ *
+ *    1': 由final rdd构建ResultStage, 构建ResultStage过程中, 根据final rdd的ShuffleDependency构建ResultStage依赖的
+ *
+ *        ShuffleMapStage, 递归构建ShuffleMapStage依赖的ShuffleMapStage[递归结束条件: rdd.dependencies() == null]
+ *
+ *    2': 划分Stage过程中需维护StageId与Stage、ShuffleId与ShuffleMapStage映射关系, 于此同时需要MapOutputTrackerMaster
+ *
+ *        维护ShuffleId与parent rdd的分区数映射关系
  *
  * 2: {@link #cancelJob(int, String)}终止作业及Job关联的Stage信息
  *
@@ -64,7 +86,7 @@ public class DAGScheduler {
     private Set<Stage> waitingStages = Sets.newHashSet();
     private Set<Stage> runningStages = Sets.newHashSet();
     private Set<Stage> failedStages = Sets.newHashSet();
-    // JobId与Stage对应关系
+    // JobId与Stage对应关系[runJob生成jobId并划分jobId依赖的所有Stage]
     private Map<Integer, Set<Integer>> jobIdToStageIds = Maps.newHashMap();
     private Map<Integer, ActiveJob> jobIdToActiveJob = Maps.newHashMap();
     private Set<ActiveJob> activeJobs = Sets.newHashSet();
@@ -200,12 +222,13 @@ public class DAGScheduler {
         }
 
         ActiveJob job = new ActiveJob(jobId, finalStage, callSite, listener, properties);
-//        clearCacheLocs();
-//        logInfo("Got job %s (%s) with %d combiner partitions".format(
-//                job.jobId, callSite.shortForm, partitions.length))
-//        logInfo("Final stage: " + finalStage + " (" + finalStage.name + ")")
-//        logInfo("Parents of final stage: " + finalStage.parents)
-//        logInfo("Missing parents: " + getMissingParentStages(finalStage))
+        clearCacheLocs();
+        LOGGER.info("Got job {} ({}) with {} combiner partitions", job.jobId(),
+                                                                   callSite.shortForm,
+                                                                   partitions.size());
+        LOGGER.info("Final stage: {}({})", finalStage, finalStage.name);
+        LOGGER.info("Parents of final stage: {}", finalStage.parents);
+        LOGGER.info("Missing parents: {}", getMissingParentStages(finalStage));
 
         long jobSubmissionTime = clock.getTimeMillis();
         jobIdToActiveJob.put(jobId, job);
@@ -220,6 +243,10 @@ public class DAGScheduler {
                                                    stageInfos,
                                                    properties));
         submitStage(finalStage);
+    }
+
+    private synchronized void clearCacheLocs() {
+        cacheLocs.clear();
     }
 
     private void submitStage(Stage stage) {
@@ -329,11 +356,22 @@ public class DAGScheduler {
         return -1;
     }
 
+    /**Create a ResultStage associated with the provided jobId*/
     private ResultStage createResultStage(RDD<?> rdd,
                                           RDDAction<?, ?> rddAction,
                                           List<Integer> partitions,
                                           int jobId,
                                           CallSite callSite) {
+        // step1: 计算final rdd依赖的所有ShuffleDependency
+        // step2: 计算ShuffleDependency依赖的ShuffleMapStage
+        // 调用链:
+        //    DAGScheduler.getOrCreateParentStages(rdd)[final rdd ==> ResultStage]
+        //      |
+        //      +---> DAGScheduler.getShuffleDependencies(rdd)[final rdd ==> Set<ShuffleDependency>]
+        //              |
+        //              +---> DAGScheduler.getOrCreateShuffleMapStage(shuffleId, jobId)[ShuffleDependency ==> List<ShuffleMapStage>]
+        //                     |
+        //                     +---> DAGScheduler.createShuffleMapStage(shuffleDep, jobId)[ShuffleDependency ==> ShuffleMapStage]
         List<Stage> parents = getOrCreateParentStages(rdd, jobId);
         int id = nextStageId.getAndIncrement();
         ResultStage stage = new ResultStage(id,
@@ -349,35 +387,55 @@ public class DAGScheduler {
     }
 
     private List<Stage> getOrCreateParentStages(RDD<?> rdd, int firstJobId) {
-        return getShuffleDependencies(rdd).stream()
-                                          .map(shuffleDep -> getOrCreateShuffleMapStage(shuffleDep, firstJobId))
-                                          .collect(Collectors.toList());
+        Set<ShuffleDependency<?, ?, ?>> shuffleDependencies = getShuffleDependencies(rdd);
+        if (CollectionUtils.isEmpty(shuffleDependencies)) {
+            return Collections.emptyList();
+        }
+        // 根据ShuffleDependency创建Stage
+        return shuffleDependencies.stream()
+                                  .map(shuffleDep -> getOrCreateShuffleMapStage(shuffleDep, firstJobId))
+                                  .collect(Collectors.toList());
     }
+
+    /** Returns shuffle dependencies that are immediate parents of the given RDD*/
     private Set<ShuffleDependency<?, ?, ?>> getShuffleDependencies(RDD<?> rdd) {
-        // 深度优先遍历
         Set<ShuffleDependency<?, ?, ?>> parents = Sets.newHashSet();
+        // 已遍历RDD
         Set<RDD<?>> visited = Sets.newHashSet();
+        // 深度优先遍历
         Stack<RDD<?>> waitingForVisit = new Stack<>();
         waitingForVisit.push(rdd);
-        while (CollectionUtils.isNotEmpty(waitingForVisit)) {
+
+        while (waitingForVisit.size() > 0) {
             RDD<?> toVisit = waitingForVisit.pop();
             if (!visited.contains(toVisit)) {
                 visited.add(toVisit);
-                toVisit.dependencies().forEach(dep -> {
-                    if (dep instanceof ShuffleDependency) {
-                        parents.add((ShuffleDependency<?, ?, ?>) dep);
-                    } else {
-                        waitingForVisit.push(dep.rdd());
+                // 递归调用结束条件: RDD.dependencies() == null, 说明为DAG图入口
+                if (toVisit.dependencies() != null) {
+                    for (Dependency<?> dep : toVisit.dependencies()) {
+                        if (dep instanceof ShuffleDependency) {
+                            parents.add((ShuffleDependency<?, ?, ?>) dep);
+                        } else {
+                            // dep依赖的RDD入栈, 深度遍历
+                            waitingForVisit.add(dep.rdd());
+                        }
                     }
-                });
+                }
             }
         }
         return parents;
     }
 
+    /**
+     * Gets a shuffle map stage if one exists in shuffleIdToMapStage. Otherwise, if the
+     * shuffle map stage doesn't already exist, this method will create the shuffle map stage in
+     * addition to any missing ancestor shuffle map stages.
+     * */
     private ShuffleMapStage getOrCreateShuffleMapStage(ShuffleDependency<?, ?, ?> shuffleDep, int firstJobId) {
         ShuffleMapStage stage = shuffleIdToMapStage.get(shuffleDep.shuffleId());
         if (stage == null) {
+            // step1: 计算ShuffleDependency依赖RDD的所有ShuffleDependency
+            // step2: 生成ShuffleDependency对应ShuffleMapStage
             getMissingAncestorShuffleDependencies(shuffleDep.rdd()).forEach(dep -> {
                 if (!shuffleIdToMapStage.containsKey(dep.shuffleId())) {
                     createShuffleMapStage(dep, firstJobId);
@@ -388,6 +446,7 @@ public class DAGScheduler {
         return stage;
     }
 
+    /** Find ancestor shuffle dependencies that are not registered in shuffleToMapStage yet */
     private Stack<ShuffleDependency<?, ?, ?>> getMissingAncestorShuffleDependencies(RDD<?> rdd) {
         Stack<ShuffleDependency<?, ?, ?>> ancestors = new Stack<>();
         Set<RDD<?>> visited = Sets.newHashSet();
@@ -395,11 +454,15 @@ public class DAGScheduler {
         // caused by recursively visiting
         Stack<RDD<?>> waitingForVisit = new Stack<>();
         waitingForVisit.push(rdd);
-        while (CollectionUtils.isNotEmpty(waitingForVisit)) {
+        while (waitingForVisit.size() > 0) {
             RDD<?> toVisit = waitingForVisit.pop();
             if (!visited.contains(toVisit)) {
                 visited.add(toVisit);
-                getShuffleDependencies(toVisit).forEach(shuffleDep -> {
+                Set<ShuffleDependency<?, ?, ?>> shuffleDependencies = getShuffleDependencies(toVisit);
+                if (shuffleDependencies == null || shuffleDependencies.size() == 0) {
+                    continue;
+                }
+                shuffleDependencies.forEach(shuffleDep -> {
                     if (!shuffleIdToMapStage.containsKey(shuffleDep.shuffleId())) {
                         ancestors.push(shuffleDep);
                         waitingForVisit.push(shuffleDep.rdd());
@@ -411,21 +474,30 @@ public class DAGScheduler {
     }
 
     private ShuffleMapStage createShuffleMapStage(ShuffleDependency<?, ?, ?> shuffleDep, int jobId) {
+        // step1: 计算ShuffleDependency依赖RDD的所有的ShuffleMapStage[同final RDD生成ResultStage, 递归调用]
         RDD<?> rdd = shuffleDep.rdd();
         int numTasks = rdd.partitions().size();
         List<Stage> parents = getOrCreateParentStages(rdd, jobId);
         int id = nextStageId.getAndIncrement();
-        ShuffleMapStage stage = new ShuffleMapStage(
-                id, rdd, numTasks, parents, jobId, rdd.creationSite, shuffleDep, mapOutputTracker);
+        ShuffleMapStage stage = new ShuffleMapStage(id,
+                                                    rdd,
+                                                    numTasks,
+                                                    parents,
+                                                    jobId,
+                                                    rdd.creationSite,
+                                                    shuffleDep,
+                                                    mapOutputTracker);
 
+        // step2: 更新ShuffleId与ShuffleMapStage映射关系
         stageIdToStage.put(id, stage);
         shuffleIdToMapStage.put(shuffleDep.shuffleId(), stage);
         updateJobIdStageIdMaps(jobId, Lists.newArrayList(stage));
 
+        // step3: MapOutputTracker记录ShuffleId对应依赖RDD输出分区数
         if (!mapOutputTracker.containsShuffle(shuffleDep.shuffleId())) {
             // Kind of ugly: need to register RDDs with the cache and map combiner tracker here
             // since we can't do it in the RDD constructor because # of partitions is unknown
-            LOGGER.info("注册RDD[rddId = {}, callSite = {}]", rdd.id, rdd.creationSite.shortForm);
+            LOGGER.info("Registering RDD {}({})", rdd.id, rdd.creationSite.shortForm);
             mapOutputTracker.registerShuffle(shuffleDep.shuffleId(), rdd.partitions().size());
         }
         return stage;

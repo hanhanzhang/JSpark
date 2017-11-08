@@ -45,7 +45,7 @@ public class ShuffleDependency<K, V, C> extends Dependency<Product2<K, V>> {
 
     @Override
     public RDD<Product2<K, V>> rdd() {
-        return null;
+        return rdd;
     }
 
     public int shuffleId() {

@@ -22,8 +22,14 @@ public class ShuffleMapStage extends Stage {
     private List<ActiveJob> mapStageJobs = Lists.newLinkedList();
     private Set<Integer> pendingPartitions = Sets.newHashSet();
 
-    public ShuffleMapStage(int id, RDD<?> rdd, int numTasks, List<Stage> parents, int firstJobId, CallSite callSite,
-                           ShuffleDependency<?, ?, ?> shuffleDep, MapOutputTrackerMaster mapOutputTrackerMaster) {
+    public ShuffleMapStage(int id,
+                           RDD<?> rdd,
+                           int numTasks,
+                           List<Stage> parents,
+                           int firstJobId,
+                           CallSite callSite,
+                           ShuffleDependency<?, ?, ?> shuffleDep,
+                           MapOutputTrackerMaster mapOutputTrackerMaster) {
         super(id, rdd, numTasks, parents, firstJobId, callSite);
         this.mapOutputTrackerMaster = mapOutputTrackerMaster;
         this.shuffleDep = shuffleDep;
