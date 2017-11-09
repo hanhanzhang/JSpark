@@ -9,6 +9,7 @@ import com.sdu.spark.scheduler.SparkListenerEvent.SparkListenerBlockManagerAdded
 import com.sdu.spark.scheduler.SparkListenerEvent.SparkListenerBlockManagerRemoved;
 import com.sdu.spark.storage.BlockManagerMessages.*;
 import com.sdu.spark.utils.ThreadUtils;
+import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
@@ -72,10 +73,10 @@ public class BlockManagerMasterEndpoint extends ThreadSafeRpcEndpoint {
             boolean result = updateBlockInfo((UpdateBlockInfo) msg);
             context.reply(result);
         } else if (msg instanceof GetLocations) {
-            Set<BlockManagerId> locations = getLocation(((GetLocations) msg).blockId);
+            BlockManagerId[] locations = getLocation(((GetLocations) msg).blockId);
             context.reply(locations);
         } else if (msg instanceof GetLocationsMultipleBlockIds) {
-            Set<BlockManagerId>[] locations = getLocationsMultipleBlockIds(((GetLocationsMultipleBlockIds) msg).blockIds);
+            BlockManagerId[][] locations = getLocationsMultipleBlockIds(((GetLocationsMultipleBlockIds) msg).blockIds);
             context.reply(locations);
         } else if (msg instanceof GetPeers) {
             Set<BlockManagerId> peers = getPeers(((GetPeers) msg).blockManagerId);
@@ -175,13 +176,15 @@ public class BlockManagerMasterEndpoint extends ThreadSafeRpcEndpoint {
         return true;
     }
 
-    private Set<BlockManagerId> getLocation(BlockId blockId) {
+    private BlockManagerId[] getLocation(BlockId blockId) {
         Set<BlockManagerId> locations = blockLocations.get(blockId);
-        return locations == null ? Collections.emptySet() : locations;
+        return locations == null ? new BlockManagerId[0]
+                                 : locations.toArray(new BlockManagerId[locations.size()]);
     }
 
-    private Set<BlockManagerId>[] getLocationsMultipleBlockIds(BlockId[] blockIds) {
-        Set<BlockManagerId>[] locations = new Set[blockIds.length];
+    private BlockManagerId[][] getLocationsMultipleBlockIds(BlockId[] blockIds) {
+        // 一个分区对应一个BlockId
+        BlockManagerId[][] locations = new BlockManagerId[blockIds.length][];
         for (int i = 0; i < blockIds.length; ++i) {
             locations[i] = getLocation(blockIds[i]);
         }

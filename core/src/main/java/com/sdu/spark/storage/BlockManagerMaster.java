@@ -20,6 +20,7 @@ import static com.sdu.spark.utils.RpcUtils.getRpcAskTimeout;
  *
  * @author hanhan.zhang
  * */
+@SuppressWarnings("unchecked")
 public class BlockManagerMaster {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(BlockManagerMaster.class);
@@ -76,27 +77,27 @@ public class BlockManagerMaster {
         }
     }
 
-    public Set<BlockManagerId> getLocations(BlockId blockId) {
+    public BlockManagerId[] getLocations(BlockId blockId) {
         try {
-            Set<BlockManagerId> res = (Set<BlockManagerId>) driverEndpoint.askSync(new GetLocations(blockId));
-            return res;
+            return (BlockManagerId[]) driverEndpoint.askSync(new GetLocations(blockId));
         } catch (Exception e) {
             throw new SparkException("fetch block location failure, blockId = " + blockId, e);
         }
 
     }
 
-    public Set<BlockManagerId>[] getLocations(BlockId[] blockIds) {
+    // 行表示分区, 列表示Task运行位置BlockManagerId
+    public BlockManagerId[][] getLocations(BlockId[] blockIds) {
         try {
-            Set<BlockManagerId>[] res = (Set<BlockManagerId>[]) driverEndpoint.askSync(new GetLocationsMultipleBlockIds(blockIds));
-            return res;
+            return  (BlockManagerId[][]) driverEndpoint.askSync(new GetLocationsMultipleBlockIds(blockIds));
         } catch (Exception e) {
             throw new SparkException("fetch block location failure, blockId = " + blockIds, e);
         }
     }
 
     public boolean contains(BlockId blockId) {
-        return !getLocations(blockId).isEmpty();
+        BlockManagerId[] locations = getLocations(blockId);
+        return locations.length != 0;
     }
 
     public Set<BlockManagerId> getPeers(BlockManagerId blockManagerId) {

@@ -22,7 +22,7 @@ public abstract class RDD<T> implements Serializable {
 
     public int id;
 
-    private transient List<Partition> partitions;
+    private transient Partition[] partitions;
     public CallSite creationSite;
     public StorageLevel storageLevel = StorageLevel.NONE;
 
@@ -80,7 +80,11 @@ public abstract class RDD<T> implements Serializable {
         throw new UnsupportedOperationException("");
     }
 
-    public List<Partition> partitions() {
+    public Partition[] partitions() {
+        throw new UnsupportedOperationException("");
+    }
+
+    public String[] preferredLocations(Partition split) {
         throw new UnsupportedOperationException("");
     }
 

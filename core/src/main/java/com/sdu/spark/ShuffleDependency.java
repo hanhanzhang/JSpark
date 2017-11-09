@@ -53,6 +53,6 @@ public class ShuffleDependency<K, V, C> extends Dependency<Product2<K, V>> {
     }
 
     public ShuffleHandle shuffleHandle() {
-        return SparkEnv.env.shuffleManager.registerShuffle(shuffleId, rdd().partitions().size(), this);
+        return SparkEnv.env.shuffleManager.registerShuffle(shuffleId, rdd().partitions().length, this);
     }
 }

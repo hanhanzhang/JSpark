@@ -39,7 +39,7 @@ public class ActiveJob {
         if (finalStage instanceof ResultStage) {
             this.numPartitions = ((ResultStage) finalStage).partitions.size();
         } else if (finalStage instanceof ShuffleMapStage) {
-           this.numPartitions = ((ShuffleMapStage) finalStage).rdd.partitions().size();
+           this.numPartitions = ((ShuffleMapStage) finalStage).rdd.partitions().length;
         }
 
         this.finished = new boolean[this.numPartitions];

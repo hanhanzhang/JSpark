@@ -1,6 +1,7 @@
 package com.sdu.spark;
 
 import com.google.common.collect.Maps;
+import com.sdu.spark.broadcast.Broadcast;
 import com.sdu.spark.rdd.RDD;
 import com.sdu.spark.rdd.Transaction;
 import com.sdu.spark.rpc.RpcEndPointRef;
@@ -106,6 +107,9 @@ public class SparkContext {
     private List<String> jars;
     private int executorMemory;
 
+    private String applicationId;
+    private String applicationAttemptId;
+
     private AtomicInteger nextShuffleId = new AtomicInteger(0);
     private AtomicInteger nextRddId = new AtomicInteger(0);
 
@@ -162,20 +166,33 @@ public class SparkContext {
 
         // 启动TaskScheduler
         taskScheduler.start();
+        applicationId = taskScheduler.applicationId();
+        applicationAttemptId = taskScheduler.applicationAttemptId();
 
     }
 
     public String appName() {
         return this.conf.get("spark.app.name");
     }
+
     public int executorMemory() {
         return this.conf.getInt("spark.executor.memory", 1024);
     }
+
     private String master() {
         return this.conf.get("spark.master");
     }
+
     private String deployMode() {
         return this.conf.get("spark.submit.deployMode");
+    }
+
+    public String applicationId() {
+        return applicationId;
+    }
+
+    public String applicationAttemptId() {
+        return applicationAttemptId;
     }
 
     public void stopInNewThread() {
@@ -234,6 +251,11 @@ public class SparkContext {
 
     public int newRddId(){
         return nextRddId.getAndIncrement();
+    }
+    
+    public <T> Broadcast<T> broadcast(T value) {
+        // TODO: 待实现
+        throw new UnsupportedOperationException("");
     }
 
     private void assertNotStopped() {

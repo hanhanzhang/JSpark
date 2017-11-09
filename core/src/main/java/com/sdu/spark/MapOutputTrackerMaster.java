@@ -194,7 +194,7 @@ public class MapOutputTrackerMaster extends MapOutputTracker {
      * 计算Shuffle依赖的Block的地址
      * */
     public String[] getPreferredLocationsForShuffle(ShuffleDependency<?, ?, ?> dep, int partitionId) {
-        if (shuffleLocalityEnabled && dep.rdd().partitions().size() < SHUFFLE_PREF_MAP_THRESHOLD &&
+        if (shuffleLocalityEnabled && dep.rdd().partitions().length < SHUFFLE_PREF_MAP_THRESHOLD &&
                 dep.partitioner.numPartitions() < SHUFFLE_PREF_REDUCE_THRESHOLD) {
             BlockManagerId[] blockManagerIds = getLocationsWithLargestOutputs(dep.shuffleId(), partitionId,
                     dep.partitioner.numPartitions(), REDUCER_PREF_LOCS_FRACTION);

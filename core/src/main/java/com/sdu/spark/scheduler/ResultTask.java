@@ -5,17 +5,19 @@ import com.sdu.spark.SparkEnv;
 import com.sdu.spark.TaskContext;
 import com.sdu.spark.broadcast.Broadcast;
 import com.sdu.spark.rdd.RDD;
+import com.sdu.spark.scheduler.action.RDDAction;
 import com.sdu.spark.serializer.SerializerInstance;
 import com.sdu.spark.utils.scala.Tuple2;
-import org.apache.commons.lang3.tuple.Pair;
 
 import java.io.IOException;
 import java.io.Serializable;
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadMXBean;
-import java.nio.ByteBuffer;
 import java.util.Iterator;
 import java.util.Properties;
+
+import static java.lang.Thread.currentThread;
+import static java.nio.ByteBuffer.wrap;
 
 /**
  * @author hanhan.zhang
@@ -44,23 +46,26 @@ public class ResultTask<T, U> extends Task<U> implements Serializable {
 
     @Override
     public U runTask(TaskContext context) throws IOException {
-        ThreadMXBean threadMXBean = ManagementFactory.getThreadMXBean();
+        ThreadMXBean bean = ManagementFactory.getThreadMXBean();
         long deserializeStartTime = System.currentTimeMillis();
-        long deserializeStartCpuTime = threadMXBean.isCurrentThreadCpuTimeSupported() ? threadMXBean.getCurrentThreadCpuTime()
+        long deserializeStartCpuTime = bean.isCurrentThreadCpuTimeSupported() ? bean.getCurrentThreadCpuTime()
                                                                                       : 0L;
         SerializerInstance serializer = SparkEnv.env.closureSerializer.newInstance();
 
-        Tuple2<RDD<T>, BroadCastFunc<Iterator<T>, U>> res = serializer.deserialize(ByteBuffer.wrap(taskBinary.value()),
-                                                                                           Thread.currentThread().getContextClassLoader());
+        // DAGScheduler.submitMissingTasks()
+        // ResultStage ===> Tuple2<RDD, RDDAction<T, U>>
+        // RDDAction即触发Spark Job动作因子
+        Tuple2<RDD<T>, RDDAction<T, U>> res = serializer.deserialize(wrap(taskBinary.value()),
+                                                                                   currentThread().getContextClassLoader());
         executorDeserializeTime = System.currentTimeMillis() - deserializeStartTime;
-        executorDeserializeCpuTime = threadMXBean.isCurrentThreadCpuTimeSupported() ? threadMXBean.getCurrentThreadCpuTime() - deserializeStartCpuTime
+        executorDeserializeCpuTime = bean.isCurrentThreadCpuTimeSupported() ? bean.getCurrentThreadCpuTime() - deserializeStartCpuTime
                                                                                     : 0L;
 
         assert res != null;
-        BroadCastFunc<Iterator<T>, U> func = res._2();
+        RDDAction<T, U> action = res._2();
         RDD<T> rdd = res._1();
         Iterator<T> iterator = rdd.iterator(partition, context);
-        return func.broadcast(context, iterator);
+        return action.func(context, iterator);
     }
 
     @Override
@@ -71,9 +76,5 @@ public class ResultTask<T, U> extends Task<U> implements Serializable {
     @Override
     public String toString() {
         return String.format("ResultTask(%d, %d)", stageId, partitionId);
-    }
-
-    public interface BroadCastFunc<T, U> {
-        U broadcast(TaskContext context, T iterator);
     }
 }

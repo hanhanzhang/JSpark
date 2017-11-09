@@ -4,6 +4,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.sdu.spark.*;
+import com.sdu.spark.broadcast.Broadcast;
 import com.sdu.spark.rdd.RDD;
 import com.sdu.spark.scheduler.DAGSchedulerEvent.JobCancelled;
 import com.sdu.spark.scheduler.DAGSchedulerEvent.JobSubmitted;
@@ -11,26 +12,35 @@ import com.sdu.spark.scheduler.JobResult.JobFailed;
 import com.sdu.spark.scheduler.SparkListenerEvent.SparkListenerJobEnd;
 import com.sdu.spark.scheduler.SparkListenerEvent.SparkListenerJobStart;
 import com.sdu.spark.scheduler.SparkListenerEvent.SparkListenerStageCompleted;
+import com.sdu.spark.scheduler.SparkListenerEvent.SparkListenerStageSubmitted;
 import com.sdu.spark.scheduler.action.RDDAction;
 import com.sdu.spark.scheduler.action.ResultHandler;
+import com.sdu.spark.serializer.SerializerInstance;
+import com.sdu.spark.storage.BlockId;
+import com.sdu.spark.storage.BlockId.RDDBlockId;
+import com.sdu.spark.storage.BlockManagerId;
 import com.sdu.spark.storage.BlockManagerMaster;
 import com.sdu.spark.storage.StorageLevel;
 import com.sdu.spark.utils.CallSite;
 import com.sdu.spark.utils.Clock;
 import com.sdu.spark.utils.Clock.SystemClock;
 import com.sdu.spark.utils.EventLoop;
+import com.sdu.spark.utils.scala.Tuple2;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.NotSerializableException;
 import java.util.*;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 import static com.sdu.spark.SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL;
+import static com.sdu.spark.network.utils.JavaUtils.bufferToArray;
+import static com.sdu.spark.utils.Utils.exceptionString;
 import static org.apache.commons.lang3.BooleanUtils.toBoolean;
 
 /**
@@ -56,9 +66,11 @@ import static org.apache.commons.lang3.BooleanUtils.toBoolean;
  *
  *        ShuffleMapStage, 递归构建ShuffleMapStage依赖的ShuffleMapStage[递归结束条件: rdd.dependencies() == null]
  *
- *    2': 划分Stage过程中需维护StageId与Stage、ShuffleId与ShuffleMapStage映射关系, 于此同时需要MapOutputTrackerMaster
+ *    2': Stage划分中需维护StageId与Stage、ShuffleId与ShuffleMapStage、jobId与Stage映射关系, 此外MapOutputTrackerMaster
  *
  *        维护ShuffleId与parent rdd的分区数映射关系
+ *
+ *    3':
  *
  * 2: {@link #cancelJob(int, String)}终止作业及Job关联的Stage信息
  *
@@ -70,6 +82,7 @@ public class DAGScheduler {
     private static final Logger LOGGER = LoggerFactory.getLogger(DAGScheduler.class);
 
     private SparkContext sc;
+    private SerializerInstance closureSerializer;
     private TaskScheduler taskScheduler;
     private LiveListenerBus listenerBus;
     private OutputCommitCoordinator outputCommitCoordinator;
@@ -90,7 +103,8 @@ public class DAGScheduler {
     private Map<Integer, Set<Integer>> jobIdToStageIds = Maps.newHashMap();
     private Map<Integer, ActiveJob> jobIdToActiveJob = Maps.newHashMap();
     private Set<ActiveJob> activeJobs = Sets.newHashSet();
-    private final Map<Integer, List<TaskLocation>> cacheLocs = Maps.newHashMap();
+    // key = rdd标识, value = [分区][当前分区任务运行位置](即: 行表示分区, 列表示任务运行位置)
+    private final Map<Integer, TaskLocation[][]> cacheLocs = Maps.newHashMap();
 
 
 
@@ -125,6 +139,7 @@ public class DAGScheduler {
         this.blockManagerMaster = blockManagerMaster;
         this.env = env;
         this.outputCommitCoordinator = this.env.outputCommitCoordinator;
+        this.closureSerializer = this.env.closureSerializer.newInstance();
         this.clock = clock;
         // 初始化
         this.eventProcessLoop = new DAGSchedulerEventProcessLoop(this);
@@ -176,7 +191,7 @@ public class DAGScheduler {
                                           ResultHandler<U> resultHandler,
                                           Properties properties) {
         // 校验传入RDD分区数是否正确
-        int maxPartitions = rdd.partitions().size();
+        int maxPartitions = rdd.partitions().length;
         for (int partition : partitions) {
             if (partition < 0 || partition >= maxPartitions) {
                 throw new IllegalArgumentException(String.format("Attempting to access a non-existent partition: %d. " +
@@ -245,28 +260,30 @@ public class DAGScheduler {
         submitStage(finalStage);
     }
 
-    private synchronized void clearCacheLocs() {
-        cacheLocs.clear();
+    private void clearCacheLocs() {
+        synchronized (cacheLocs) {
+            cacheLocs.clear();
+        }
     }
 
     private void submitStage(Stage stage) {
         int jobId = activeJobForStage(stage);
         if (jobId != -1) {
-            LOGGER.info("提交Spark Job Stage[stageId = {}, firstJobId = {}]", stage.id, stage.firstJobId);
-            if (!waitingStages.contains(stage) && !runningStages.contains(stage)
-                    && !failedStages.contains(stage)) {
+            LOGGER.debug("submitStage({})", stage);
+            if (!waitingStages.contains(stage) && !runningStages.contains(stage) && !failedStages.contains(stage)) {
                 List<Stage> missing = getMissingParentStages(stage);
+                // TODO: 按照划分来说应该按照升序
+                Collections.sort(missing, (s1, s2) -> s1.id - s2.id);
 
                 if (CollectionUtils.isEmpty(missing)) {
                     submitMissingTasks(stage, jobId);
                 } else {
-                    Collections.sort(missing, (o1, o2) -> o1.id - o2.id);
                     missing.forEach(this::submitStage);
                     waitingStages.add(stage);
                 }
             }
         } else {
-
+            abortStage(stage, "No active job for stage " + stage.id, null);
         }
     }
 
@@ -275,53 +292,42 @@ public class DAGScheduler {
             // Skip all the actions if the stage has been removed.
             return;
         }
-//        List<ActiveJob> dependentJobs;
-//        val dependentJobs: Seq[ActiveJob] =
-//                activeJobs.filter(job => stageDependsOn(job.finalStage, failedStage)).toSeq
-//        failedStage.latestInfo.completionTime = Some(clock.getTimeMillis())
-//        for (job <- dependentJobs) {
-//            failJobAndIndependentStages(job, s"Job aborted due to stage failure: $reason", exception)
-//        }
-//        if (dependentJobs.isEmpty) {
-//            logInfo("Ignoring failure of " + failedStage + " because all jobs depending on it are done")
-//        }
-    }
 
-    private void submitMissingTasks(Stage stage, int jobId) {
-
-    }
-
-    private List<TaskLocation> getCacheLocs(RDD<?> rdd) {
-        synchronized (cacheLocs) {
-            if (!cacheLocs.containsKey(rdd.id)) {
-                // Note: if the storage level is NONE, we don't need to get locations from block manager.
-                List<TaskLocation> locs = null;
-                if (rdd.storageLevel == StorageLevel.NONE) {
-
-                } else {
-
-                }
-                cacheLocs.put(rdd.id, locs);
-            }
-            return cacheLocs.get(rdd.id);
+        List<ActiveJob> dependentJobs = activeJobs.stream()
+                                                  .filter(job -> stageDependsOn(job.finalStage(), failedStage))
+                                                  .collect(Collectors.toList());
+        failedStage.latestInfo().setCompletionTime(clock.getTimeMillis());
+        if (CollectionUtils.isNotEmpty(dependentJobs)) {
+            dependentJobs.forEach(job -> failJobAndIndependentStages(
+                    job,
+                    String.format("Job aborted due to stage failure: %s", reason),
+                    exception
+            ));
+        } else {
+            LOGGER.info("Ignoring failure of {} because all jobs depending on it are done", failedStage);
         }
     }
 
-    private void visit(RDD<?> rdd,
-                       Stage stage,
-                       Set<RDD<?>> visited,
-                       Set<Stage> missing,
-                       Stack<RDD<?>> waitingForVisit) {
-        if (!visited.contains(rdd)) {
-            visited.add(rdd);
-            boolean rddHasUncachedPartitions = getCacheLocs(rdd).isEmpty();
-            if (rddHasUncachedPartitions) {
-                for (Dependency dep : rdd.dependencies()) {
+    /**Return true if one of stage's ancestors is target.*/
+    private boolean stageDependsOn(Stage stage, Stage target) {
+        if (stage.equals(target)) {
+            return true;
+        }
+
+        Set<RDD<?>> visitedRdds = Sets.newHashSet();
+        Stack<RDD<?>> waitingForVisit = new Stack<>();
+
+        waitingForVisit.push(stage.rdd);
+        while (waitingForVisit.size() > 0) {
+            RDD<?> rdd = waitingForVisit.pop();
+            if (!visitedRdds.contains(rdd)) {
+                visitedRdds.add(rdd);
+                for (Dependency<?> dep : rdd.dependencies()) {
                     if (dep instanceof ShuffleDependency) {
                         ShuffleDependency<?, ?, ?> shuffleDep = (ShuffleDependency<?, ?, ?>) dep;
                         ShuffleMapStage mapStage = getOrCreateShuffleMapStage(shuffleDep, stage.firstJobId);
                         if (!mapStage.isAvailable()) {
-                            missing.add(mapStage);
+                            waitingForVisit.push(mapStage.rdd);
                         }
                     } else if (dep instanceof NarrowDependency) {
                         NarrowDependency<?> narrowDep = (NarrowDependency<?>) dep;
@@ -330,7 +336,266 @@ public class DAGScheduler {
                 }
             }
         }
+
+        return visitedRdds.contains(target.rdd);
     }
+
+    private void submitMissingTasks(Stage stage, int jobId) {
+        LOGGER.debug("submitMissingTasks({})", stage);
+
+        // First figure out the indexes of partition ids to compute.
+        List<Integer> partitionsToCompute = stage.findMissingPartitions();
+
+        // Use the scheduling pool, job group, description, etc. from an ActiveJob associated
+        // with this Stage
+        Properties properties = jobIdToActiveJob.get(jobId).properties;
+
+        runningStages.add(stage);
+        if (stage instanceof ShuffleMapStage) {
+            // 记录Stage运行状态信息
+            outputCommitCoordinator.stageStart(stage.id, stage.numPartitions - 1);
+        } else if (stage instanceof ResultStage) {
+            outputCommitCoordinator.stageStart(stage.id, stage.rdd.partitions().length - 1);
+        }
+
+        // 计算作业运行位置
+        Map<Integer, TaskLocation[]> taskIdToLocations = Maps.newHashMapWithExpectedSize(partitionsToCompute.size());
+        try {
+            if (stage instanceof ShuffleMapStage) {
+                for (int partition : partitionsToCompute) {
+                    TaskLocation[] taskLocations = getPreferredLocs(stage.rdd, partition);
+                    taskIdToLocations.put(partition, taskLocations);
+                }
+            } else if (stage instanceof ResultStage) {
+                for (int partition : partitionsToCompute) {
+                    int p = ((ResultStage) stage).partitions.get(partition);
+                    TaskLocation[] taskLocations = getPreferredLocs(stage.rdd, p);
+                    taskIdToLocations.put(partition, taskLocations);
+                }
+            }
+        } catch (Exception e) {
+            stage.makeNewStageAttempt(partitionsToCompute.size());
+            listenerBus.post(new SparkListenerEvent.SparkListenerStageSubmitted(stage.latestInfo(), properties));
+            abortStage(stage, "Task creation failed: " + exceptionString(e), e);
+            runningStages.remove(stage);
+            return;
+        }
+        TaskLocation[][] taskLocations = new TaskLocation[partitionsToCompute.size()][];
+        for (int partition : partitionsToCompute) {
+            taskLocations[partition] = taskIdToLocations.get(partition);
+        }
+        stage.makeNewStageAttempt(partitionsToCompute.size(), taskLocations);
+
+        // If there are tasks to execute, record the submission time of the stage. Otherwise,
+        // post the even without the submission time, which indicates that this stage was
+        // skipped.
+        if (!partitionsToCompute.isEmpty()) {
+            stage.latestInfo().setSubmissionTime(clock.getTimeMillis());
+        }
+        listenerBus.post(new SparkListenerStageSubmitted(stage.latestInfo(), properties));
+
+        // TODO: Maybe we can keep the taskBinary in Stage to avoid serializing it multiple times.
+        // Broadcasted binary for the task, used to dispatch tasks to executors. Note that we broadcast
+        // the serialized copy of the RDD and for each task we will deserialize it, which means each
+        // task gets a different copy of the RDD. This provides stronger isolation between tasks that
+        // might modify state of objects referenced in their closures. This is necessary in Hadoop
+        // where the JobConf/Configuration object is not thread-safe.
+        Broadcast<byte[]> taskBinary = null;
+        try {
+            // For ShuffleMapTask, serialize and broadcast (rdd, shuffleDep).
+            // For ResultTask, serialize and broadcast (rdd, func).
+            byte[] taskBinaryBytes = null;
+            if (stage instanceof ShuffleMapStage) {
+                ShuffleMapStage mapStage = (ShuffleMapStage) stage;
+                taskBinaryBytes = bufferToArray(closureSerializer.serialize(new Tuple2<>(stage.rdd,
+                                                                                         mapStage.shuffleDep)));
+            } else if (stage instanceof ResultStage) {
+                ResultStage resultStage = (ResultStage) stage;
+                taskBinaryBytes = bufferToArray(closureSerializer.serialize(new Tuple2<>(stage.rdd,
+                                                                                         resultStage.func)));
+            }
+            // TODO: 待实现broadcast
+            taskBinary = sc.broadcast(taskBinaryBytes);
+        } catch (NotSerializableException e) {
+            abortStage(stage, "Task not serializable: " + e.toString(), e);
+            runningStages.remove(stage);
+            return;
+        } catch (Throwable e) {
+            abortStage(stage, "Task serialization failed: " + e + "\n" + exceptionString(e), e);
+            runningStages.remove(stage);
+            return;
+        }
+
+        // 每个分区对应一个Task
+        Task<?>[] tasks = new Task[partitionsToCompute.size()];
+        try {
+            // TODO: TaskMetric
+            if (stage instanceof ShuffleMapStage) {
+                ShuffleMapStage mapStage = (ShuffleMapStage) stage;
+                mapStage.pendingPartitions.clear();
+                for (int partition : partitionsToCompute) {
+                    TaskLocation[] locs = taskIdToLocations.get(partition);
+                    Partition part = stage.rdd.partitions()[partition];
+                    mapStage.pendingPartitions.add(partition);
+                    tasks[partition] = new ShuffleMapTask(stage.id,
+                                                          stage.latestInfo().attemptId,
+                                                          taskBinary,
+                                                          part,
+                                                         locs,
+                                                         properties,
+                                                         jobId,
+                                                         sc.applicationId(),
+                                                         sc.applicationAttemptId());
+                }
+            } else if (stage instanceof ResultStage) {
+                ResultStage resultStage = (ResultStage) stage;
+                for (int partition : partitionsToCompute) {
+                    int p = resultStage.partitions.get(partition);
+                    Partition part = stage.rdd.partitions()[p];
+                    TaskLocation[] locs = taskIdToLocations.get(partition);
+                    tasks[partition] = new ResultTask<>(stage.id,
+                                                        stage.latestInfo().attemptId,
+                                                        taskBinary,
+                                                        part,
+                                                        locs,
+                                                        partition,
+                                                        properties,
+                                                        jobId,
+                                                        sc.applicationId(),
+                                                        sc.applicationAttemptId());
+                }
+            }
+        } catch (Throwable e) {
+            abortStage(stage, "Task creation failed: " + e + "\n" + exceptionString(e), e);
+            runningStages.remove(stage);
+            return;
+        }
+
+        if (tasks.length > 0) {
+            taskScheduler.submitTasks(new TaskSet(tasks,
+                                                  stage.id,
+                                                  stage.latestInfo().attemptId,
+                                                  jobId, properties));
+        } else {
+            // Because we posted SparkListenerStageSubmitted earlier, we should mark
+            // the stage as completed here in case there are no tasks to run
+            markStageAsFinished(stage, "");
+
+            String debugString = "";
+            if (stage instanceof ShuffleMapStage) {
+                debugString = String.format("Stage %s is actually done; (available: %s, available outputs: %s, " +
+                                            "partitions: %d", stage, ((ShuffleMapStage) stage).isAvailable(),
+                                            stage.numPartitions);
+            } else if (stage instanceof ResultStage) {
+                debugString = String.format("Stage %s is actually done; (partitions: %d", stage, stage.numPartitions);
+            }
+            LOGGER.debug(debugString);
+
+            submitWaitingChildStages(stage);
+        }
+    }
+
+    private void submitWaitingChildStages(Stage parent) {
+        LOGGER.trace("Checking if any dependencies of {} are now runnable", parent);
+        LOGGER.trace("running: {}", runningStages);
+        LOGGER.trace("waiting: {}", waitingStages);
+        LOGGER.trace("failed: {}", failedStages);
+        List<Stage> childStages = waitingStages.stream()
+                                               .filter(stage -> stage.parents.contains(parent))
+                                               .collect(Collectors.toList());
+        if (CollectionUtils.isNotEmpty(childStages)) {
+            childStages.forEach(waitingStages::remove);
+            // TODO: 排序
+            Collections.sort(childStages, (s1, s2) -> s1.firstJobId - s2.firstJobId);
+            childStages.forEach(this::submitStage);
+        }
+    }
+
+    private TaskLocation[] getPreferredLocs(RDD<?> rdd, int partition) {
+        return getPreferredLocsInternal(rdd, partition, new HashSet<>());
+    }
+
+    private TaskLocation[] getPreferredLocsInternal(RDD<?> rdd,
+                                                        int partition,
+                                                        HashSet<Tuple2<RDD<?>, Integer>> visited) {
+        // If the partition has already been visited, no need to re-visit.
+        if (!visited.add(new Tuple2<>(rdd, partition))) {
+            return new TaskLocation[0];
+        }
+
+        // If the partition is cached, return the cache locations
+        TaskLocation[] taskLocation = getCacheLocs(rdd)[partition];
+        if (taskLocation != null && taskLocation.length > 0) {
+            return taskLocation;
+        }
+
+        // If the RDD has some placement preferences (as is the case for input RDDs), get those
+        String[] rddPrefs = rdd.preferredLocations(rdd.partitions()[partition]);
+        if (rddPrefs != null && rddPrefs.length > 0) {
+            TaskLocation[] locations = new TaskLocation[rddPrefs.length];
+            for (int i = 0; i < rddPrefs.length; ++i) {
+                locations[i] = TaskLocation.apply(rddPrefs[i]);
+            }
+            return locations;
+        }
+
+        // If the RDD has narrow dependencies, pick the first partition of the first narrow dependency
+        // that has any placement preferences. Ideally we would choose based on transfer sizes,
+        // but this will do for now.
+        List<Dependency<?>> dependencies = rdd.dependencies();
+        if (dependencies == null) {
+            return new TaskLocation[0];
+        }
+        for (Dependency<?> dep : dependencies) {
+            if (dep instanceof NarrowDependency) {
+                int[] parents = ((NarrowDependency) dep).getParents(partition);
+                for (int inPart : parents) {
+                    TaskLocation[] locs = getPreferredLocsInternal(dep.rdd(), inPart, visited);
+                    if (locs != null) {
+                        return locs;
+                    }
+                }
+            }
+        }
+        return new TaskLocation[0];
+    }
+
+
+    private TaskLocation[][] getCacheLocs(RDD<?> rdd) {
+        synchronized (cacheLocs) {
+            if (!cacheLocs.containsKey(rdd.id)) {
+                // Note: if the storage level is NONE, we don't need to get locations from block manager.
+                TaskLocation[][] locs = null;
+                if (rdd.storageLevel == StorageLevel.NONE) {
+                    locs = new TaskLocation[rdd.partitions().length][];
+                    for (int i = 0; i < locs.length; ++i) {
+                        locs[i] = null;
+                    }
+                } else {
+                    // 一个分区对应一个BlockId
+                    BlockId[] blockIds = new BlockId[rdd.partitions().length];
+                    for (int i = 0; i < rdd.partitions().length; ++i) {
+                        blockIds[i] = new RDDBlockId(rdd.id, i);
+                    }
+                    BlockManagerId[][] blockManagerIds = blockManagerMaster.getLocations(blockIds);
+                    locs = new TaskLocation[blockManagerIds.length][];
+                    for (int partition = 0; partition < blockManagerIds.length; ++partition) {
+                        // TODO: 检查整套实现流程
+                        TaskLocation[] locations = new TaskLocation[blockManagerIds[partition].length];
+                        for (int task = 0; task < blockManagerIds[partition].length; ++task) {
+                            locations[task] = TaskLocation.apply(blockManagerIds[partition][task].host,
+                                                                 blockManagerIds[partition][task].executorId);
+                        }
+                        locs[partition] = locations;
+                    }
+                    
+                }
+                cacheLocs.put(rdd.id, locs);
+            }
+            return cacheLocs.get(rdd.id);
+        }
+    }
+
     private List<Stage> getMissingParentStages(Stage stage) {
         Set<Stage> missing = Sets.newHashSet();
         Set<RDD<?>> visited = Sets.newHashSet();
@@ -338,8 +603,29 @@ public class DAGScheduler {
         // caused by recursively visiting
         Stack<RDD<?>> waitingForVisit = new Stack<>();
         waitingForVisit.push(stage.rdd);
-        while (CollectionUtils.isNotEmpty(waitingForVisit)) {
-            visit(waitingForVisit.pop(), stage, visited, missing, waitingForVisit);
+        while (waitingForVisit.size() > 0) {
+            RDD<?> rdd = waitingForVisit.pop();
+            if (!visited.contains(rdd)) {
+                visited.add(rdd);
+                boolean rddHasUncachedPartitions = getCacheLocs(rdd).length == 0;
+                if (rddHasUncachedPartitions) {
+                    List<Dependency<?>> dependencies = rdd.dependencies();
+                    if (CollectionUtils.isNotEmpty(dependencies)) {
+                        for (Dependency<?> dep : dependencies) {
+                            if (dep instanceof ShuffleDependency) {
+                                ShuffleDependency<?, ?, ?> shuffleDep = (ShuffleDependency<?, ?, ?>) dep;
+                                ShuffleMapStage mapStage = getOrCreateShuffleMapStage(shuffleDep, stage.firstJobId);
+                                if (!mapStage.isAvailable()) {
+                                    missing.add(mapStage);
+                                }
+                            } else if (dep instanceof NarrowDependency) {
+                                waitingForVisit.push(dep.rdd());
+                            }
+                        }
+                    }
+                }
+            }
+
         }
         return Lists.newLinkedList(missing);
     }
@@ -476,7 +762,7 @@ public class DAGScheduler {
     private ShuffleMapStage createShuffleMapStage(ShuffleDependency<?, ?, ?> shuffleDep, int jobId) {
         // step1: 计算ShuffleDependency依赖RDD的所有的ShuffleMapStage[同final RDD生成ResultStage, 递归调用]
         RDD<?> rdd = shuffleDep.rdd();
-        int numTasks = rdd.partitions().size();
+        int numTasks = rdd.partitions().length;
         List<Stage> parents = getOrCreateParentStages(rdd, jobId);
         int id = nextStageId.getAndIncrement();
         ShuffleMapStage stage = new ShuffleMapStage(id,
@@ -498,7 +784,7 @@ public class DAGScheduler {
             // Kind of ugly: need to register RDDs with the cache and map combiner tracker here
             // since we can't do it in the RDD constructor because # of partitions is unknown
             LOGGER.info("Registering RDD {}({})", rdd.id, rdd.creationSite.shortForm);
-            mapOutputTracker.registerShuffle(shuffleDep.shuffleId(), rdd.partitions().size());
+            mapOutputTracker.registerShuffle(shuffleDep.shuffleId(), rdd.partitions().length);
         }
         return stage;
     }

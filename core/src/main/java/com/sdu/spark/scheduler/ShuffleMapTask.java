@@ -7,6 +7,7 @@ import com.sdu.spark.serializer.SerializerInstance;
 import com.sdu.spark.shuffle.ShuffleManager;
 import com.sdu.spark.shuffle.ShuffleWriter;
 import com.sdu.spark.utils.scala.Product2;
+import com.sdu.spark.utils.scala.Tuple2;
 import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,7 +15,11 @@ import org.slf4j.LoggerFactory;
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadMXBean;
 import java.nio.ByteBuffer;
+import java.util.Iterator;
 import java.util.Properties;
+
+import static java.lang.Thread.currentThread;
+import static java.nio.ByteBuffer.wrap;
 
 /**
  * @author hanhan.zhang
@@ -54,26 +59,29 @@ public class ShuffleMapTask extends Task<MapStatus> {
     @SuppressWarnings("unchecked")
     @Override
     public MapStatus runTask(TaskContext context) throws Exception {
-        ThreadMXBean threadMXBean = ManagementFactory.getThreadMXBean();
+        ThreadMXBean bean = ManagementFactory.getThreadMXBean();
         long deserializeStartTime = System.currentTimeMillis();
-        long deserializeStartCpuTime = threadMXBean.isCurrentThreadCpuTimeSupported() ? threadMXBean.getCurrentThreadCpuTime()
-                                                                                      : 0L;
+        long deserializeStartCpuTime = bean.isCurrentThreadCpuTimeSupported() ? bean.getCurrentThreadCpuTime()
+                                                                              : 0L;
         SerializerInstance ser = SparkEnv.env.closureSerializer.newInstance();
-        Pair<RDD<Product2<Object, Object>>, ShuffleDependency<Object, Object, Object>> res = ser.deserialize(ByteBuffer.wrap(taskBinary.value()),
-                                                                       Thread.currentThread().getContextClassLoader());
+        // DAGScheduler.submitMissingTasks
+        // ShuffleMapStage ==> Tuple2<RDD, ShuffleDependency>
+        Tuple2<RDD<?>, ShuffleDependency<?, ?, ?>> res = ser.deserialize(wrap(taskBinary.value()),
+                                                                              currentThread().getContextClassLoader());
 
         executorDeserializeTime = System.currentTimeMillis() - deserializeStartTime;
-        executorDeserializeCpuTime = threadMXBean.isCurrentThreadCpuTimeSupported() ? threadMXBean.getCurrentThreadCpuTime() - deserializeStartCpuTime
+        executorDeserializeCpuTime = bean.isCurrentThreadCpuTimeSupported() ? bean.getCurrentThreadCpuTime() - deserializeStartCpuTime
                                                                                     : 0L;
 
         assert res != null;
-        RDD<Product2<Object, Object>> rdd = res.getLeft();
-        ShuffleDependency<Object, Object, Object> dep = res.getRight();
+        RDD<?> rdd = res._1();
+        ShuffleDependency<?, ?, ?> dep = res._2();
         ShuffleWriter<Object, Object> writer = null;
         try {
             ShuffleManager manager = SparkEnv.env.shuffleManager;
             writer = manager.getWriter(dep.shuffleHandle(), partitionId, context);
-            writer.write(rdd.iterator(partition, context));
+            Iterator<Product2<Object, Object>> iterator = (Iterator<Product2<Object, Object>>) rdd.iterator(partition, context);
+            writer.write(iterator);
             return writer.stop(true);
         } catch (Exception e){
             try {

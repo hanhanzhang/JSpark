@@ -17,6 +17,8 @@ public class ResultStage extends Stage  {
 
     private ActiveJob activeJob;
 
+    public RDDAction<?, ?> func;
+
     public ResultStage(int id,
                        RDD<?> rdd,
                        RDDAction<?, ?> rddAction,
@@ -25,6 +27,7 @@ public class ResultStage extends Stage  {
                        int firstJobId,
                        CallSite callSite) {
         super(id, rdd, partitions.size(), parents, firstJobId, callSite);
+        this.func = rddAction;
         this.partitions = partitions;
     }
 

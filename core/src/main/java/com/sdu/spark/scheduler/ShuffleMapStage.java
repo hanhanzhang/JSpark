@@ -17,10 +17,10 @@ import java.util.Set;
 public class ShuffleMapStage extends Stage {
 
     private MapOutputTrackerMaster mapOutputTrackerMaster;
-    private ShuffleDependency<?, ?, ?> shuffleDep;
+    public ShuffleDependency<?, ?, ?> shuffleDep;
 
     private List<ActiveJob> mapStageJobs = Lists.newLinkedList();
-    private Set<Integer> pendingPartitions = Sets.newHashSet();
+    public Set<Integer> pendingPartitions = Sets.newHashSet();
 
     public ShuffleMapStage(int id,
                            RDD<?> rdd,

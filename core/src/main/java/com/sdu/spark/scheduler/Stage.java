@@ -45,7 +45,7 @@ public abstract class Stage {
         this.firstJobId = firstJobId;
         this.callSite = callSite;
 
-        this.numPartitions = this.rdd.partitions().size();
+        this.numPartitions = this.rdd.partitions().length;
         this.name = this.callSite.shortForm;
         this.details = this.callSite.longForm;
         this.latestInfo = StageInfo.fromStage(this, nextAttemptId);
@@ -56,14 +56,16 @@ public abstract class Stage {
     }
 
     public void makeNewStageAttempt(int numPartitionsToCompute) {
-        makeNewStageAttempt(numPartitionsToCompute, Collections.emptyList());
+        makeNewStageAttempt(numPartitionsToCompute, new TaskLocation[0][0]);
     }
 
     public void makeNewStageAttempt(int numPartitionsToCompute,
-                                    List<TaskLocation> taskLocalityPreferences) {
+                                    TaskLocation[][] taskLocalityPreferences) {
         // TODO: TaskMetric
-        latestInfo = StageInfo.fromStage(
-                this, nextAttemptId, numPartitionsToCompute, taskLocalityPreferences);
+        latestInfo = StageInfo.fromStage(this,
+                                         nextAttemptId,
+                                         numPartitionsToCompute,
+                                         taskLocalityPreferences);
         nextAttemptId += 1;
     }
 

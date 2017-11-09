@@ -63,6 +63,18 @@ public class Utils {
     private static Map<String, Tuple2<String, Integer>> hostPortParseResults = Maps.newConcurrentMap();
     private static String customHostname = System.getenv("SPARK_LOCAL_HOSTNAME");
 
+
+    public static String exceptionString(Throwable e) {
+        if (e == null) {
+            return "";
+        } else {
+            // Use e.printStackTrace here because e.getStackTrace doesn't include the cause
+            StringWriter stringWriter = new StringWriter();
+            e.printStackTrace(new PrintWriter(stringWriter));
+            return stringWriter.toString();
+        }
+    }
+
     public static int nonNegativeMod(int x, int mod) {
         int rawMod = x % mod;
         return rawMod + (rawMod < 0 ? mod : 0);

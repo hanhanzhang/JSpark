@@ -21,7 +21,8 @@ public class StageInfo {
     public List<RDDInfo> rddInfos;
     public List<Integer> parentIds;
     public String details;
-    public List<TaskLocation> taskLocalityPreferences;
+    // 行表示分区, 列表示Task运行位置
+    public TaskLocation[][] taskLocalityPreferences;
 
     /** When this stage was submitted from the DAGScheduler to a TaskScheduler. */
     private long submissionTime = -1;
@@ -35,13 +36,19 @@ public class StageInfo {
                      String name,
                      int numTasks,
                      List<RDDInfo> rddInfos,
-                     List<Integer> parentIds, String details) {
-        this(stageId, attemptId, name, numTasks, rddInfos, parentIds, details, Collections.emptyList());
+                     List<Integer> parentIds,
+                     String details) {
+        this(stageId, attemptId, name, numTasks, rddInfos, parentIds, details, new TaskLocation[0][0]);
     }
 
-    public StageInfo(int stageId, int attemptId, String name, int numTasks,
-                     List<RDDInfo> rddInfos, List<Integer> parentIds,
-                     String details, List<TaskLocation> taskLocalityPreferences) {
+    public StageInfo(int stageId,
+                     int attemptId,
+                     String name,
+                     int numTasks,
+                     List<RDDInfo> rddInfos,
+                     List<Integer> parentIds,
+                     String details,
+                     TaskLocation[][] taskLocalityPreferences) {
         this.stageId = stageId;
         this.attemptId = attemptId;
         this.name = name;
@@ -54,6 +61,10 @@ public class StageInfo {
 
     public long submissionTime() {
         return submissionTime;
+    }
+
+    public void setSubmissionTime(long submissionTime) {
+        this.submissionTime = submissionTime;
     }
 
     public void setCompletionTime(long time) {
@@ -80,17 +91,24 @@ public class StageInfo {
     public static StageInfo fromStage(Stage stage,
                                       int attemptId,
                                       int numTasks,
-                                      List<TaskLocation> taskLocalityPreferences){
+                                      TaskLocation[][] taskLocalityPreferences){
         List<RDDInfo> ancestorRddInfos = stage.rdd.getNarrowAncestors().stream()
                                                                         .map(RDDInfo::fromRDD)
                                                                         .collect(Collectors.toList());
         ancestorRddInfos.add(RDDInfo.fromRDD(stage.rdd));
 
         List<Integer> parentIds = stage.parents.stream().map(s -> s.id).collect(Collectors.toList());
-        return new StageInfo(stage.id, attemptId, stage.name, numTasks, ancestorRddInfos, parentIds, stage.details, taskLocalityPreferences);
+        return new StageInfo(stage.id,
+                             attemptId,
+                             stage.name,
+                             numTasks,
+                             ancestorRddInfos,
+                             parentIds,
+                             stage.details,
+                             taskLocalityPreferences);
     }
 
     public static StageInfo fromStage(Stage stage, int attemptId) {
-        return fromStage(stage, attemptId, stage.numTasks, Collections.emptyList());
+        return fromStage(stage, attemptId, stage.numTasks, new TaskLocation[0][0]);
     }
 }
