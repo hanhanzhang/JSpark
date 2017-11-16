@@ -63,6 +63,17 @@ public class Utils {
     private static Map<String, Tuple2<String, Integer>> hostPortParseResults = Maps.newConcurrentMap();
     private static String customHostname = System.getenv("SPARK_LOCAL_HOSTNAME");
 
+    public static ClassLoader getContextOrSparkClassLoader() {
+        ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
+        if (classLoader == null) {
+            return getSparkClassLoader();
+        }
+        return classLoader;
+    }
+
+    private static ClassLoader getSparkClassLoader() {
+        return Utils.class.getClass().getClassLoader();
+    }
 
     public static String exceptionString(Throwable e) {
         if (e == null) {

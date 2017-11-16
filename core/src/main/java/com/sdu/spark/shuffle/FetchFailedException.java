@@ -1,6 +1,10 @@
 package com.sdu.spark.shuffle;
 
+import com.sdu.spark.scheduler.TaskEndReason.*;
 import com.sdu.spark.storage.BlockManagerId;
+import com.sdu.spark.utils.Utils;
+
+import static com.sdu.spark.utils.Utils.exceptionString;
 
 /**
  * @author hanhan.zhang
@@ -27,6 +31,10 @@ public class FetchFailedException extends RuntimeException {
         this.reduceId = reduceId;
         this.message = message;
         this.cause = cause;
+    }
+
+    public TaskFailedReason toTaskFailedReason() {
+        return new FetchFailed(bmAddress, shuffleId, mapId, reduceId, exceptionString(this));
     }
 
     public static class MetadataFetchFailedException extends FetchFailedException {

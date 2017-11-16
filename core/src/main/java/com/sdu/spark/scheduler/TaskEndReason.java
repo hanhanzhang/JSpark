@@ -1,5 +1,7 @@
 package com.sdu.spark.scheduler;
 
+import com.sdu.spark.storage.BlockManagerId;
+
 import java.io.Serializable;
 
 /**
@@ -14,6 +16,25 @@ public interface TaskEndReason extends Serializable {
         public abstract String toErrorString();
         public boolean countTowardsTaskFailures() {
             return true;
+        }
+    }
+
+    class TaskKilled extends TaskFailedReason {
+
+        private String reason;
+
+        public TaskKilled(String reason) {
+            this.reason = reason;
+        }
+
+        @Override
+        public String toErrorString() {
+            return String.format("TaskKilled (%s)", reason);
+        }
+
+        @Override
+        public boolean countTowardsTaskFailures() {
+            return false;
         }
     }
 
@@ -38,6 +59,34 @@ public interface TaskEndReason extends Serializable {
         @Override
         public boolean countTowardsTaskFailures() {
             return false;
+        }
+    }
+
+    class FetchFailed extends TaskFailedReason {
+
+        private BlockManagerId bmAddress;
+        private int shuffleId;
+        private int mapId;
+        private int reduceId;
+        private String message;
+
+        public FetchFailed(BlockManagerId bmAddress,
+                           int shuffleId,
+                           int mapId,
+                           int reduceId,
+                           String message) {
+            this.bmAddress = bmAddress;
+            this.shuffleId = shuffleId;
+            this.mapId = mapId;
+            this.reduceId = reduceId;
+            this.message = message;
+        }
+
+        @Override
+        public String toErrorString() {
+            String bmAddressString = bmAddress == null ? "null" : bmAddress.toString();
+            return String.format("FetchFailed(%s, shuffleId=%d, mapId=%d, reduceId=%d, message=\n%s\n)",
+                                bmAddressString, shuffleId, mapId, reduceId, message);
         }
     }
 }

@@ -124,5 +124,7 @@ public abstract class TaskContext implements Serializable {
      */
     public abstract void setFetchFailed(FetchFailedException fetchFailed);
 
+    public abstract FetchFailedException fetchFailed();
+
 
 }

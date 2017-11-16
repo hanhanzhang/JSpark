@@ -96,7 +96,7 @@ public abstract class Task<T> {
         }
     }
 
-    private void kill(boolean interruptThread, String reason) {
+    public void kill(boolean interruptThread, String reason) {
         assert reason != null;
         reasonIfKilled = reason;
         if (context != null) {

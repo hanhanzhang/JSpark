@@ -144,6 +144,11 @@ public class TaskContextImpl extends TaskContext {
         fetchFailedException = fetchFailed;
     }
 
+    @Override
+    public FetchFailedException fetchFailed() {
+        return fetchFailedException;
+    }
+
     public void markInterrupted(String reason) {
         reasonIfKilled = reason;
     }
