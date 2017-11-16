@@ -27,7 +27,7 @@ public class BlockManagerMaster {
     public static final String DRIVER_ENDPOINT_NAME = "BlockManagerMaster";
 
     /**BlockManagerMasterEndpoint的引用*/
-    private RpcEndPointRef driverEndpoint;
+    public RpcEndPointRef driverEndpoint;
     private SparkConf conf;
     private boolean isDriver;
 
@@ -111,8 +111,7 @@ public class BlockManagerMaster {
 
     public RpcEndPointRef getExecutorEndpointRef(String executorId) {
         try {
-            RpcEndPointRef res = (RpcEndPointRef) driverEndpoint.askSync(new GetExecutorEndpointRef(executorId));
-            return res;
+            return (RpcEndPointRef) driverEndpoint.askSync(new GetExecutorEndpointRef(executorId));
         } catch (Exception e) {
             throw new SparkException("fetch executor point ref failure, id = " + executorId, e);
         }

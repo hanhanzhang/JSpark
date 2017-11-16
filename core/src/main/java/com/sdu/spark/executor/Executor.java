@@ -33,6 +33,7 @@ import java.util.Properties;
 import java.util.concurrent.*;
 import java.util.stream.Collectors;
 
+import static com.sdu.spark.executor.ExecutorExitCode.HEARTBEAT_FAILURE;
 import static com.sdu.spark.scheduler.TaskState.FINISHED;
 import static com.sdu.spark.scheduler.TaskState.RUNNING;
 import static com.sdu.spark.utils.RpcUtils.makeDriverRef;
@@ -155,35 +156,33 @@ public class Executor {
         startDriverHeartbeat();
     }
 
-    /*****************************定时向Driver上报心跳*************************/
     private void startDriverHeartbeat() {
-        long intervalMs = conf.getTimeAsMs("spark.executor.heartbeatInterval=", "10s");
+        long intervalMs = conf.getTimeAsMs("spark.executor.heartbeatInterval", "10s");
         long initialDelay = (long) (intervalMs + Math.random() * intervalMs);
         heartbeater.scheduleAtFixedRate(this::reportHeartBeat, initialDelay, intervalMs, TimeUnit.MILLISECONDS);
     }
 
     private void reportHeartBeat() {
-        // TODO: 统计信息尚未上报
+        // TODO: Task Accumulator
         Heartbeat message = new Heartbeat(executorId, env.blockManager.blockManagerId);
         try {
-            HeartbeatResponse response = (HeartbeatResponse) heartbeatReceiverRef.askSync(message, conf.getTimeAsMs("spark.executor.heartbeatInterval", "10s"));
+            long timeout = conf.getTimeAsMs("spark.executor.heartbeatInterval", "10s");
+            HeartbeatResponse response = (HeartbeatResponse) heartbeatReceiverRef.askSync(message, timeout);
             if (response.registerBlockManager) {
+                LOGGER.info("Told to re-register on heartbeat");
                 env.blockManager.reregister();
             }
+            heartbeatFailures = 0;
         } catch (Exception e) {
             heartbeatFailures += 1;
             if (heartbeatFailures >= HEARTBEAT_MAX_FAILURES) {
-                LOGGER.error("超过{}次未收到Driver(hostPort = {}:{})的心跳响应, Executor(execId = {})退出",
-                            heartbeatFailures,
-                            conf.get("spark.driver.host", "localhost"), conf.get("spark.driver.port", "7077"),
-                            executorId);
-                System.exit(56);
+                LOGGER.error("Exit as unable to send heartbeats to driver more than {} times", heartbeatFailures);
+                System.exit(HEARTBEAT_FAILURE);
             }
         }
 
     }
 
-    /******************************Executor执行Task****************************/
     public void launchTask(ExecutorBackend context, TaskDescription taskDescription) {
         TaskRunner tr = new TaskRunner(context, taskDescription);
         runningTasks.put(taskDescription.taskId, tr);

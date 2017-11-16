@@ -15,4 +15,12 @@ public class Heartbeat implements Serializable {
         this.executorId = executorId;
         this.blockManagerId = blockManagerId;
     }
+
+    @Override
+    public String toString() {
+        return "Heartbeat(" +
+                "executorId='" + executorId + '\'' +
+                ", blockManagerId=" + blockManagerId +
+                ')';
+    }
 }

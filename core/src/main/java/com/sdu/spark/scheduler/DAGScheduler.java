@@ -16,11 +16,9 @@ import com.sdu.spark.scheduler.SparkListenerEvent.SparkListenerStageSubmitted;
 import com.sdu.spark.scheduler.action.RDDAction;
 import com.sdu.spark.scheduler.action.ResultHandler;
 import com.sdu.spark.serializer.SerializerInstance;
-import com.sdu.spark.storage.BlockId;
+import com.sdu.spark.storage.*;
+import com.sdu.spark.storage.BlockManagerMessages.*;
 import com.sdu.spark.storage.BlockId.RDDBlockId;
-import com.sdu.spark.storage.BlockManagerId;
-import com.sdu.spark.storage.BlockManagerMaster;
-import com.sdu.spark.storage.StorageLevel;
 import com.sdu.spark.utils.CallSite;
 import com.sdu.spark.utils.Clock;
 import com.sdu.spark.utils.Clock.SystemClock;
@@ -34,7 +32,9 @@ import org.slf4j.LoggerFactory;
 
 import java.io.NotSerializableException;
 import java.util.*;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -145,6 +145,21 @@ public class DAGScheduler {
         this.eventProcessLoop = new DAGSchedulerEventProcessLoop(this);
         this.eventProcessLoop.start();
         this.taskScheduler.setDAGScheduler(this);
+    }
+
+    /********************************Spark Executor心跳消息**************************/
+    /**
+     * Return true if the driver knows about the given block manager. Otherwise, return false,
+     * indicating that the block manager should re-register.
+     * */
+    public boolean executorHeartbeatReceived(String execId, BlockManagerId blockManagerId) {
+        // TODO: Executor Metrics
+        // Driver BlockManagerMaster注册Executor端的BlockManager
+        try {
+            return (boolean) blockManagerMaster.driverEndpoint.askSync(new BlockManagerHeartbeat(blockManagerId));
+        } catch (Exception e) {
+            throw new SparkException("Ask BlockManagerHeartbeat failure", e);
+        }
     }
 
     /********************************Spark DAG State调度*********************************/

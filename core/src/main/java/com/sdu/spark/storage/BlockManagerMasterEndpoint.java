@@ -24,7 +24,21 @@ import static com.sdu.spark.utils.Utils.bytesToString;
 
 /**
  *
- * {@link BlockManagerMasterEndpoint} 维护BlockManager上Block数据存储信息
+ * {@link BlockManagerMasterEndpoint}职责:
+ *
+ * 1: SparkEnv Driver注册BlockManagerMasterEndpoint, BlockManagerMasterEndpoint负责管理Executor BlockManager信息
+ *
+ *    Executor启动同时向Driver HeartBeatReceiver上报心跳, 其调用链:
+ *
+ *    Executor.startDriverHeartbeat()[Worker]
+ *      |
+ *      +-----> HeartBeatReceiver.receiveAndReply()[Driver]
+ *                |
+ *                +-----> TaskScheduler.executorHeartbeatReceived()[Driver]
+ *                           |
+ *                           +-----> DAGScheduler.executorHeartbeatReceived()[Driver]
+ *                                     |
+ *                                     +----> BlockManagerMasterEndpoint.receiveAndReply(BlockManagerHeartbeat)
  *
  * todo: {@link TopologyMapper} 作用
  * todo: {@link #removeBlockManager(BlockManagerId)} 副本的删除
@@ -105,7 +119,8 @@ public class BlockManagerMasterEndpoint extends ThreadSafeRpcEndpoint {
         } else if (msg instanceof StopBlockManagerMaster) {
 
         } else if (msg instanceof BlockManagerHeartbeat) {
-
+            BlockManagerHeartbeat heartbeat = (BlockManagerHeartbeat) msg;
+            context.reply(heartbeatReceived(heartbeat.blockManagerId));
         } else if (msg instanceof HasCachedBlocks) {
 
         }
@@ -268,6 +283,20 @@ public class BlockManagerMasterEndpoint extends ThreadSafeRpcEndpoint {
 
             listenerBus.post(new SparkListenerBlockManagerRemoved(System.currentTimeMillis(), blockManagerId));
             LOGGER.info("Removing block manager {}", blockManagerId);
+        }
+    }
+
+    /**
+     * Return true if the driver knows about the given block manager. Otherwise, return false,
+     * indicating that the block manager should re-register.
+     * */
+    private boolean heartbeatReceived(BlockManagerId blockManagerId) {
+        if (!blockManagerInfo.containsKey(blockManagerId)) {
+            return blockManagerId.isDriver() && !isLocal;
+        } else {
+            BlockManagerInfo managerInfo = blockManagerInfo.get(blockManagerId);
+            managerInfo.updateLastSeenMs();
+            return true;
         }
     }
 }

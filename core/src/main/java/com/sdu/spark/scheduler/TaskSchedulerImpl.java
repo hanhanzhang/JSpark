@@ -205,9 +205,14 @@ public class TaskSchedulerImpl implements TaskScheduler {
 
     }
 
+    /**
+     * Return true if the driver knows about the given block manager. Otherwise, return false,
+     * indicating that the block manager should re-register.
+     * */
     @Override
     public boolean executorHeartbeatReceived(String execId, BlockManagerId blockManagerId) {
-        return false;
+        // TODO: Task Metrics
+        return dagScheduler.executorHeartbeatReceived(execId, blockManagerId);
     }
 
     @Override
