@@ -5,17 +5,17 @@ import com.sdu.spark.deploy.ApplicationDescription;
 import com.sdu.spark.deploy.Command;
 import com.sdu.spark.deploy.client.StandaloneAppClient;
 import com.sdu.spark.deploy.client.StandaloneAppClientListener;
+import com.sdu.spark.executor.ExecutorExitCode.*;
 import com.sdu.spark.laucher.LauncherBackend;
 import com.sdu.spark.launcher.SparkAppHandle.State;
 import com.sdu.spark.rpc.RpcEndpointAddress;
 import com.sdu.spark.scheduler.TaskSchedulerImpl;
-import com.sdu.spark.utils.DefaultFuture;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.util.List;
-import java.util.concurrent.Future;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -58,7 +58,7 @@ public class StandaloneSchedulerBackend extends CoarseGrainedSchedulerBackend im
 
     @Override
     public void start() {
-        // step1: 启动Spark DriverEndPoint
+        // step1: 启动Spark DriverEndpoint
         super.start();
 
         // step2: 构建CoarseGrainedExecutorBackend启动参数
@@ -146,9 +146,14 @@ public class StandaloneSchedulerBackend extends CoarseGrainedSchedulerBackend im
     }
 
     @Override
-    public void executorRemove(String fullId, String message, int exitStatus, boolean workerLost) {
-        LOGGER.info("Executor {} removed: {}", fullId, message);
-        removeExecutor(fullId.split("/")[1], message);
+    public void executorRemoved(String fullId, String message, int exitStatus, boolean workerLost) {
+        ExecutorLossReason reason;
+        if (exitStatus > 0) {
+            reason = new ExecutorExited(exitStatus, true, message);
+        } else {
+            reason = new SlaveLost(message, workerLost);
+        }
+        removeExecutor(fullId.split("/")[1], reason);
     }
 
     @Override
@@ -158,20 +163,21 @@ public class StandaloneSchedulerBackend extends CoarseGrainedSchedulerBackend im
     }
 
     @Override
-    public Future<Boolean> doRequestTotalExecutors(int requestedTotal) {
+    public CompletableFuture<Boolean> doRequestTotalExecutors(int requestedTotal) {
         if (client != null) {
             return client.requestTotalExecutors(requestedTotal);
         } else {
-            return new DefaultFuture<>(false);
+            return CompletableFuture.completedFuture(false);
         }
     }
 
     @Override
-    public Future<Boolean> doKillExecutors(List<String> executorIds) {
+    public CompletableFuture<Boolean> doKillExecutors(List<String> executorIds) {
         if (client != null) {
             return client.killExecutors(executorIds);
         } else {
-            return new DefaultFuture<>(false);
+            LOGGER.warn("Attempted to kill executors before driver fully initialized.");
+            return CompletableFuture.completedFuture(false);
         }
     }
 

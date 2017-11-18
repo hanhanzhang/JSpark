@@ -5,8 +5,8 @@ import com.sdu.spark.deploy.ApplicationDescription;
 import com.sdu.spark.deploy.DeployMessage.ExecutorStateChanged;
 import com.sdu.spark.deploy.ExecutorState;
 import com.sdu.spark.executor.CoarseGrainedExecutorBackend;
+import com.sdu.spark.rpc.RpcEndpointRef;
 import com.sdu.spark.rpc.SparkConf;
-import com.sdu.spark.rpc.RpcEndPointRef;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.File;
@@ -40,7 +40,7 @@ public class ExecutorRunner {
     public ApplicationDescription appDesc;
     public int cores;
     public int memory;
-    public RpcEndPointRef worker;
+    public RpcEndpointRef worker;
     public File sparkHome;
     public File executorDir;
     public SparkConf conf;
@@ -50,7 +50,17 @@ public class ExecutorRunner {
     private Thread workerThread;
     private Process process;
 
-    public ExecutorRunner(String appId, int execId, ApplicationDescription appDesc, int cores, int memory, RpcEndPointRef worker, File sparkHome, File executorDir, SparkConf conf, String[] appLocalDirs, ExecutorState state) {
+    public ExecutorRunner(String appId,
+                          int execId,
+                          ApplicationDescription appDesc,
+                          int cores,
+                          int memory,
+                          RpcEndpointRef worker,
+                          File sparkHome,
+                          File executorDir,
+                          SparkConf conf,
+                          String[] appLocalDirs,
+                          ExecutorState state) {
         this.appId = appId;
         this.execId = execId;
         this.appDesc = appDesc;

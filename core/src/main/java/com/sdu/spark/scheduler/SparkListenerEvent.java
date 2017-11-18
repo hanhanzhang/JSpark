@@ -1,5 +1,6 @@
 package com.sdu.spark.scheduler;
 
+import com.sdu.spark.executor.ExecutorExitCode.*;
 import com.sdu.spark.scheduler.cluster.ExecutorInfo;
 import com.sdu.spark.storage.BlockManagerId;
 import com.sdu.spark.storage.BlockUpdatedInfo;
@@ -139,7 +140,7 @@ public interface SparkListenerEvent extends Serializable {
     class SparkListenerExecutorRemoved implements SparkListenerEvent {
         public long time;
         public String executorId;
-        public String reason;
+        public ExecutorLossReason reason;
     }
 
     @AllArgsConstructor

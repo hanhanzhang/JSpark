@@ -1,5 +1,6 @@
 package com.sdu.spark.scheduler;
 
+import com.sdu.spark.executor.ExecutorExitCode.*;
 import com.sdu.spark.storage.BlockManagerId;
 
 /**
@@ -61,7 +62,7 @@ public interface TaskScheduler {
     /**
      * Process a lost executor
      */
-    void executorLost(String executorId, String reason);
+    void executorLost(String executorId, ExecutorLossReason reason);
 
     /**
      * Process a removed worker

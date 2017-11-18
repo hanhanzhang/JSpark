@@ -1,6 +1,7 @@
 package com.sdu.spark.scheduler;
 
 import com.google.common.collect.Maps;
+import com.sdu.spark.SparkException;
 import com.sdu.spark.utils.ByteBufferInputStream;
 import com.sdu.spark.utils.ByteBufferOutputStream;
 import com.sdu.spark.utils.Utils;
@@ -105,37 +106,40 @@ public class TaskDescription {
         }
     }
 
-    public static TaskDescription decode(ByteBuffer byteBuffer) throws IOException {
-        DataInputStream dataIn = new DataInputStream(new ByteBufferInputStream(byteBuffer));
+    public static TaskDescription decode(ByteBuffer byteBuffer) {
+        try {
+            DataInputStream dataIn = new DataInputStream(new ByteBufferInputStream(byteBuffer));
 
-        long taskId = dataIn.readLong();
-        int attemptNumber = dataIn.readInt();
-        String executorId = dataIn.readUTF();
-        String name = dataIn.readUTF();
-        int index = dataIn.readInt();
+            long taskId = dataIn.readLong();
+            int attemptNumber = dataIn.readInt();
+            String executorId = dataIn.readUTF();
+            String name = dataIn.readUTF();
+            int index = dataIn.readInt();
 
-        // Read files.
-        Map<String, Long> taskFiles = deserializeStringLongMap(dataIn);
+            // Read files.
+            Map<String, Long> taskFiles = deserializeStringLongMap(dataIn);
 
-        // Read jars.
-        Map<String, Long> taskJars = deserializeStringLongMap(dataIn);
+            // Read jars.
+            Map<String, Long> taskJars = deserializeStringLongMap(dataIn);
 
-        // Read properties.
-        Properties properties = new Properties();
-        int numProperties = dataIn.readInt();
-        for (int i = 0; i < numProperties; ++i) {
-            String key = dataIn.readUTF();
-            int valueLength = dataIn.readInt();
-            byte[] valueBytes = new byte[valueLength];
-            dataIn.readFully(valueBytes);
-            properties.setProperty(key, new String(valueBytes, StandardCharsets.UTF_8));
+            // Read properties.
+            Properties properties = new Properties();
+            int numProperties = dataIn.readInt();
+            for (int i = 0; i < numProperties; ++i) {
+                String key = dataIn.readUTF();
+                int valueLength = dataIn.readInt();
+                byte[] valueBytes = new byte[valueLength];
+                dataIn.readFully(valueBytes);
+                properties.setProperty(key, new String(valueBytes, StandardCharsets.UTF_8));
+            }
+
+            // Create a sub-buffer for the serialized task into its own buffer (to be deserialized later).
+            ByteBuffer serializedTask = byteBuffer.slice();
+
+            return new TaskDescription(taskId, attemptNumber, executorId, name, index, taskFiles, taskJars,
+                    properties, serializedTask);
+        } catch (IOException e) {
+            throw new SparkException("deserializer task failure", e);
         }
-
-        // Create a sub-buffer for the serialized task into its own buffer (to be deserialized later).
-        ByteBuffer serializedTask = byteBuffer.slice();
-
-        return new TaskDescription(taskId, attemptNumber, executorId, name, index, taskFiles, taskJars,
-                properties, serializedTask);
-
     }
 }

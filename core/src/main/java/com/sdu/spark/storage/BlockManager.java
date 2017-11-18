@@ -14,7 +14,7 @@ import com.sdu.spark.network.shuffle.ExternalShuffleClient;
 import com.sdu.spark.network.shuffle.ShuffleClient;
 import com.sdu.spark.network.shuffle.protocol.ExecutorShuffleInfo;
 import com.sdu.spark.network.utils.TransportConf;
-import com.sdu.spark.rpc.RpcEndPointRef;
+import com.sdu.spark.rpc.RpcEndpointRef;
 import com.sdu.spark.rpc.RpcEnv;
 import com.sdu.spark.rpc.SparkConf;
 import com.sdu.spark.serializer.SerializerInstance;
@@ -87,7 +87,7 @@ public class BlockManager implements BlockDataManager, BlockEvictionHandler {
 
     private long maxFailuresBeforeLocationRefresh;
 
-    private RpcEndPointRef slaveEndpoint;
+    private RpcEndpointRef slaveEndpoint;
 
     private BlockInfoManager blockInfoManager;
 

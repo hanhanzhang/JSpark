@@ -8,13 +8,13 @@ import com.sdu.spark.memory.StaticMemoryManager;
 import com.sdu.spark.memory.UnifiedMemoryManager;
 import com.sdu.spark.network.BlockTransferService;
 import com.sdu.spark.network.netty.NettyBlockTransferService;
-import com.sdu.spark.rpc.RpcEndPoint;
-import com.sdu.spark.rpc.RpcEndPointRef;
+import com.sdu.spark.rpc.RpcEndpoint;
+import com.sdu.spark.rpc.RpcEndpointRef;
 import com.sdu.spark.rpc.RpcEnv;
 import com.sdu.spark.rpc.SparkConf;
 import com.sdu.spark.scheduler.LiveListenerBus;
 import com.sdu.spark.scheduler.OutputCommitCoordinator;
-import com.sdu.spark.scheduler.OutputCommitCoordinatorEndPoint;
+import com.sdu.spark.scheduler.OutputCommitCoordinatorEndpoint;
 import com.sdu.spark.serializer.JavaSerializer;
 import com.sdu.spark.serializer.Serializer;
 import com.sdu.spark.serializer.SerializerManager;
@@ -137,17 +137,16 @@ public class SparkEnv {
             ioEncryptionKey = createKey(conf);
         }
 
-        return create(
-                conf,
-                SparkContext.DRIVER_IDENTIFIER,
-                bindAddress,
-                advertiseAddress,
-                port,
-                isLocal,
-                numCores,
-                ioEncryptionKey,
-                listenerBus,
-                mockOutputCommitCoordinator);
+        return create(conf,
+                      SparkContext.DRIVER_IDENTIFIER,
+                      bindAddress,
+                      advertiseAddress,
+                      port,
+                      isLocal,
+                      numCores,
+                      ioEncryptionKey,
+                      listenerBus,
+                      mockOutputCommitCoordinator);
     }
 
     public static SparkEnv createExecutorEnv(SparkConf conf,
@@ -208,7 +207,7 @@ public class SparkEnv {
         // Map输出管理
         MapOutputTracker mapOutputTracker = isDriver ? new MapOutputTrackerMaster(conf, broadcastManager, isLocal)
                                                      : new MapOutputTrackerWorker(conf);
-        MapOutputTrackerRpcEndPointCreator creator = tracker -> new MapOutputTrackerMasterEndPoint(rpcEnv, tracker, conf);
+        MapOutputTrackerRpcEndPointCreator creator = tracker -> new MapOutputTrackerMasterEndpoint(rpcEnv, tracker, conf);
         mapOutputTracker.trackerEndpoint = registerOrLookupEndpoint(conf, isDriver, rpcEnv,
                                                                     MapOutputTracker.ENDPOINT_NAME,
                                                                     mapOutputTracker, creator);
@@ -235,7 +234,7 @@ public class SparkEnv {
                 port,
                 numUsableCores
         );
-        // step3: Block Manager Master RpcEndPoint(负责接收消息, 获取Block数据、注册及状态等)
+        // step3: Block Manager Master RpcEndpoint(负责接收消息, 获取Block数据、注册及状态等)
         GeneralRpcEndPointCreator rpcEndPointCreator = () -> new BlockManagerMasterEndpoint(rpcEnv, isLocal, conf, liveListenerBus);
         BlockManagerMaster blockManagerMaster = new BlockManagerMaster(
                 registerOrLookupEndpoint(conf, isDriver, rpcEnv, BlockManagerMaster.DRIVER_ENDPOINT_NAME, rpcEndPointCreator),
@@ -261,7 +260,7 @@ public class SparkEnv {
 
         OutputCommitCoordinator outputCommitCoordinator = mockOutputCommitCoordinator == null ? new OutputCommitCoordinator(conf, isDriver)
                                                                                               : mockOutputCommitCoordinator;
-        GeneralRpcEndPointCreator outputCommitRpcEndPointCreator = () -> new OutputCommitCoordinatorEndPoint(rpcEnv, outputCommitCoordinator);
+        GeneralRpcEndPointCreator outputCommitRpcEndPointCreator = () -> new OutputCommitCoordinatorEndpoint(rpcEnv, outputCommitCoordinator);
         outputCommitCoordinator.coordinatorRef = registerOrLookupEndpoint(
                 conf,
                 isDriver,
@@ -270,20 +269,18 @@ public class SparkEnv {
                 outputCommitRpcEndPointCreator
         );
 
-        SparkEnv envInstance = new SparkEnv(
-                executorId,
-                rpcEnv,
-                serializer,
-                closureSerializer,
-                mapOutputTracker,
-                shuffleManager,
-                broadcastManager,
-                blockManager,
-                serializerManager,
-                memoryManager,
-                outputCommitCoordinator,
-                conf
-        );
+        SparkEnv envInstance = new SparkEnv(executorId,
+                                            rpcEnv,
+                                            serializer,
+                                            closureSerializer,
+                                            mapOutputTracker,
+                                            shuffleManager,
+                                            broadcastManager,
+                                            blockManager,
+                                            serializerManager,
+                                            memoryManager,
+                                            outputCommitCoordinator,
+                                            conf);
 
         // Add a reference to tmp dir created by driver, we will delete this tmp dir when stop() is
         // called, and we only need to do it for driver. Because driver may run as a service, and if we
@@ -324,7 +321,7 @@ public class SparkEnv {
         return instantiateClass(conf, isDriver, conf.get(propertyName, defaultClassName));
     }
 
-    private static RpcEndPointRef registerOrLookupEndpoint(SparkConf conf, boolean isDriver, RpcEnv rpcEnv,
+    private static RpcEndpointRef registerOrLookupEndpoint(SparkConf conf, boolean isDriver, RpcEnv rpcEnv,
                                                            String name, MapOutputTracker mapOutputTracker, MapOutputTrackerRpcEndPointCreator creator) {
         if (isDriver) {
             LOGGER.info("Registering {}", name);
@@ -334,7 +331,7 @@ public class SparkEnv {
         }
     }
 
-    private static RpcEndPointRef registerOrLookupEndpoint(SparkConf conf, boolean isDriver, RpcEnv rpcEnv,
+    private static RpcEndpointRef registerOrLookupEndpoint(SparkConf conf, boolean isDriver, RpcEnv rpcEnv,
                                                            String name, GeneralRpcEndPointCreator creator) {
         if (isDriver) {
             LOGGER.info("Registering {}", name);
@@ -345,10 +342,10 @@ public class SparkEnv {
     }
 
     private interface MapOutputTrackerRpcEndPointCreator {
-        RpcEndPoint create(MapOutputTrackerMaster tracker);
+        RpcEndpoint create(MapOutputTrackerMaster tracker);
     }
 
     private interface GeneralRpcEndPointCreator {
-        RpcEndPoint create();
+        RpcEndpoint create();
     }
 }

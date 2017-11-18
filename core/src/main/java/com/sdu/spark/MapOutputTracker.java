@@ -1,12 +1,10 @@
 package com.sdu.spark;
 
 import com.google.common.collect.LinkedHashMultimap;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.sdu.spark.broadcast.Broadcast;
 import com.sdu.spark.broadcast.BroadcastManager;
-import com.sdu.spark.rpc.RpcEndPointRef;
+import com.sdu.spark.rpc.RpcEndpointRef;
 import com.sdu.spark.rpc.SparkConf;
 import com.sdu.spark.scheduler.MapStatus;
 import com.sdu.spark.shuffle.FetchFailedException.MetadataFetchFailedException;
@@ -20,8 +18,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.*;
-import java.util.List;
-import java.util.Map;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
@@ -43,7 +39,7 @@ public abstract class MapOutputTracker {
      *
      * Executor: Driver RpcEnv MapOutputTrackerMasterEndPoint节点引用
      * */
-    public RpcEndPointRef trackerEndpoint;
+    public RpcEndpointRef trackerEndpoint;
 
     /**
      * 当Shuffle的结果输出失效时, Driver会更新epoch值并将此值作为Task一部分发送给Executor, Executor根据

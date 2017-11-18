@@ -112,7 +112,7 @@ public class Master extends ThreadSafeRpcEndpoint {
     // Spark集群Application集合
     private Set<ApplicationInfo> apps = Sets.newHashSet();
     // Spark与Application交互映射[key = Application引用, value = Application]
-    private Map<RpcEndPointRef, ApplicationInfo> endpointToApp = Maps.newHashMap();
+    private Map<RpcEndpointRef, ApplicationInfo> endpointToApp = Maps.newHashMap();
     private Map<RpcAddress, ApplicationInfo> addressToApp = Maps.newHashMap();
     // Spark集群已完成的Application
     private List<ApplicationInfo> completedApps = Lists.newArrayList();
@@ -635,7 +635,7 @@ public class Master extends ThreadSafeRpcEndpoint {
 
         // 向RpcEnv注册Master节点
         Master master = new Master(conf, rpcEnv, rpcEnv.address());
-        RpcEndPointRef masterRef = rpcEnv.setRpcEndPointRef(ENDPOINT_NAME, master);
+        RpcEndpointRef masterRef = rpcEnv.setRpcEndPointRef(ENDPOINT_NAME, master);
 
         // 向Master的对应RpcEndPoint节点发送消息
         Future<BoundPortsResponse> future = masterRef.ask(new BoundPortsRequest());

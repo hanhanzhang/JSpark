@@ -1,7 +1,7 @@
 package com.sdu.spark.storage;
 
 import com.sdu.spark.SparkException;
-import com.sdu.spark.rpc.RpcEndPointRef;
+import com.sdu.spark.rpc.RpcEndpointRef;
 import com.sdu.spark.rpc.SparkConf;
 import com.sdu.spark.storage.BlockManagerMessages.*;
 import org.apache.commons.lang3.tuple.Pair;
@@ -14,9 +14,19 @@ import java.util.Set;
 import static com.sdu.spark.utils.RpcUtils.getRpcAskTimeout;
 
 /**
- * {@link BlockManagerMaster}负责向{@link BlockManagerMasterEndpoint}发送数据块信息消息
+ * {@link BlockManagerMaster}职责:
  *
- * todo: 方法实现
+ *  1: Driver、Executor都会实例化BlockManagerMaster, 但区别在于:
+ *
+ *   1': Driver端
+ *
+ *      SparkEnv向Driver RpcEnv注册BlockManagerMasterEndpoint节点, BlockManager.driverEndpoint为该节点引用
+ *
+ *   2': Executor端
+ *
+ *      SparkEnv向Driver查找BlockManagerMasterEndpoint节点引用, 并赋值给BlockManager.driverEndpoint
+ *
+ * 2: 管理Block数据信息
  *
  * @author hanhan.zhang
  * */
@@ -27,13 +37,13 @@ public class BlockManagerMaster {
     public static final String DRIVER_ENDPOINT_NAME = "BlockManagerMaster";
 
     /**BlockManagerMasterEndpoint的引用*/
-    public RpcEndPointRef driverEndpoint;
+    public RpcEndpointRef driverEndpoint;
     private SparkConf conf;
     private boolean isDriver;
 
     private long timeout;
 
-    public BlockManagerMaster(RpcEndPointRef driverEndpoint, SparkConf conf, boolean isDriver) {
+    public BlockManagerMaster(RpcEndpointRef driverEndpoint, SparkConf conf, boolean isDriver) {
         this.driverEndpoint = driverEndpoint;
         this.conf = conf;
         this.isDriver = isDriver;
@@ -52,7 +62,7 @@ public class BlockManagerMaster {
     }
 
     public BlockManagerId registerBlockManager(BlockManagerId blockManagerId, long maxOnHeapMemSize,
-                                               long maxOffHeapMemSize, RpcEndPointRef slaveEndpoint) {
+                                               long maxOffHeapMemSize, RpcEndpointRef slaveEndpoint) {
         LOGGER.info("Registering BlockManager {}", blockManagerId);
         try {
             BlockManagerId updatedId = (BlockManagerId) driverEndpoint.askSync(new
@@ -109,9 +119,9 @@ public class BlockManagerMaster {
         }
     }
 
-    public RpcEndPointRef getExecutorEndpointRef(String executorId) {
+    public RpcEndpointRef getExecutorEndpointRef(String executorId) {
         try {
-            return (RpcEndPointRef) driverEndpoint.askSync(new GetExecutorEndpointRef(executorId));
+            return (RpcEndpointRef) driverEndpoint.askSync(new GetExecutorEndpointRef(executorId));
         } catch (Exception e) {
             throw new SparkException("fetch executor point ref failure, id = " + executorId, e);
         }

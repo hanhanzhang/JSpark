@@ -1,7 +1,8 @@
 package com.sdu.spark.scheduler.cluster;
 
 import com.google.common.base.MoreObjects;
-import com.sdu.spark.rpc.RpcEndPointRef;
+import com.sdu.spark.executor.ExecutorExitCode.*;
+import com.sdu.spark.rpc.RpcEndpointRef;
 import com.sdu.spark.scheduler.TaskState;
 import com.sdu.spark.utils.SerializableBuffer;
 
@@ -52,7 +53,7 @@ public interface CoarseGrainedClusterMessage extends Serializable {
     class StopDriver implements CoarseGrainedClusterMessage {}
 
 
-    /*********************Spark Driver Message(CoarseGrainedSchedulerBackend.DriverEndPoint)*****************/
+    /*********************Spark Driver Message(CoarseGrainedSchedulerBackend.DriverEndpoint)*****************/
     class ReviveOffers implements CoarseGrainedClusterMessage {}
 
     class StatusUpdate implements CoarseGrainedClusterMessage {
@@ -71,21 +72,21 @@ public interface CoarseGrainedClusterMessage extends Serializable {
         @Override
         public String toString() {
            return MoreObjects.toStringHelper(this)
-                   .add("execId", executorId)
-                   .add("taskId", taskId)
-                   .add("state", state.name())
-                   .toString();
+                             .add("execId", executorId)
+                             .add("taskId", taskId)
+                             .add("state", state.name())
+                             .toString();
         }
     }
 
     class RegisterExecutor implements CoarseGrainedClusterMessage {
         public String executorId;
-        public RpcEndPointRef executorRef;
+        public RpcEndpointRef executorRef;
         public String hostname;
         public int cores;
         public Map<String, String> logUrls;
 
-        public RegisterExecutor(String executorId, RpcEndPointRef executorRef, String hostname,
+        public RegisterExecutor(String executorId, RpcEndpointRef executorRef, String hostname,
                                 int cores, Map<String, String> logUrls) {
             this.executorId = executorId;
             this.executorRef = executorRef;
@@ -97,9 +98,9 @@ public interface CoarseGrainedClusterMessage extends Serializable {
 
     class RemoveExecutor implements CoarseGrainedClusterMessage {
         public String executorId;
-        public String reason;
+        public ExecutorLossReason reason;
 
-        public RemoveExecutor(String executorId, String reason) {
+        public RemoveExecutor(String executorId, ExecutorLossReason reason) {
             this.executorId = executorId;
             this.reason = reason;
         }

@@ -1,6 +1,7 @@
 package com.sdu.spark.utils;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.sdu.spark.SparkException;
 import com.sdu.spark.network.utils.ByteUnit;
@@ -576,5 +577,23 @@ public class Utils {
 
     public static String getUsedTimeMs(long startTimeMs) {
         return (System.currentTimeMillis() - startTimeMs) + " ms";
+    }
+
+
+    public static <T> Tuple2<List<T>, List<T>> partition(List<T> list, Function<T> f) {
+        List<T> trueList = Lists.newLinkedList();
+        List<T> falseList = Lists.newLinkedList();
+        list.forEach(obj -> {
+            if (f.apply(obj)) {
+                trueList.add(obj);
+            } else {
+                falseList.add(obj);
+            }
+        });
+        return new Tuple2<>(trueList, falseList);
+    }
+
+    public interface Function<T> {
+        boolean apply(T obj);
     }
 }

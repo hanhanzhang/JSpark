@@ -5,7 +5,6 @@ import com.sdu.spark.deploy.DeployMessage.*;
 import com.sdu.spark.deploy.ExecutorState;
 import com.sdu.spark.deploy.Master;
 import com.sdu.spark.rpc.*;
-import com.sdu.spark.utils.DefaultFuture;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -50,7 +49,7 @@ public class StandaloneAppClient {
     private AtomicBoolean registered = new AtomicBoolean(false);
 
     // ClientEndPoint引用节点
-    private AtomicReference<RpcEndPointRef> endpoint = new AtomicReference<>();
+    private AtomicReference<RpcEndpointRef> endpoint = new AtomicReference<>();
 
 
     public StandaloneAppClient(RpcEnv rpcEnv, String masterUrl, ApplicationDescription appDescription,
@@ -64,7 +63,7 @@ public class StandaloneAppClient {
     }
 
     public void start() {
-        endpoint.set(rpcEnv.setRpcEndPointRef("AppClient", new ClientEndPoint(rpcEnv)));
+        endpoint.set(rpcEnv.setRpcEndPointRef("AppClient", new ClientEndpoint(rpcEnv)));
     }
 
     public void stop() {
@@ -81,29 +80,29 @@ public class StandaloneAppClient {
     }
 
     /*****************************Spark Master申请Executor**************************/
-    public Future<Boolean> requestTotalExecutors(int requestedTotal) {
+    public CompletableFuture<Boolean> requestTotalExecutors(int requestedTotal) {
         if (endpoint.get() != null && appId.get() != null) {
             return endpoint.get().ask(new RequestExecutors(appId.get(), requestedTotal));
         } else {
-            LOGGER.error("在Driver完全启动后尝试申请Executor");
-            return new DefaultFuture<>(false);
+            LOGGER.error("Attempted to request executors before driver fully initialized.");
+            return CompletableFuture.completedFuture(false);
         }
     }
 
 
     /******************************Spark Master关闭Executor**************************/
-    public Future<Boolean> killExecutors(List<String> executorIds) {
+    public CompletableFuture<Boolean> killExecutors(List<String> executorIds) {
         if (endpoint.get() != null && appId.get() != null) {
             return endpoint.get().ask(new KillExecutors(appId.get(), executorIds));
         } else {
-            LOGGER.error("在Driver完全启动后尝试关闭Executor");
-            return new DefaultFuture<>(false);
+            LOGGER.error("Attempted to kill executors before driver fully initialized.");
+            return CompletableFuture.completedFuture(false);
         }
     }
 
-    private class ClientEndPoint extends ThreadSafeRpcEndpoint {
+    private class ClientEndpoint extends ThreadSafeRpcEndpoint {
 
-        private RpcEndPointRef master = null;
+        private RpcEndpointRef master = null;
         private boolean alreadyDisconnected = false;
         private AtomicReference<Boolean> alreadyDead = new AtomicReference<>(false);
 
@@ -114,7 +113,7 @@ public class StandaloneAppClient {
         private AtomicReference<Future<?>> registerMasterFuture = new AtomicReference<>();
         private AtomicReference<ScheduledFuture<?>> registrationRetryTimer = new AtomicReference<>();
 
-        public ClientEndPoint(RpcEnv rpcEnv) {
+        public ClientEndpoint(RpcEnv rpcEnv) {
             super(rpcEnv);
         }
 
@@ -152,7 +151,7 @@ public class StandaloneAppClient {
 
                 LOGGER.info("Executor updated: {} is now {}({})", fullId, executor.state, executor.message);
                 if (ExecutorState.isFinished(executor.state)) {
-                    listener.executorRemove(fullId, executor.message, executor.exitStatus, executor.workerLost);
+                    listener.executorRemoved(fullId, executor.message, executor.exitStatus, executor.workerLost);
                 }
             } else if (msg instanceof WorkerRemoved) {
                 WorkerRemoved workerRemoved = (WorkerRemoved) msg;
@@ -219,7 +218,7 @@ public class StandaloneAppClient {
                     return;
                 }
                 LOGGER.info("Connecting to master {} ...", masterAddress.toSparkURL());
-                RpcEndPointRef masterRef = rpcEnv.setRpcEndPointRef(Master.ENDPOINT_NAME, masterAddress);
+                RpcEndpointRef masterRef = rpcEnv.setRpcEndPointRef(Master.ENDPOINT_NAME, masterAddress);
                 masterRef.send(new RegisterApplication(appDescription, self()));
             });
         }
@@ -233,7 +232,7 @@ public class StandaloneAppClient {
             }
         }
 
-        private <T> void askAndReplyAsync(RpcEndPointRef endpointRef, RpcCallContext context, T message) {
+        private <T> void askAndReplyAsync(RpcEndpointRef endpointRef, RpcCallContext context, T message) {
             // Ask a message and create a thread to reply with the result.  Allow thread to be
             // interrupted during shutdown, otherwise context must be notified of NonFatal errors.
             Future<?> future = endpointRef.ask(message);

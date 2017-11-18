@@ -1,8 +1,7 @@
 package com.sdu.spark.deploy.worker;
 
 import com.sdu.spark.rpc.RpcAddress;
-import com.sdu.spark.rpc.RpcEndPoint;
-import com.sdu.spark.rpc.RpcEndPointRef;
+import com.sdu.spark.rpc.RpcEndpoint;
 import com.sdu.spark.rpc.RpcEnv;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,7 +10,7 @@ import org.slf4j.LoggerFactory;
  *
  * @author hanhan.zhang
  * */
-public class WorkerWatcher extends RpcEndPoint {
+public class WorkerWatcher extends RpcEndpoint {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(WorkerWatcher.class);
 

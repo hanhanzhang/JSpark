@@ -2,29 +2,26 @@ package com.sdu.spark.rpc.netty;
 
 import com.sdu.spark.network.client.TransportClient;
 import com.sdu.spark.rpc.RpcAddress;
-import com.sdu.spark.rpc.RpcEndPointRef;
+import com.sdu.spark.rpc.RpcEndpointRef;
 import com.sdu.spark.rpc.RpcEndpointAddress;
 
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
+import java.util.concurrent.*;
 
 import static com.sdu.spark.utils.RpcUtils.getRpcAskTimeout;
 
 /**
  * Note:
  *
- *  1: {@link NettyRpcEndPointRef}归属于{@link NettyRpcEnv}
+ *  1: {@link NettyRpcEndpointRef}归属于{@link NettyRpcEnv}
  *
- *  2: 使用{@link NettyRpcEndPointRef}发送消息时:
+ *  2: 使用{@link NettyRpcEndpointRef}发送消息时:
  *
  *      1': 发送方地址 = RpcEnv.address[即RpcEnv启动的RpcServer地址]
  *
- *      2': 接收方地址 = {@link NettyRpcEndPointRef#address}
+ *      2': 接收方地址 = {@link NettyRpcEndpointRef#address}
  *
  *  todo:
  *      {@link #readObject(ObjectInputStream)}
@@ -32,7 +29,7 @@ import static com.sdu.spark.utils.RpcUtils.getRpcAskTimeout;
  *
  * @author hanhan.zhang
  * */
-public class NettyRpcEndPointRef extends RpcEndPointRef {
+public class NettyRpcEndpointRef extends RpcEndpointRef {
 
     // 引用RpcEndPoint节点的网络地址
     private RpcEndpointAddress endpointAddress;
@@ -43,7 +40,7 @@ public class NettyRpcEndPointRef extends RpcEndPointRef {
 
     private final long defaultAskTimeout;
 
-    public NettyRpcEndPointRef(RpcEndpointAddress address, NettyRpcEnv nettyEnv) {
+    public NettyRpcEndpointRef(RpcEndpointAddress address, NettyRpcEnv nettyEnv) {
         this.endpointAddress = address;
         this.nettyEnv = nettyEnv;
 
@@ -70,9 +67,9 @@ public class NettyRpcEndPointRef extends RpcEndPointRef {
 
     @SuppressWarnings("unchecked")
     @Override
-    public <T> Future<T> ask(Object message) {
+    public <T> CompletableFuture<T> ask(Object message) {
         assert nettyEnv != null;
-        return (Future<T>) nettyEnv.ask(new RequestMessage(nettyEnv.address(), this, message));
+        return (CompletableFuture<T>) nettyEnv.ask(new RequestMessage(nettyEnv.address(), this, message));
     }
 
     @Override
@@ -111,7 +108,7 @@ public class NettyRpcEndPointRef extends RpcEndPointRef {
             return false;
         }
 
-        NettyRpcEndPointRef that = (NettyRpcEndPointRef) o;
+        NettyRpcEndpointRef that = (NettyRpcEndpointRef) o;
 
         return that.endpointAddress.equals(this.endpointAddress);
     }

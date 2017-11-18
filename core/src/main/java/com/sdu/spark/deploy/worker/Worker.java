@@ -46,7 +46,7 @@ public class Worker extends ThreadSafeRpcEndpoint {
     // 是否注解到Master
     private boolean register = false;
     // Master EndPoint节点引用
-    private RpcEndPointRef master;
+    private RpcEndpointRef master;
     // 心跳时间间隔
     private long HEARTBEAT_MILLIS = 60 * 1000L / 4L;
     // 心跳线程
@@ -174,7 +174,7 @@ public class Worker extends ThreadSafeRpcEndpoint {
                 }
                 RpcAddress address = master.address();
                 LOGGER.info("Connecting to master {} ...", address.hostPort());
-                RpcEndPointRef masterPointRef = rpcEnv.setRpcEndPointRef(Master.ENDPOINT_NAME, address);
+                RpcEndpointRef masterPointRef = rpcEnv.setRpcEndPointRef(Master.ENDPOINT_NAME, address);
                 sendRegisterMessageToMaster(masterPointRef);
             }
             if (connectionAttemptCount == 16) {
@@ -193,11 +193,11 @@ public class Worker extends ThreadSafeRpcEndpoint {
     }
     private Future<?> tryRegisterMaster() {
         return registerExecutorService.submit(() -> {
-            RpcEndPointRef masterPointRef = rpcEnv.setRpcEndPointRef(Master.ENDPOINT_NAME, masterRpcAddress);
+            RpcEndpointRef masterPointRef = rpcEnv.setRpcEndPointRef(Master.ENDPOINT_NAME, masterRpcAddress);
             sendRegisterMessageToMaster(masterPointRef);
         });
     }
-    private void sendRegisterMessageToMaster(RpcEndPointRef masterRef) {
+    private void sendRegisterMessageToMaster(RpcEndpointRef masterRef) {
         masterRef.send(new RegisterWorker(workerId,
                                           host(),
                                           port(),
@@ -247,9 +247,17 @@ public class Worker extends ThreadSafeRpcEndpoint {
 
         String[] localAppDirs = new String[0];
 
-        ExecutorRunner runner = new ExecutorRunner(executor.appId, executor.execId, executor.appDesc,
-                                                   executor.cores, executor.memory, self(), sparkHome, executorDir, conf,
-                                                   localAppDirs, ExecutorState.RUNNING);
+        ExecutorRunner runner = new ExecutorRunner(executor.appId,
+                                                   executor.execId,
+                                                   executor.appDesc,
+                                                   executor.cores,
+                                                   executor.memory,
+                                                   self(),
+                                                   sparkHome,
+                                                   executorDir,
+                                                   conf,
+                                                   localAppDirs,
+                                                   ExecutorState.RUNNING);
         executors.put(executor.appId + "/" + executor.execId, runner);
         runner.start();
         coresUsed += executor.cores;

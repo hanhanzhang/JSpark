@@ -1,8 +1,6 @@
 package com.sdu.spark.deploy;
 
-import com.sdu.spark.rpc.RpcEndPointRef;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
+import com.sdu.spark.rpc.RpcEndpointRef;
 
 import java.io.Serializable;
 import java.util.List;
@@ -19,9 +17,9 @@ public interface DeployMessage extends Serializable {
      * */
     class Heartbeat implements DeployMessage {
         public String workerId;
-        public RpcEndPointRef worker;
+        public RpcEndpointRef worker;
 
-        public Heartbeat(String workerId, RpcEndPointRef worker) {
+        public Heartbeat(String workerId, RpcEndpointRef worker) {
             this.workerId = workerId;
             this.worker = worker;
         }
@@ -38,10 +36,10 @@ public interface DeployMessage extends Serializable {
         public int port;
         public int cores;
         public long memory;
-        public RpcEndPointRef worker;
+        public RpcEndpointRef worker;
 
         public RegisterWorker(String workerId, String host, int port, int cores,
-                              long memory, RpcEndPointRef worker) {
+                              long memory, RpcEndpointRef worker) {
             this.workerId = workerId;
             this.host = host;
             this.port = port;
@@ -60,9 +58,9 @@ public interface DeployMessage extends Serializable {
      * 工作节点注册响应消息
      * */
     class RegisteredWorker implements DeployMessage, RegisteredWorkerResponse {
-        public RpcEndPointRef master;
+        public RpcEndpointRef master;
 
-        public RegisteredWorker(RpcEndPointRef master) {
+        public RegisteredWorker(RpcEndpointRef master) {
             this.master = master;
         }
     }
@@ -115,9 +113,9 @@ public interface DeployMessage extends Serializable {
      * Worker重连消息
      * */
     class ReconnectWorker implements DeployMessage {
-        public RpcEndPointRef master;
+        public RpcEndpointRef master;
 
-        public ReconnectWorker(RpcEndPointRef master) {
+        public ReconnectWorker(RpcEndpointRef master) {
             this.master = master;
         }
     }
@@ -250,9 +248,9 @@ public interface DeployMessage extends Serializable {
     /*******************************Spark App注册及资源申请(StandaloneAppClient)*****************************/
     class RegisterApplication implements DeployMessage {
         public ApplicationDescription appDescription;
-        public RpcEndPointRef driver;
+        public RpcEndpointRef driver;
 
-        public RegisterApplication(ApplicationDescription appDescription, RpcEndPointRef driver) {
+        public RegisterApplication(ApplicationDescription appDescription, RpcEndpointRef driver) {
             this.appDescription = appDescription;
             this.driver = driver;
         }
@@ -260,9 +258,9 @@ public interface DeployMessage extends Serializable {
 
     class RegisteredApplication implements DeployMessage {
         public String appId;
-        public RpcEndPointRef master;
+        public RpcEndpointRef master;
 
-        public RegisteredApplication(String appId, RpcEndPointRef master) {
+        public RegisteredApplication(String appId, RpcEndpointRef master) {
             this.appId = appId;
             this.master = master;
         }
@@ -352,10 +350,10 @@ public interface DeployMessage extends Serializable {
     }
 
     class MasterChanged implements DeployMessage {
-        public RpcEndPointRef master;
+        public RpcEndpointRef master;
         public String masterWebUiUrl;
 
-        public MasterChanged(RpcEndPointRef master, String masterWebUiUrl) {
+        public MasterChanged(RpcEndpointRef master, String masterWebUiUrl) {
             this.master = master;
             this.masterWebUiUrl = masterWebUiUrl;
         }

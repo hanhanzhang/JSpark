@@ -16,7 +16,7 @@ import java.util.Map;
 import java.util.concurrent.*;
 
 /**
- * {@link Dispatcher}负责路由接收到的消息[本地消息及网络消息]给{@link RpcEndPoint}
+ * {@link Dispatcher}负责路由接收到的消息[本地消息及网络消息]给{@link RpcEndpoint}
  *
  * @author hanhan.zhang
  * */
@@ -27,19 +27,19 @@ public class Dispatcher {
     /**
      * {@link EndPointData}职责:
      *
-     *  1: 维护{@link RpcEndPoint}与{@link RpcEndPointRef}对应关系
+     *  1: 维护{@link RpcEndpoint}与{@link RpcEndpointRef}对应关系
      *
-     *  2: 维护{@link RpcEndPoint}与{@link RpcEndPointRef}Rpc消息接收信箱{@link Index}
+     *  2: 维护{@link RpcEndpoint}与{@link RpcEndpointRef}Rpc消息接收信箱{@link Index}
      *
-     *  3: {@link EndPointData}实例化时, 向信箱投递{@link OnStart}消息, 进而调用{@link RpcEndPoint#onStart()}方法
+     *  3: {@link EndPointData}实例化时, 向信箱投递{@link OnStart}消息, 进而调用{@link RpcEndpoint#onStart()}方法
      * */
     private class EndPointData {
         String name;
-        RpcEndPoint endPoint;
-        RpcEndPointRef endPointRef;
+        RpcEndpoint endPoint;
+        RpcEndpointRef endPointRef;
         Index index;
 
-        EndPointData(String name, RpcEndPoint endPoint, RpcEndPointRef endPointRef) {
+        EndPointData(String name, RpcEndpoint endPoint, RpcEndpointRef endPointRef) {
             this.name = name;
             this.endPoint = endPoint;
             this.endPointRef = endPointRef;
@@ -52,10 +52,10 @@ public class Dispatcher {
     private NettyRpcEnv nettyRpcEnv;
 
     /*****************************Spark Point-To-Point映射*******************************/
-    /** key = RpcEndPoint Name, value = EndPointData*/
+    /** key = RpcEndpoint Name, value = EndPointData*/
     private Map<String, EndPointData> endPoints = Maps.newConcurrentMap();
-    /**key = RpcEndPoint, value = RpcEndPointRef*/
-    private Map<RpcEndPoint, RpcEndPointRef> endPointRefs = Maps.newConcurrentMap();
+    /**key = RpcEndpoint, value = RpcEndpointRef*/
+    private Map<RpcEndpoint, RpcEndpointRef> endPointRefs = Maps.newConcurrentMap();
     /**Track the receivers whose inboxes may contain messages(线程池访问, 需确保线程安全)*/
     private LinkedBlockingQueue<EndPointData> receivers = new LinkedBlockingQueue<>();
 
@@ -104,9 +104,9 @@ public class Dispatcher {
 
     /*********************************Spark Point-To-Point映射管理************************************/
     // RpcEndPoint节点注册, 并返回RpcEndPoint节点的引用
-    public NettyRpcEndPointRef registerRpcEndPoint(String name, RpcEndPoint endPoint) {
+    public NettyRpcEndpointRef registerRpcEndPoint(String name, RpcEndpoint endPoint) {
         RpcEndpointAddress endpointAddress = new RpcEndpointAddress(name, nettyRpcEnv.address());
-        NettyRpcEndPointRef endPointRef = new NettyRpcEndPointRef(endpointAddress, nettyRpcEnv);
+        NettyRpcEndpointRef endPointRef = new NettyRpcEndpointRef(endpointAddress, nettyRpcEnv);
         synchronized (this) {
             if (stopped) {
                 throw new IllegalStateException("RpcEnv has stopped");
@@ -130,7 +130,7 @@ public class Dispatcher {
     }
 
     /**RpcEndpoint Name查询, {@link RpcEndpointVerifier#receiveAndReply(Object, RpcCallContext)} */
-    public RpcEndPointRef verify(String name) {
+    public RpcEndpointRef verify(String name) {
         EndPointData endPointData = endPoints.get(name);
         if (endPointData == null) {
             return null;
@@ -138,21 +138,25 @@ public class Dispatcher {
         return endPointData.endPointRef;
     }
 
-    public RpcEndPointRef getRpcEndPointRef(RpcEndPoint endPoint) {
+    public RpcEndpointRef getRpcEndPointRef(RpcEndpoint endPoint) {
         return endPointRefs.get(endPoint);
     }
 
-    public void removeRpcEndPointRef(RpcEndPoint endPoint) {
+    public void removeRpcEndPointRef(RpcEndpoint endPoint) {
         endPointRefs.remove(endPoint);
     }
 
     /** 本地消息*/
-    public Object postLocalMessage(RequestMessage req) throws ExecutionException, InterruptedException {
-        SettableFuture<Object> p = SettableFuture.create();
-        LocalNettyRpcCallContext callContext = new LocalNettyRpcCallContext(req.senderAddress, p);
-        RpcMessage rpcMessage = new RpcMessage(req.senderAddress, req.content, callContext);
-        postMessage(req.receiver.name(), rpcMessage, null);
-        return p.get();
+    public Object postLocalMessage(RequestMessage req) {
+        try {
+            CompletableFuture<Object> p = new CompletableFuture<>();
+            LocalNettyRpcCallContext callContext = new LocalNettyRpcCallContext(req.senderAddress, p);
+            RpcMessage rpcMessage = new RpcMessage(req.senderAddress, req.content, callContext);
+            postMessage(req.receiver.name(), rpcMessage, null);
+            return p.get();
+        } catch (Exception e) {
+            throw new SparkException("Got local message result failure", e);
+        }
     }
 
     /**网络消息[单向]*/
@@ -217,12 +221,12 @@ public class Dispatcher {
         }
     }
 
-    public void stop(RpcEndPointRef rpcEndPointRef) {
+    public void stop(RpcEndpointRef rpcEndpointRef) {
         synchronized (this) {
             if (stopped) {
                 return;
             }
-            unregisterRpcEndpoint(rpcEndPointRef.name());
+            unregisterRpcEndpoint(rpcEndpointRef.name());
         }
     }
 

@@ -2,25 +2,25 @@ package com.sdu.spark;
 
 import com.sdu.spark.MapOutputTrackerMessage.*;
 import com.sdu.spark.rpc.RpcCallContext;
-import com.sdu.spark.rpc.RpcEndPoint;
+import com.sdu.spark.rpc.RpcEndpoint;
 import com.sdu.spark.rpc.RpcEnv;
 import com.sdu.spark.rpc.SparkConf;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * {@link MapOutputTrackerMasterEndPoint}接收到RpcMessage交给MapOutputTrackerMaster处理
+ * {@link MapOutputTrackerMasterEndpoint}接收到RpcMessage交给MapOutputTrackerMaster处理
  *
  * @author hanhan.zhang
  * */
-public class MapOutputTrackerMasterEndPoint extends RpcEndPoint {
+public class MapOutputTrackerMasterEndpoint extends RpcEndpoint {
 
-    private static final Logger LOGGER = LoggerFactory.getLogger(MapOutputTrackerMasterEndPoint.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(MapOutputTrackerMasterEndpoint.class);
 
     private MapOutputTrackerMaster tracker;
     private SparkConf conf;
 
-    public MapOutputTrackerMasterEndPoint(RpcEnv rpcEnv, MapOutputTrackerMaster tracker, SparkConf conf) {
+    public MapOutputTrackerMasterEndpoint(RpcEnv rpcEnv, MapOutputTrackerMaster tracker, SparkConf conf) {
         super(rpcEnv);
         this.tracker = tracker;
         this.conf = conf;

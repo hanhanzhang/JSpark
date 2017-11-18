@@ -1,8 +1,8 @@
 package com.sdu.spark.rpc.netty;
 
 
-import com.sdu.spark.rpc.RpcEndPoint;
-import com.sdu.spark.rpc.RpcEndPointRef;
+import com.sdu.spark.rpc.RpcEndpoint;
+import com.sdu.spark.rpc.RpcEndpointRef;
 import com.sdu.spark.rpc.ThreadSafeRpcEndpoint;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,9 +21,9 @@ public class Index {
     private static final Logger LOGGER = LoggerFactory.getLogger(Index.class);
 
     /**消息发送方*/
-    private RpcEndPoint endPoint;
+    private RpcEndpoint endPoint;
     /**消息接收方*/
-    private RpcEndPointRef endPointRef;
+    private RpcEndpointRef endPointRef;
     /**消息信箱*/
     private LinkedList<IndexMessage> messageBox = new LinkedList<>();
     private boolean enableConcurrent = false;
@@ -31,7 +31,7 @@ public class Index {
 
     private boolean stopped = false;
 
-    public Index(RpcEndPoint endPoint, RpcEndPointRef endPointRef) {
+    public Index(RpcEndpoint endPoint, RpcEndpointRef endPointRef) {
         this.endPoint = endPoint;
         this.endPointRef = endPointRef;
         /**投递启动消息, EndPoint调用OnStart方法*/
@@ -137,7 +137,7 @@ public class Index {
        return messageBox.isEmpty();
     }
 
-    private void safelyCall(RpcEndPoint endPoint, IndexMessage message, MessageHandler action) {
+    private void safelyCall(RpcEndpoint endPoint, IndexMessage message, MessageHandler action) {
         try {
             action.handle(message);
         } catch (Exception e) {

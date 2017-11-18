@@ -1,8 +1,6 @@
 package com.sdu.spark.deploy;
 
-import com.sdu.spark.rpc.RpcEndPointRef;
-import lombok.Getter;
-import lombok.Setter;
+import com.sdu.spark.rpc.RpcEndpointRef;
 
 import java.io.Serializable;
 import java.util.Map;
@@ -34,7 +32,7 @@ public class WorkerInfo implements Serializable{
     /**
      * 工作节点网络通信引用
      * */
-    public RpcEndPointRef endPointRef;
+    public RpcEndpointRef endPointRef;
 
 
 
@@ -58,7 +56,7 @@ public class WorkerInfo implements Serializable{
     public transient Map<String, ExecutorDesc> executors;
     public transient Map<String, DriverInfo> drivers;
 
-    public WorkerInfo(String workerId, String host, int port, int cores, long memory, RpcEndPointRef endPointRef) {
+    public WorkerInfo(String workerId, String host, int port, int cores, long memory, RpcEndpointRef endPointRef) {
         this.workerId = workerId;
         this.host = host;
         this.port = port;

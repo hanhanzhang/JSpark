@@ -3,7 +3,7 @@ package com.sdu.spark.scheduler;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.sdu.spark.SparkException;
-import com.sdu.spark.rpc.RpcEndPointRef;
+import com.sdu.spark.rpc.RpcEndpointRef;
 import com.sdu.spark.rpc.SparkConf;
 import com.sdu.spark.scheduler.OutputCommitCoordinationMessage.*;
 import com.sdu.spark.scheduler.TaskEndReason.*;
@@ -14,10 +14,8 @@ import org.slf4j.LoggerFactory;
 import java.io.Serializable;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 /**
  * {@link OutputCommitCoordinator}
@@ -46,7 +44,7 @@ public class OutputCommitCoordinator {
     private SparkConf conf;
     private boolean isDriver;
 
-    public RpcEndPointRef coordinatorRef;
+    public RpcEndpointRef coordinatorRef;
 
     private Map<Integer, StageState> stageStates;
 

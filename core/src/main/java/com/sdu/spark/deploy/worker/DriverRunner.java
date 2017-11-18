@@ -4,10 +4,9 @@ import com.sdu.spark.SecurityManager;
 import com.sdu.spark.deploy.DeployMessage.DriverStateChanged;
 import com.sdu.spark.deploy.DriverDescription;
 import com.sdu.spark.deploy.DriverState;
+import com.sdu.spark.rpc.RpcEndpointRef;
 import com.sdu.spark.rpc.SparkConf;
-import com.sdu.spark.rpc.RpcEndPointRef;
 import com.sdu.spark.utils.ShutdownHookManager;
-import com.sdu.spark.utils.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -31,7 +30,7 @@ public class DriverRunner {
     private File workDir;
     private File sparkHome;
     private DriverDescription desc;
-    private RpcEndPointRef worker;
+    private RpcEndpointRef worker;
     private SecurityManager securityManager;
 
     private long DRIVER_TERMINATE_TIMEOUT_MS;
@@ -47,7 +46,7 @@ public class DriverRunner {
                         File workDir,
                         File sparkHome,
                         DriverDescription desc,
-                        RpcEndPointRef worker,
+                        RpcEndpointRef worker,
                         SecurityManager securityManager) {
         this.conf = conf;
         this.driverId = driverId;

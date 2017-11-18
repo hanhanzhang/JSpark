@@ -4,23 +4,28 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.sdu.spark.ExecutorAllocationClient;
+import com.sdu.spark.SparkException;
+import com.sdu.spark.executor.ExecutorExitCode.ExecutorLossReason;
+import com.sdu.spark.executor.ExecutorExitCode.SlaveLost;
 import com.sdu.spark.rpc.*;
 import com.sdu.spark.scheduler.*;
 import com.sdu.spark.scheduler.SparkListenerEvent.SparkListenerExecutorAdded;
 import com.sdu.spark.scheduler.SparkListenerEvent.SparkListenerExecutorRemoved;
 import com.sdu.spark.scheduler.cluster.CoarseGrainedClusterMessage.*;
-import com.sdu.spark.utils.DefaultFuture;
 import com.sdu.spark.utils.SerializableBuffer;
+import com.sdu.spark.utils.scala.Tuple2;
 import org.apache.commons.collections.CollectionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.annotation.concurrent.GuardedBy;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -30,6 +35,10 @@ import java.util.stream.Collectors;
 import static com.sdu.spark.utils.RpcUtils.maxMessageSizeBytes;
 import static com.sdu.spark.utils.ThreadUtils.newDaemonSingleThreadScheduledExecutor;
 import static com.sdu.spark.utils.Utils.getFutureResult;
+import static com.sdu.spark.utils.Utils.partition;
+import static java.lang.String.format;
+import static org.apache.commons.lang3.StringUtils.isNotEmpty;
+import static org.apache.commons.lang3.StringUtils.join;
 
 /**
  * {@link CoarseGrainedSchedulerBackend}职责:
@@ -65,21 +74,28 @@ public abstract class CoarseGrainedSchedulerBackend implements ExecutorAllocatio
     // Spark Job分配CPU核数
     protected AtomicInteger totalCoreCount = new AtomicInteger(0);
     protected double minRegisteredRatio;
+
     // Spark Job分配Executor
+    @GuardedBy("CoarseGrainedSchedulerBackend.this")
     private int requestedTotalExecutors = 0;
+
     // Spark Job等待分配Executor
+    @GuardedBy("CoarseGrainedSchedulerBackend.this")
     private int numPendingExecutors = 0;
+
     // Spark Job注册Executor数
     private AtomicInteger totalRegisteredExecutors = new AtomicInteger(0);
     private int localityAwareTasks = 0;
+    @GuardedBy("CoarseGrainedSchedulerBackend.this")
     private Map<String, Integer> hostToLocalTaskCount = Collections.emptyMap();
     // Spark Job分配Executor[key = executorId, value = ExecutorData]
     private Map<String, ExecutorData> executorDataMap = Maps.newHashMap();
-    // 待删除Executor
+
+    @GuardedBy("CoarseGrainedSchedulerBackend.this")
     private Map<String, Boolean> executorsPendingToRemove = Maps.newHashMap();
 
     /*********************************Spark Job Driver***********************************/
-    private RpcEndPointRef driverEndpoint;
+    private RpcEndpointRef driverEndpoint;
 
     public CoarseGrainedSchedulerBackend(TaskSchedulerImpl scheduler) {
         this.scheduler = scheduler;
@@ -91,19 +107,22 @@ public abstract class CoarseGrainedSchedulerBackend implements ExecutorAllocatio
         this.minRegisteredRatio = Math.min(1, conf.getDouble("spark.scheduler.minRegisteredResourcesRatio", 0));
     }
 
-    private RpcEndPoint createDriverEndPoint() {
-        return new DriverEndPoint(this.rpcEnv);
+    private RpcEndpoint createDriverEndPoint(Map<String, String> properties) {
+        return new DriverEndpoint(this.rpcEnv, properties);
     }
 
-    private class DriverEndPoint extends ThreadSafeRpcEndpoint {
+    private class DriverEndpoint extends ThreadSafeRpcEndpoint {
+        private Map<String, String> sparkProperties;
+
         protected Set<String> executorsPendingLossReason = Sets.newHashSet();
         // Executor分配地址映射[key = RpcAddress, value = executorId]
         private Map<RpcAddress, String> addressToExecutorId = Maps.newHashMap();
         // 定时调度Task分配给Executor线程
         private ScheduledExecutorService reviveThread = newDaemonSingleThreadScheduledExecutor("driver-receive-thread");
 
-        public DriverEndPoint(RpcEnv rpcEnv) {
+        public DriverEndpoint(RpcEnv rpcEnv, Map<String, String> sparkProperties) {
             super(rpcEnv);
+            this.sparkProperties = sparkProperties;
         }
 
         @Override
@@ -178,8 +197,10 @@ public abstract class CoarseGrainedSchedulerBackend implements ExecutorAllocatio
         @Override
         public void onDisconnected(RpcAddress remoteAddress) {
             String executorId = addressToExecutorId.get(remoteAddress);
-            String reason = String.format("RpcAddress(host = %s, port = %d)断开连接", remoteAddress.host, remoteAddress.port);
-            removeExecutor(executorId, reason);
+            if (isNotEmpty(executorId)) {
+                removeExecutor(executorId, new SlaveLost("Remote RPC client disassociated. Likely due to " +
+                                                         "containers exceeding thresholds, or network issues. Check driver logs for WARN messages."));
+            }
         }
 
         @Override
@@ -194,7 +215,7 @@ public abstract class CoarseGrainedSchedulerBackend implements ExecutorAllocatio
                 context.reply(true);
             } else if (CollectionUtils.isNotEmpty(scheduler.nodeBlacklist()) &&
                         scheduler.nodeBlacklist().contains(executor.hostname)){
-                executor.executorRef.send(new RegisterExecutorFailed(String.format("Executor is blacklisted: %s", executor.executorId)));
+                executor.executorRef.send(new RegisterExecutorFailed(format("Executor is blacklisted: %s", executor.executorId)));
                 context.reply(true);
             } else {
                 RpcAddress executorAddress;
@@ -267,7 +288,7 @@ public abstract class CoarseGrainedSchedulerBackend implements ExecutorAllocatio
                         String msg = "Serialized task %s:%d was %d bytes, which exceeds max allowed: " +
                                 "spark.rpc.message.maxSize (%d bytes). Consider increasing " +
                                 "spark.rpc.message.maxSize or using broadcast variables for large values.";
-                        msg = String.format(msg, task.taskId, task.index, buffer.limit(), maxRpcMessageSize);
+                        msg = format(msg, task.taskId, task.index, buffer.limit(), maxRpcMessageSize);
                         TaskSetManager tasSetMgr = scheduler.taskIdToTaskSetManager.get(task.taskId);
                         tasSetMgr.abort(msg);
                     } else {
@@ -285,7 +306,7 @@ public abstract class CoarseGrainedSchedulerBackend implements ExecutorAllocatio
         }
 
         /**********************************删除Executor(连接断开)*********************************/
-        private void removeExecutor(String executorId, String reason) {
+        private void removeExecutor(String executorId, ExecutorLossReason reason) {
             ExecutorData executorData = executorDataMap.get(executorId);
             if (executorData != null) {
                 synchronized (CoarseGrainedSchedulerBackend.this) {
@@ -325,39 +346,56 @@ public abstract class CoarseGrainedSchedulerBackend implements ExecutorAllocatio
 
     @Override
     public void start() {
-        this.driverEndpoint = rpcEnv.setRpcEndPointRef(ENDPOINT_NAME, createDriverEndPoint());
+        Map<String, String> properties = Maps.newHashMap();
+        scheduler.sc.conf.getAll().forEach((key, value) -> {
+            if (key.startsWith("spark.")) {
+                properties.put(key, value);
+            }
+        });
+        driverEndpoint = rpcEnv.setRpcEndPointRef(ENDPOINT_NAME,
+                                                  createDriverEndPoint(properties));
     }
 
-    @Override
-    public boolean isReady() {
-        if (sufficientResourcesRegistered()) {
-            return true;
-        }
-        if ((System.currentTimeMillis() - createTime) >- maxRegisteredWaitingTimeMs) {
-            return true;
-        }
-        return false;
-    }
-
-    private boolean stopExecutors() {
+    private void stopExecutors() {
         if (driverEndpoint != null) {
-            LOGGER.info("关闭全部Executor");
+            LOGGER.info("Shutting down all executors");
             try {
-                return (boolean) driverEndpoint.askSync(new StopExecutors(), 1000);
+                driverEndpoint.askSync(new StopExecutors());
             } catch (Exception e) {
-                LOGGER.error("关闭Executor异常", e);
-                return false;
+                throw new SparkException("Error asking standalone scheduler to shut down executors", e);
             }
         }
-        return false;
     }
 
     @Override
     public void stop() {
         stopExecutors();
-        if (driverEndpoint != null) {
-            driverEndpoint.ask(new StopDriver());
+        try {
+            if (driverEndpoint != null) {
+                driverEndpoint.askSync(new StopDriver());
+            }
+        } catch (Exception e) {
+            throw new SparkException("Error stopping standalone scheduler's driver endpoint", e);
         }
+    }
+
+    /**
+     * Reset the state of CoarseGrainedSchedulerBackend to the initial state. Currently it will only
+     * be called in the yarn-client mode when AM re-registers after a failure.
+     * */
+    protected void reset() {
+        Set<String> executors;
+        synchronized (this) {
+            requestedTotalExecutors = 0;
+            numPendingExecutors = 0;
+            executorsPendingToRemove.clear();
+            executors = executorDataMap.keySet();
+        }
+
+        // Remove all the lingering executors that should be removed but not yet. The reason might be
+        // because (1) disconnected event is not yet received; (2) executors die silently.
+        executors.forEach(execId -> removeExecutor(execId,
+                                                   new SlaveLost("Stale executor after cluster manager re-registered.")));
     }
 
     @Override
@@ -370,6 +408,45 @@ public abstract class CoarseGrainedSchedulerBackend implements ExecutorAllocatio
         driverEndpoint.send(new KillTask(taskId, executorId, interruptThread, reason));
     }
 
+    /**
+     * Called by subclasses when notified of a lost worker. It just fires the message and returns
+     * at once.
+     * */
+    protected void removeExecutor(String executorId, ExecutorLossReason reason) {
+        driverEndpoint.ask(new RemoveExecutor(executorId, reason))
+                      .exceptionally(t -> {
+                          LOGGER.error(t.getMessage(), t);
+                          return t;
+                      });
+    }
+
+    protected void removeWorker(String workerId, String host, String reason) {
+        driverEndpoint.ask(new RemoveWorker(workerId, host, reason))
+                      .exceptionally(t -> {
+                          LOGGER.error(t.getMessage(), t);
+                          return t;
+                      });
+    }
+
+    public boolean sufficientResourcesRegistered() {
+        return true;
+    }
+
+    @Override
+    public boolean isReady() {
+        if (sufficientResourcesRegistered()) {
+            LOGGER.info("SchedulerBackend is ready for scheduling beginning after reached " +
+                        "minRegisteredResourcesRatio: {}", minRegisteredRatio);
+            return true;
+        }
+        if ((System.currentTimeMillis() - createTime) >- maxRegisteredWaitingTimeMs) {
+            LOGGER.info("SchedulerBackend is ready for scheduling beginning after waiting " +
+                        "maxRegisteredResourcesWaitingTime: {}(ms)", maxRegisteredWaitingTimeMs);
+            return true;
+        }
+        return false;
+    }
+
     @Override
     public List<String> getExecutorIds() {
         return Lists.newLinkedList(executorDataMap.keySet());
@@ -378,7 +455,8 @@ public abstract class CoarseGrainedSchedulerBackend implements ExecutorAllocatio
     @Override
     public boolean requestTotalExecutors(int numExecutors, int localityAwareTasks, Map<String, Integer> hostToLocalTaskCount) {
         if (numExecutors < 0) {
-            throw new IllegalArgumentException("尝试申请Executor: " + numExecutors);
+            throw new IllegalArgumentException(format("Attempted to request a negative number of executor(s) " +
+                                                      "%d from the cluster manager. Please specify a positive number!", numExecutors));
         }
 
         Future<Boolean> response;
@@ -386,6 +464,7 @@ public abstract class CoarseGrainedSchedulerBackend implements ExecutorAllocatio
             this.requestedTotalExecutors = numExecutors;
             this.localityAwareTasks = localityAwareTasks;
             this.hostToLocalTaskCount = hostToLocalTaskCount;
+
             int numExistingExecutors = executorDataMap.size();
             numPendingExecutors = Math.max(numExecutors - numExistingExecutors + executorsPendingToRemove.size(), 0);
 
@@ -398,8 +477,12 @@ public abstract class CoarseGrainedSchedulerBackend implements ExecutorAllocatio
     @Override
     public boolean requestExecutors(int numAdditionalExecutors) {
         if (numAdditionalExecutors < 0) {
-            throw new IllegalArgumentException("尝试申请Executor: " + numAdditionalExecutors);
+            throw new IllegalArgumentException(format("Attempted to request a negative number of additional executor(s) " +
+                                                      "%d from the cluster manager. Please specify a positive number!", numAdditionalExecutors));
+
         }
+
+        LOGGER.info("Requesting {} additional executor(s) from the cluster manager", numAdditionalExecutors);
 
         Future<Boolean> response;
         synchronized (this) {
@@ -407,14 +490,17 @@ public abstract class CoarseGrainedSchedulerBackend implements ExecutorAllocatio
             numPendingExecutors += numAdditionalExecutors;
             int numExistingExecutors = executorDataMap.size();
 
-            if (requestedTotalExecutors != numExistingExecutors + numPendingExecutors - executorsPendingToRemove.size()) {
-                LOGGER.debug("尝试请求Executor(num = {}), Executor分配不匹配: \n" +
-                             "requestedTotalExecutors = {} \n" +
-                             "numExistingExecutors = {} \n" +
-                             "numPendingExecutors = {}\n" +
-                             "executorsPendingToRemove = {}", numAdditionalExecutors, requestedTotalExecutors,
-                                                              numExistingExecutors, numPendingExecutors,
-                                                              executorsPendingToRemove.size());
+            LOGGER.debug("Number of pending executors is now {}", numPendingExecutors);
+
+            if (requestedTotalExecutors !=
+                    (numExistingExecutors + numPendingExecutors - executorsPendingToRemove.size())) {
+                LOGGER.debug("requestExecutors({}) : Executor request doesn't match: \n" +
+                             "requestedTotalExecutors   = {} \n" +
+                             "numExistingExecutors      = {} \n" +
+                             "numPendingExecutors       = {}\n" +
+                             "executorsPendingToRemove  = {}", numAdditionalExecutors, requestedTotalExecutors,
+                                                               numExistingExecutors, numPendingExecutors,
+                                                               executorsPendingToRemove.size());
             }
             response = doRequestTotalExecutors(numAdditionalExecutors);
         }
@@ -423,37 +509,34 @@ public abstract class CoarseGrainedSchedulerBackend implements ExecutorAllocatio
 
     @Override
     public List<String> killExecutors(List<String> executorIds, boolean replace, boolean force) {
+        LOGGER.info("Requesting to kill executor(s): {}", join(executorIds, ", "));
+
         Future<Boolean> killExecutors;
         synchronized (this) {
-            List<String> knownExecutors = Lists.newLinkedList();
-            List<String> unknownExecutors = Lists.newLinkedList();
-            executorIds.forEach(execId -> {
-                if (executorDataMap.containsKey(execId)) {
-                    knownExecutors.add(execId);
-                } else {
-                    unknownExecutors.add(execId);
-                }
-            });
+            Tuple2<List<String>, List<String>> t = partition(executorIds, executorDataMap::containsKey);
 
-            unknownExecutors.forEach(execId -> LOGGER.info("需关闭的Executor(execId = {})不存在", execId));
+            t._2().forEach(execId -> LOGGER.info("Executor to kill {} does not exist!", execId));
 
-            List<String> executorsToKill = knownExecutors.stream().filter(execId -> !executorsPendingToRemove.containsKey(execId))
-                                                                  .filter(execId -> force || !scheduler.isExecutorBusy(execId))
-                                                                  .collect(Collectors.toList());
+            List<String> executorsToKill = t._1().stream()
+                                                 .filter(execId -> !executorsPendingToRemove.containsKey(execId))
+                                                 .filter(execId -> force || !scheduler.isExecutorBusy(execId))
+                                                 .collect(Collectors.toList());
+
+            LOGGER.info("Actual list of executor(s) to be killed is {}", join(executorsToKill, ", "));
+
             executorsToKill.forEach(execId -> executorsPendingToRemove.put(execId, !replace));
 
             if (!replace) {
                 requestedTotalExecutors = Math.max(requestedTotalExecutors - executorsToKill.size(), 0);
-                doRequestTotalExecutors(requestedTotalExecutors);
             } else {
-                numPendingExecutors += knownExecutors.size();
+                numPendingExecutors += t._1().size();
             }
 
 
             if (CollectionUtils.isNotEmpty(executorsToKill)) {
                 killExecutors = doKillExecutors(executorsToKill);
             } else {
-                killExecutors = new DefaultFuture<>(true);
+                killExecutors = CompletableFuture.completedFuture(true);
             }
 
             boolean response = getFutureResult(killExecutors);
@@ -469,26 +552,7 @@ public abstract class CoarseGrainedSchedulerBackend implements ExecutorAllocatio
         return true;
     }
 
-    protected void removeExecutor(String executorId, String reason) {
-        try {
-            boolean success = (boolean) driverEndpoint.askSync(new RemoveExecutor(executorId, reason), 1000);
-            if (success) {
-                LOGGER.error("移除Executor[execId = {}]成功, 原因: {}", executorId, reason);
-            }
-        } catch (Exception e) {
-            LOGGER.error("移除Executor[execId = {}]异常", executorId, e);
-        }
+    public abstract CompletableFuture<Boolean> doRequestTotalExecutors(int requestedTotal);
 
-    }
-
-    protected void removeWorker(String workerId, String host, String reason) {
-        LOGGER.info("移除Worker[workerId = {}, host = {}], 原因: {}", workerId, host, reason);
-        driverEndpoint.ask(new RemoveWorker(workerId, host, reason));
-    }
-
-    public abstract Future<Boolean> doRequestTotalExecutors(int requestedTotal);
-
-    public abstract Future<Boolean> doKillExecutors(List<String> executorIds);
-
-    public abstract boolean sufficientResourcesRegistered();
+    public abstract CompletableFuture<Boolean> doKillExecutors(List<String> executorIds);
 }

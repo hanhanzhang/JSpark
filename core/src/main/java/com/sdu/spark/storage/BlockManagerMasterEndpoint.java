@@ -9,7 +9,6 @@ import com.sdu.spark.scheduler.SparkListenerEvent.SparkListenerBlockManagerAdded
 import com.sdu.spark.scheduler.SparkListenerEvent.SparkListenerBlockManagerRemoved;
 import com.sdu.spark.storage.BlockManagerMessages.*;
 import com.sdu.spark.utils.ThreadUtils;
-import org.apache.commons.lang3.ArrayUtils;
 import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
@@ -39,6 +38,10 @@ import static com.sdu.spark.utils.Utils.bytesToString;
  *                           +-----> DAGScheduler.executorHeartbeatReceived()[Driver]
  *                                     |
  *                                     +----> BlockManagerMasterEndpoint.receiveAndReply(BlockManagerHeartbeat)
+ *
+ * 2: Executor注册BlockManager(BlockManagerMasterEndpoint仅在Driver RpcEnv注册节点)
+ *
+ * 3: Block数据块存储信息
  *
  * todo: {@link TopologyMapper} 作用
  * todo: {@link #removeBlockManager(BlockManagerId)} 副本的删除
@@ -96,7 +99,7 @@ public class BlockManagerMasterEndpoint extends ThreadSafeRpcEndpoint {
             Set<BlockManagerId> peers = getPeers(((GetPeers) msg).blockManagerId);
             context.reply(peers);
         } else if (msg instanceof GetExecutorEndpointRef) {
-            RpcEndPointRef ref = getExecutorEndpointRef(((GetExecutorEndpointRef) msg).execId);
+            RpcEndpointRef ref = getExecutorEndpointRef(((GetExecutorEndpointRef) msg).execId);
             context.reply(ref);
         } else if (msg instanceof GetMemoryStatus) {
             context.reply(memoryStatus());
@@ -212,7 +215,7 @@ public class BlockManagerMasterEndpoint extends ThreadSafeRpcEndpoint {
                                           .collect(Collectors.toSet());
     }
 
-    private RpcEndPointRef getExecutorEndpointRef(String executorId) {
+    private RpcEndpointRef getExecutorEndpointRef(String executorId) {
         BlockManagerId id = blockManagerIdByExecutor.get(executorId);
         if (id == null) {
             return null;

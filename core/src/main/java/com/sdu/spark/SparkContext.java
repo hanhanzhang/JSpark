@@ -4,13 +4,12 @@ import com.google.common.collect.Maps;
 import com.sdu.spark.broadcast.Broadcast;
 import com.sdu.spark.rdd.RDD;
 import com.sdu.spark.rdd.Transaction;
-import com.sdu.spark.rpc.RpcEndPointRef;
+import com.sdu.spark.rpc.RpcEndpointRef;
 import com.sdu.spark.rpc.SparkConf;
 import com.sdu.spark.scheduler.*;
 import com.sdu.spark.scheduler.cluster.StandaloneSchedulerBackend;
 import com.sdu.spark.utils.CallSite;
 import com.sdu.spark.utils.scala.Tuple2;
-import org.apache.commons.lang3.tuple.ImmutablePair;
 import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -103,7 +102,7 @@ public class SparkContext {
     public SchedulerBackend schedulerBackend;
     public TaskScheduler taskScheduler;
     private volatile DAGScheduler dagScheduler;
-    private RpcEndPointRef heartbeatReceiver;
+    private RpcEndpointRef heartbeatReceiver;
     private List<String> jars;
     private int executorMemory;
 

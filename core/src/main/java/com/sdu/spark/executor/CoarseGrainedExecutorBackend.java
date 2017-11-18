@@ -1,5 +1,6 @@
 package com.sdu.spark.executor;
 
+import com.sdu.spark.executor.ExecutorExitCode.*;
 import com.sdu.spark.SecurityManager;
 import com.sdu.spark.SparkEnv;
 import com.sdu.spark.deploy.worker.WorkerWatcher;
@@ -14,23 +15,47 @@ import org.apache.commons.lang3.math.NumberUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
 import java.net.URL;
 import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.Map;
-import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import static com.sdu.spark.utils.Utils.getFutureResult;
+import static java.lang.String.format;
 
 /**
- * {@link CoarseGrainedExecutorBackend}两个重要属性:
+ * {@link CoarseGrainedExecutorBackend}职责:
  *
- *  1: Driver RpcEndPoint引用负责与Spark Driver通信
+ * 1: CoarseGrainedExecutorBackend启动流程
  *
- *  2: Executor(运行在CoarseGrainedExecutorBackend进程中)负责执行Spark任务并将运行完结果返回给Driver
+ *    Spark Submit Job时向Master申请Executor(StandaloneSchedulerBackend.start())资源, Master收到Executor资源申请请求
+ *
+ *    选择满足资源需求的Worker节点启动CoarseGrainedExecutorBackend(ExecutorRunner)
+ *
+ * 2: CoarseGrainedExecutorBackend与Driver通信
+ *
+ *    1': LaunchTask, 其调用链:
+ *
+ *      TaskScheduler.submitTasks()[Driver]
+ *        |
+ *        +---> CoarseGrainedSchedulerBackend.reviveOffers()[Driver]
+ *        |
+ *        +---> CoarseGrainedSchedulerBackend.DriverEndpoint.launchTasks()[Driver]
+ *                |
+ *                +---> CoarseGrainedExecutorBackend.LaunchTask()[Executor]
+ *                         |
+ *                         +---> Executor.launchTask()
+ *
+ *    2': StatusUpdate: 作业运行状态上报Driver, 其调用链:
+ *
+ *      Executor.TaskRunner.run()[Executor]
+ *        |
+ *        +---> CoarseGrainedExecutorBackend.statusUpdate()[Executor]
+ *                |
+ *                +---> CoarseGrainedSchedulerBackend.DriverEndpoint.receive(StatusUpdate)[Driver]
+ *                         |
+ *                         +---> CoarseGrainedSchedulerBackend.StatusUpdate()
  *
  * @author hanhan.zhang
  * */
@@ -47,11 +72,16 @@ public class CoarseGrainedExecutorBackend extends ThreadSafeRpcEndpoint implemen
     private AtomicBoolean stopping = new AtomicBoolean(false);
 
     private Executor executor;
-    private volatile RpcEndPointRef driver;
+    private volatile RpcEndpointRef driver;
     private SerializerInstance ser;
 
-    public CoarseGrainedExecutorBackend(RpcEnv rpcEnv, String driverUrl, String executorId, String hostname,
-                                        int cores, URL[] userClassPath, SparkEnv env) {
+    public CoarseGrainedExecutorBackend(RpcEnv rpcEnv,
+                                        String driverUrl,
+                                        String executorId,
+                                        String hostname,
+                                        int cores,
+                                        URL[] userClassPath,
+                                        SparkEnv env) {
         super(rpcEnv);
         this.driverUrl = driverUrl;
         this.executorId = executorId;
@@ -64,26 +94,18 @@ public class CoarseGrainedExecutorBackend extends ThreadSafeRpcEndpoint implemen
 
     @Override
     public void onStart() {
-        LOGGER.info("Executor(host = {}, id = {})尝试连接Driver(address = {})",
-                     hostname, executorId, driverUrl);
-
+        LOGGER.info("Connecting to driver: {}", driverUrl);
         driver = this.rpcEnv.setupEndpointRefByURI(driverUrl);
         if (driver == null) {
-            String reason = String.format("Executor(host = %s, id = %s)连接Driver(address = %s)失败",
-                                           hostname, executorId, driverUrl);
-            exitExecutor(1, reason, null, false);
+            exitExecutor(1, format("Cannot register with driver: %s", driverUrl), null, false);
         }
 
-        LOGGER.info("Executor(host= {}, id = {})尝试向Driver(address = {})注册Executor",
-                     hostname, executorId, driver.address());
-        Future<Boolean> future = driver.ask(new RegisterExecutor(executorId,
-                                                           self(),
-                                                           hostname,
-                                                           cores,
-                                                           extractLogUrls()));
-        boolean success = getFutureResult(future);
-        LOGGER.info("Executor(host = {}, id = {})向Driver(address = {})注册Executor{}",
-                hostname, executorId, driver.address(), success ? "成功" : "失败");
+        // 注册Executor资源
+        driver.ask(new RegisterExecutor(executorId,
+                                        self(),
+                                        hostname,
+                                        cores,
+                                        extractLogUrls()));
     }
     
     private Map<String, String> extractLogUrls() {
@@ -94,37 +116,34 @@ public class CoarseGrainedExecutorBackend extends ThreadSafeRpcEndpoint implemen
     @Override
     public void receive(Object msg) {
         if (msg instanceof RegisteredExecutor) {
-            LOGGER.info("Driver注册Executor(execId = {})成功", executorId);
+            LOGGER.info("Successfully registered with driver");
             try {
                 executor = new Executor(executorId, hostname, env, userClassPath);
             } catch (Exception e) {
-                exitExecutor(1, "启动Executor异常: " + e.getMessage(), e);
+                exitExecutor(1, "Unable to create executor due to {}" + e.getMessage(), e);
             }
         } else if (msg instanceof RegisterExecutorFailed) {
-            RegisterExecutorFailed executorFailed = (RegisterExecutorFailed) msg;
-            exitExecutor(1, String.format("Executor注册失败: %s", executorFailed.message), null);
+            RegisterExecutorFailed failed = (RegisterExecutorFailed) msg;
+            exitExecutor(1, format("Slave registration failed: %s", failed.message), null);
         } else if (msg instanceof LaunchTask) {
             if (executor == null) {
-                exitExecutor(1, "接收到LaunchTask指令但由于Executor=NULL而退出", null);
+                exitExecutor(1, "Received LaunchTask command but executor was null", null);
             } else {
                 LaunchTask task = (LaunchTask) msg;
-                try {
-                    TaskDescription taskDesc = TaskDescription.decode(task.taskData.buffer);
-                    executor.launchTask(this, taskDesc);
-                } catch (IOException e) {
-                    LOGGER.error("序列化Spark任务异常", e);
-                }
+                TaskDescription taskDesc = TaskDescription.decode(task.taskData.buffer);
+                LOGGER.info("Got assigned task {}", taskDesc.taskId);
+                executor.launchTask(this, taskDesc);
             }
         } else if (msg instanceof KillTask) {
             if (executor == null) {
-                exitExecutor(1, "接收到KillTask命令但由于Executor=NULL而退出", null);
+                exitExecutor(1, "Received KillTask command but executor was null", null);
             } else {
-                KillTask killTask = (KillTask) msg;
-                executor.killTask(killTask.taskId, killTask.interruptThread, killTask.reason);
+                KillTask task = (KillTask) msg;
+                executor.killTask(task.taskId, task.interruptThread, task.reason);
             }
         } else if (msg instanceof StopExecutor) {
             stopping.set(true);
-            LOGGER.info("接收到Driver命令: Shutdown");
+            LOGGER.info("Driver commanded a shutdown");
             self().send(new Shutdown());
         } else if (msg instanceof Shutdown) {
             stopping.set(true);
@@ -135,11 +154,7 @@ public class CoarseGrainedExecutorBackend extends ThreadSafeRpcEndpoint implemen
                     // However, if `executor.stop()` runs in some thread of RpcEnv, RpcEnv won't be able to
                     // stop until `executor.stop()` returns, which becomes a dead-lock (See SPARK-14180).
                     // Therefore, we put this line in a new thread.
-                    try {
-                        executor.stop();
-                    } catch (InterruptedException e) {
-                        LOGGER.error("关闭Executor异常", e);
-                    }
+                    executor.stop();
                 }
             }.start();
         }
@@ -148,11 +163,11 @@ public class CoarseGrainedExecutorBackend extends ThreadSafeRpcEndpoint implemen
     @Override
     public void onDisconnected(RpcAddress remoteAddress) {
         if (stopping.get()) {
-            LOGGER.info("由于Driver(address = {})关闭断开连接", remoteAddress.hostPort());
+            LOGGER.info("Driver from {} disconnected during shutdown", remoteAddress.hostPort());
         } else if (driver != null && driver.address().equals(remoteAddress)){
-            exitExecutor(1, String.format("失去与Driver %s 连接, Executor退出", remoteAddress), null);
+            exitExecutor(1, format("Driver %s disassociated! Shutting down.", remoteAddress), null);
         } else {
-            LOGGER.error("未知Driver(address = {})断开连接", remoteAddress.hostPort());
+            LOGGER.error("An unknown ({}) driver disconnected.", remoteAddress.hostPort());
         }
     }
 
@@ -160,7 +175,7 @@ public class CoarseGrainedExecutorBackend extends ThreadSafeRpcEndpoint implemen
     public void statusUpdate(long taskId, TaskState state, ByteBuffer data) {
         StatusUpdate msg = new StatusUpdate(executorId, taskId, state, data);
         if (driver == null) {
-            LOGGER.info("由于尚未连接Driver丢弃消息: {}", msg);
+            LOGGER.info("Drop {} because has not yet connected to driver", msg);
             return;
         }
         driver.send(msg);
@@ -171,18 +186,18 @@ public class CoarseGrainedExecutorBackend extends ThreadSafeRpcEndpoint implemen
     }
 
     private void exitExecutor(int code, String reason, Throwable throwable, boolean notifyDriver) {
-        String message = String.format("Executor退出原因: %s", reason);
+        String message = format("Executor self-exiting due to : %s", reason);
         if (throwable != null) {
             LOGGER.error(message, throwable);
         } else {
             LOGGER.error(message);
         }
         if (notifyDriver && driver != null) {
-            Future<Boolean> future = driver.ask(new RemoveExecutor(executorId, reason));
-            boolean success = getFutureResult(future);
-            if (!success) {
-                LOGGER.error("Driver下线Executor(execId = {})失败", executorId);
-            }
+            driver.ask(new RemoveExecutor(executorId, new ExecutorLossReason(reason)))
+                  .exceptionally(t -> {
+                      LOGGER.error("Unable to notify the driver due to {} ", t.getMessage(), t);
+                      return t;
+                  });
         }
         System.exit(code);
     }
@@ -203,7 +218,7 @@ public class CoarseGrainedExecutorBackend extends ThreadSafeRpcEndpoint implemen
                                       new SecurityManager(conf),
                                       true);
 
-        RpcEndPointRef driverRef = rpcEnv.setupEndpointRefByURI(driverUrl);
+        RpcEndpointRef driverRef = rpcEnv.setupEndpointRefByURI(driverUrl);
         try {
             SparkAppConfig cfg = (SparkAppConfig) driverRef.askSync(new RetrieveSparkAppConfig(), Integer.MAX_VALUE);
             cfg.sparkProperties.put("spark.app.id", appId);
@@ -222,18 +237,20 @@ public class CoarseGrainedExecutorBackend extends ThreadSafeRpcEndpoint implemen
                 }
             }
 
-            SparkEnv env = SparkEnv.createExecutorEnv(
-                    driverConf, executorId, hostname, cores, cfg.ioEncryptionKey, false);
+            SparkEnv env = SparkEnv.createExecutorEnv(driverConf,
+                                                      executorId,
+                                                      hostname,
+                                                      cores,
+                                                      cfg.ioEncryptionKey,
+                                                      false);
 
-            env.rpcEnv.setRpcEndPointRef("Executor", new CoarseGrainedExecutorBackend(
-                    env.rpcEnv,
-                    driverUrl,
-                    executorId,
-                    hostname,
-                    cores,
-                    userClassPath,
-                    env
-            ));
+            env.rpcEnv.setRpcEndPointRef("Executor", new CoarseGrainedExecutorBackend(env.rpcEnv,
+                                                                                      driverUrl,
+                                                                                      executorId,
+                                                                                      hostname,
+                                                                                      cores,
+                                                                                      userClassPath,
+                                                                                      env));
             if (StringUtils.isNotEmpty(workerUrl)) {
                 env.rpcEnv.setRpcEndPointRef("WorkerWatcher", new WorkerWatcher(env.rpcEnv, workerUrl));
             }

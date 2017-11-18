@@ -13,11 +13,8 @@ import com.sdu.spark.network.client.TransportClientFactory;
 import com.sdu.spark.network.crypto.AuthClientBootstrap;
 import com.sdu.spark.network.crypto.AuthServerBootstrap;
 import com.sdu.spark.network.netty.SparkTransportConf;
-import com.sdu.spark.network.server.StreamManager;
 import com.sdu.spark.network.server.TransportServer;
 import com.sdu.spark.network.server.TransportServerBootstrap;
-import com.sdu.spark.network.utils.ConfigProvider;
-import com.sdu.spark.network.utils.IOModel;
 import com.sdu.spark.network.utils.TransportConf;
 import com.sdu.spark.rpc.*;
 import com.sdu.spark.rpc.netty.OutboxMessage.CheckExistence;
@@ -36,6 +33,7 @@ import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -45,7 +43,7 @@ import static com.sdu.spark.utils.ThreadUtils.newDaemonCachedThreadPool;
 /**
  * {@link NettyRpcEnv}职责：
  *
- * 1: RpcEndPoint(RpcEndPoint负责处理不同RpcMessage)管理
+ * 1: RpcEndpoint(RpcEndPoint负责处理不同RpcMessage)管理
  *
  *    1': 注册RpcEndpoint(具体管理由{@link Dispatcher}实现)
  *
@@ -129,23 +127,23 @@ public class NettyRpcEnv extends RpcEnv {
 
     /***********************************Spark Point-To-Point管理***************************************/
     @Override
-    public RpcEndPointRef endPointRef(RpcEndPoint endPoint) {
+    public RpcEndpointRef endPointRef(RpcEndpoint endPoint) {
         return dispatcher.getRpcEndPointRef(endPoint);
     }
 
     @Override
-    public RpcEndPointRef setRpcEndPointRef(String name, RpcEndPoint endPoint) {
+    public RpcEndpointRef setRpcEndPointRef(String name, RpcEndpoint endPoint) {
         return dispatcher.registerRpcEndPoint(name, endPoint);
     }
 
     @Override
-    public Future<RpcEndPointRef> asyncSetupEndpointRefByURI(String uri) {
+    public Future<RpcEndpointRef> asyncSetupEndpointRefByURI(String uri) {
         RpcEndpointAddress endpointAddress = RpcEndpointAddress.apply(uri);
         /**RpcEnv会创建{@link RpcEndpointVerifier}负责EndPointName查询*/
         RpcEndpointAddress verifierEndpointAddress = new RpcEndpointAddress(RpcEndpointVerifier.NAME,
                                                                             endpointAddress.address);
         /**向{@link RpcEndpointVerifier}询问endpointAddress是否存在*/
-        NettyRpcEndPointRef verifier = new NettyRpcEndPointRef(verifierEndpointAddress, this);
+        NettyRpcEndpointRef verifier = new NettyRpcEndpointRef(verifierEndpointAddress, this);
         return verifier.ask(new CheckExistence(endpointAddress.name));
     }
 
@@ -164,19 +162,20 @@ public class NettyRpcEnv extends RpcEnv {
     }
 
     // 双向消息
-    public Future<?> ask(RequestMessage message) {
+    public CompletableFuture<?> ask(RequestMessage message) {
         if (message.receiver.address().equals(address())) {
             // 发送本地消息
-            return deliverMessageExecutor.submit(() -> dispatcher.postLocalMessage(message));
+            return CompletableFuture.runAsync(() -> dispatcher.postLocalMessage(message),
+                                              deliverMessageExecutor);
         } else {
             // 发送网络消息
-            SettableFuture<Object> p = SettableFuture.create();
+            CompletableFuture<Object> p = new CompletableFuture<>();
             RpcResponseCallback callback = new RpcResponseCallback() {
                 @Override
                 public void onSuccess(ByteBuffer response) {
                     try {
                         Object result = deserialize(null, response);
-                        p.set(result);
+                        p.complete(result);
                     } catch (IOException e) {
                         onFailure(e);
                     }
@@ -184,7 +183,7 @@ public class NettyRpcEnv extends RpcEnv {
 
                 @Override
                 public void onFailure(Throwable e) {
-                    p.setException(e);
+                    p.completeExceptionally(e);
                 }
             };
             OutboxMessage.RpcOutboxMessage outboxMessage = new RpcOutboxMessage(message.serialize(this), callback);
@@ -193,7 +192,7 @@ public class NettyRpcEnv extends RpcEnv {
         }
     }
 
-    private void postToOutbox(NettyRpcEndPointRef receiver, OutboxMessage message) {
+    private void postToOutbox(NettyRpcEndpointRef receiver, OutboxMessage message) {
         if (receiver.client != null) {
             message.sendWith(receiver.client);
         } else {
@@ -238,7 +237,7 @@ public class NettyRpcEnv extends RpcEnv {
         dispatcher.registerRpcEndPoint(RpcEndpointVerifier.NAME, new RpcEndpointVerifier(this, dispatcher));
     }
 
-    /********************************Spark RpcEndPoint Client********************************/
+    /********************************Spark RpcEndpoint Client********************************/
     public TransportClient createClient(RpcAddress address) throws IOException, InterruptedException {
         return clientFactory.createClient(address.host, address.port);
 
@@ -274,8 +273,8 @@ public class NettyRpcEnv extends RpcEnv {
     }
 
     @Override
-    public void stop(RpcEndPointRef endPoint) {
-        assert endPoint instanceof NettyRpcEndPointRef;
+    public void stop(RpcEndpointRef endPoint) {
+        assert endPoint instanceof NettyRpcEndpointRef;
         dispatcher.stop(endPoint);
     }
 

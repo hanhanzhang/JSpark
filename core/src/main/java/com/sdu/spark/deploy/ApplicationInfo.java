@@ -1,7 +1,7 @@
 package com.sdu.spark.deploy;
 
 import com.google.common.collect.Lists;
-import com.sdu.spark.rpc.RpcEndPointRef;
+import com.sdu.spark.rpc.RpcEndpointRef;
 
 import java.io.Serializable;
 import java.util.Date;
@@ -33,7 +33,7 @@ public class ApplicationInfo implements Serializable {
     /**
      * 应用启动节点
      * */
-    public RpcEndPointRef driver;
+    public RpcEndpointRef driver;
     /**
      * 默认分配CPU数
      * */
@@ -64,7 +64,7 @@ public class ApplicationInfo implements Serializable {
     public transient long endTime;
     private transient int nextExecutorId;
 
-    public ApplicationInfo(long startTime, String id, ApplicationDescription desc, Date submitDate, RpcEndPointRef driver, int defaultCores) {
+    public ApplicationInfo(long startTime, String id, ApplicationDescription desc, Date submitDate, RpcEndpointRef driver, int defaultCores) {
         this.startTime = startTime;
         this.id = id;
         this.desc = desc;

@@ -18,7 +18,7 @@ public interface StandaloneAppClientListener {
     void executorAdded(String fullId, String workerId, String hostPort, int cores, int memory);
 
     /**Spark Executor移除*/
-    void executorRemove(String fullId, String message, int exitStatus, boolean workerLost);
+    void executorRemoved(String fullId, String message, int exitStatus, boolean workerLost);
 
     void workerRemoved(String workerId, String host, String message);
 

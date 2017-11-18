@@ -5,16 +5,16 @@ package com.sdu.spark.rpc;
  *
  * @author hanhan.zhang
  * */
-public abstract class RpcEndPoint {
+public abstract class RpcEndpoint {
 
     public RpcEnv rpcEnv;
 
-    public RpcEndPoint(RpcEnv rpcEnv) {
+    public RpcEndpoint(RpcEnv rpcEnv) {
         this.rpcEnv = rpcEnv;
     }
 
     // Rpc节点的引用节点
-    public RpcEndPointRef self() {
+    public RpcEndpointRef self() {
         assert rpcEnv != null : "nettyEnv has not been initialized";
         return rpcEnv.endPointRef(this);
     }

@@ -2,7 +2,7 @@ package com.sdu.spark.storage;
 
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.sdu.spark.rpc.RpcEndPointRef;
+import com.sdu.spark.rpc.RpcEndpointRef;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,7 +23,7 @@ public class BlockManagerInfo {
     private BlockManagerId blockManagerId;
     private long maxOnHeapMem;
     private long maxOffHeapMem;
-    public RpcEndPointRef slaveEndpoint;
+    public RpcEndpointRef slaveEndpoint;
     private long lastSeenMs;
 
     // Executor或Driver分配的存储最大内存
@@ -36,7 +36,7 @@ public class BlockManagerInfo {
     private Set<BlockId> cachedBlocks;
 
     public BlockManagerInfo(BlockManagerId blockManagerId, long maxOnHeapMem,
-                            long maxOffHeapMem, RpcEndPointRef slaveEndpoint, long timeMs) {
+                            long maxOffHeapMem, RpcEndpointRef slaveEndpoint, long timeMs) {
         this.blockManagerId = blockManagerId;
         this.maxOnHeapMem = maxOnHeapMem;
         this.maxOffHeapMem = maxOffHeapMem;

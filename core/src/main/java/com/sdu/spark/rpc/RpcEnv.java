@@ -31,20 +31,20 @@ public abstract class RpcEnv {
     public abstract RpcAddress address();
 
     // RpcEndPoint节点引用
-    public abstract RpcEndPointRef endPointRef(RpcEndPoint endPoint);
+    public abstract RpcEndpointRef endPointRef(RpcEndpoint endPoint);
 
     // RpcEndPoint节点注册
-    public abstract RpcEndPointRef setRpcEndPointRef(String name, RpcEndPoint endPoint);
+    public abstract RpcEndpointRef setRpcEndPointRef(String name, RpcEndpoint endPoint);
 
-    public RpcEndPointRef setRpcEndPointRef(String name, RpcAddress address) {
+    public RpcEndpointRef setRpcEndPointRef(String name, RpcAddress address) {
         RpcEndpointAddress endpointAddress = new RpcEndpointAddress(name, address);
         return setupEndpointRefByURI(endpointAddress.toString());
     }
 
-    public abstract Future<RpcEndPointRef> asyncSetupEndpointRefByURI(String uri);
+    public abstract Future<RpcEndpointRef> asyncSetupEndpointRefByURI(String uri);
 
-    public RpcEndPointRef setupEndpointRefByURI(String uri) {
-        Future<RpcEndPointRef> f = asyncSetupEndpointRefByURI(uri);
+    public RpcEndpointRef setupEndpointRefByURI(String uri) {
+        Future<RpcEndpointRef> f = asyncSetupEndpointRefByURI(uri);
         try {
             return f.get(defaultLookupTimeout, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
@@ -57,7 +57,7 @@ public abstract class RpcEnv {
     }
 
     // RpcEndPoint关闭
-    public abstract void stop(RpcEndPointRef endPoint);
+    public abstract void stop(RpcEndpointRef endPoint);
 
     // RpcEnv关闭
     public abstract void awaitTermination();

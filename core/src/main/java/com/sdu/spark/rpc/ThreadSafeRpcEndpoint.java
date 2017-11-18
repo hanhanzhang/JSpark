@@ -19,7 +19,7 @@ import com.sdu.spark.rpc.netty.Dispatcher;
  *
  * @author hanhan.zhang
  * */
-public abstract class ThreadSafeRpcEndpoint extends RpcEndPoint {
+public abstract class ThreadSafeRpcEndpoint extends RpcEndpoint {
 
     public ThreadSafeRpcEndpoint(RpcEnv rpcEnv) {
         super(rpcEnv);

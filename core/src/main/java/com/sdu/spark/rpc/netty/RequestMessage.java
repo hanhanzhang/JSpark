@@ -2,6 +2,7 @@ package com.sdu.spark.rpc.netty;
 
 import com.sdu.spark.network.client.TransportClient;
 import com.sdu.spark.rpc.RpcAddress;
+import com.sdu.spark.rpc.RpcEndpoint;
 import com.sdu.spark.rpc.RpcEndpointAddress;
 import com.sdu.spark.serializer.SerializationStream;
 import com.sdu.spark.utils.ByteBufferInputStream;
@@ -26,7 +27,7 @@ public class RequestMessage {
     /**
      * 消息接收方
      * */
-    public NettyRpcEndPointRef receiver;
+    public NettyRpcEndpointRef receiver;
     /**
      * 远端服务的客户端
      * */
@@ -36,7 +37,7 @@ public class RequestMessage {
      * */
     public Object content;
 
-    public RequestMessage(RpcAddress senderAddress, NettyRpcEndPointRef receiver, Object content) {
+    public RequestMessage(RpcAddress senderAddress, NettyRpcEndpointRef receiver, Object content) {
         this.senderAddress = senderAddress;
         this.receiver = receiver;
         this.content = content;
@@ -47,7 +48,7 @@ public class RequestMessage {
      *
      *  1: 发送方地址
      *  2: 接收方地址
-     *  3: 接收方{@link com.sdu.spark.rpc.RpcEndPoint}名字
+     *  3: 接收方{@link RpcEndpoint}名字
      *  4: 发送内容
      * */
     public ByteBuffer serialize(NettyRpcEnv rpcEnv) {
@@ -79,7 +80,7 @@ public class RequestMessage {
      *
      *  1: 发送方地址
      *  2: 接收方地址
-     *  3: 接收方{@link com.sdu.spark.rpc.RpcEndPoint}名字
+     *  3: 接收方{@link RpcEndpoint}名字
      *  4: 发送内容
      * */
     public static RequestMessage deserialize(ByteBuffer buffer, NettyRpcEnv rpcEnv, TransportClient client) {
@@ -91,7 +92,7 @@ public class RequestMessage {
             String name = input.readUTF();
             // 消息体
             RpcEndpointAddress endpointAddress = new RpcEndpointAddress(name, receiverAddress);
-            NettyRpcEndPointRef endPointRef = new NettyRpcEndPointRef(endpointAddress, rpcEnv);
+            NettyRpcEndpointRef endPointRef = new NettyRpcEndpointRef(endpointAddress, rpcEnv);
             endPointRef.client = client;
 
             return new RequestMessage(senderAddress, endPointRef, rpcEnv.deserialize(client, buffer));

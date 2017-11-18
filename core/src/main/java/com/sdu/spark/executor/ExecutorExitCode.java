@@ -53,7 +53,7 @@ public class ExecutorExitCode {
         }
     }
 
-    public static abstract class ExecutorLossReason implements Serializable {
+    public static class ExecutorLossReason implements Serializable {
         private String message;
 
         public ExecutorLossReason(String message) {
@@ -70,7 +70,7 @@ public class ExecutorExitCode {
         public int exitCode;
         public boolean exitCausedByApp;
 
-        ExecutorExited(int exitCode, boolean exitCausedByApp, String reason) {
+        public ExecutorExited(int exitCode, boolean exitCausedByApp, String reason) {
             super(reason);
             this.exitCode = exitCode;
             this.exitCausedByApp = exitCausedByApp;
@@ -84,19 +84,19 @@ public class ExecutorExitCode {
         }
     }
 
-    public class ExecutorKilled extends ExecutorLossReason {
+    public static class ExecutorKilled extends ExecutorLossReason {
         public ExecutorKilled() {
             super("Executor killed by driver.");
         }
     }
 
-    public class LossReasonPending extends ExecutorLossReason {
+    public static class LossReasonPending extends ExecutorLossReason {
         public LossReasonPending() {
             super("Pending loss reason.");
         }
     }
 
-    public class SlaveLost extends ExecutorLossReason {
+    public static class SlaveLost extends ExecutorLossReason {
         public boolean workerLost = false;
 
         public SlaveLost() {

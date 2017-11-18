@@ -4,7 +4,7 @@ import com.google.common.collect.Maps;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.sdu.spark.*;
 import com.sdu.spark.memory.TaskMemoryManager;
-import com.sdu.spark.rpc.RpcEndPointRef;
+import com.sdu.spark.rpc.RpcEndpointRef;
 import com.sdu.spark.rpc.SparkConf;
 import com.sdu.spark.scheduler.*;
 import com.sdu.spark.scheduler.TaskEndReason.TaskFailedReason;
@@ -44,7 +44,26 @@ import static java.lang.Thread.currentThread;
 import static org.apache.commons.lang3.StringUtils.join;
 
 /**
- * {@link Executor}Spark Task执行器
+ * {@link Executor}职责:
+ *
+ * 1: Executor向Driver上报心跳(HeartBeatReceiver), 若是心跳响应标明BlockManager尚未向Driver BlockManagerMaster注册,
+ *
+ *    则BlockManagerMaster向Driver BlockManagerMaster注册BlockManager信息, 其调用链:
+ *
+ *    Executor.startDriverHeartbeat(Heartbeat)
+ *      |
+ *      |   未注册BlockManager
+ *      +----------------------> BlockManagerMaster.reregister(RegisterBlockManager)
+ *
+ * 2: Executor执行计算任务并计算结果上报Driver, 根据计算结果数据量向Driver上报内容不同:
+ *
+ *    1':
+ *
+ *    2':
+ *
+ *    3':
+ *
+ * 3: Executor Kill运行中Task
  *
  * @author hanhan.zhang
  * */
@@ -76,7 +95,7 @@ public class Executor {
     private Map<Long, TaskRunner> runningTasks = Maps.newConcurrentMap();
     // 向Driver发现心跳
     private ScheduledExecutorService heartbeater = newDaemonSingleThreadScheduledExecutor("driver-heartbeater");
-    private RpcEndPointRef heartbeatReceiverRef;
+    private RpcEndpointRef heartbeatReceiverRef;
     private int heartbeatFailures = 0;
     private int HEARTBEAT_MAX_FAILURES;
 
@@ -283,12 +302,16 @@ public class Executor {
         return parent;
     }
 
-    public void stop() throws InterruptedException {
-        heartbeater.shutdown();
-        heartbeater.awaitTermination(10, TimeUnit.SECONDS);
-        threadPool.shutdown();
-        if (!isLocal) {
-            env.stop();
+    public void stop() {
+        try {
+            heartbeater.shutdown();
+            heartbeater.awaitTermination(10, TimeUnit.SECONDS);
+            threadPool.shutdown();
+            if (!isLocal) {
+                env.stop();
+            }
+        } catch (InterruptedException e) {
+            throw new SparkException("executor " + executorId + " shutdown failure", e);
         }
     }
 

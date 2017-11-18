@@ -3,6 +3,7 @@ package com.sdu.spark.scheduler;
 import com.google.common.collect.Maps;
 import com.sdu.spark.ExecutorAllocationClient;
 import com.sdu.spark.SparkContext;
+import com.sdu.spark.executor.ExecutorExitCode.*;
 import com.sdu.spark.rpc.SparkConf;
 import com.sdu.spark.scheduler.SchedulableBuilder.*;
 import com.sdu.spark.storage.BlockManagerId;
@@ -216,7 +217,7 @@ public class TaskSchedulerImpl implements TaskScheduler {
     }
 
     @Override
-    public void executorLost(String executorId, String reason) {
+    public void executorLost(String executorId, ExecutorLossReason reason) {
         throw new UnsupportedOperationException("");
     }
 

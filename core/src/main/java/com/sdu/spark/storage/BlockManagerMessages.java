@@ -1,6 +1,6 @@
 package com.sdu.spark.storage;
 
-import com.sdu.spark.rpc.RpcEndPointRef;
+import com.sdu.spark.rpc.RpcEndpointRef;
 
 import java.io.*;
 
@@ -77,10 +77,10 @@ public interface BlockManagerMessages extends Serializable{
         public BlockManagerId blockManagerId;
         public long maxOnHeapMemSize;
         public long maxOffHeapMemSize;
-        public RpcEndPointRef sender;
+        public RpcEndpointRef sender;
 
         public RegisterBlockManager(BlockManagerId blockManagerId, long maxOnHeapMemSize,
-                                    long maxOffHeapMemSize, RpcEndPointRef sender) {
+                                    long maxOffHeapMemSize, RpcEndpointRef sender) {
             this.blockManagerId = blockManagerId;
             this.maxOnHeapMemSize = maxOnHeapMemSize;
             this.maxOffHeapMemSize = maxOffHeapMemSize;
