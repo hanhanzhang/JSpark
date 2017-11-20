@@ -62,7 +62,10 @@ public interface CoarseGrainedClusterMessage extends Serializable {
         public TaskState state;
         public SerializableBuffer data;
 
-        public StatusUpdate(String executorId, long taskId, TaskState state, ByteBuffer data) {
+        public StatusUpdate(String executorId,
+                            long taskId,
+                            TaskState state,
+                            ByteBuffer data) {
             this.executorId = executorId;
             this.taskId = taskId;
             this.state = state;

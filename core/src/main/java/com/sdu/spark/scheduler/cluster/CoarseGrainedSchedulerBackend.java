@@ -43,11 +43,38 @@ import static org.apache.commons.lang3.StringUtils.join;
 /**
  * {@link CoarseGrainedSchedulerBackend}职责:
  *
- * 1: 启动DriverEndPoint({@link #start()})
+ * 1: CoarseGrainedSchedulerBackend在SparkContext中被初始化(也就是说, 只有在Driver端会初始化该组件), 其初始化调用链:
  *
- *    监听Executor任务运行状态(当Executor运行完成任务, TaskScheduler调度任务)
+ *    SparkContext.createTaskScheduler()[Driver]
+ *      |
+ *      +---> CoarseGrainedSchedulerBackend::new
  *
- * 2: Executor资源管理
+ * 2: CoarseGrainedSchedulerBackend.start(): Driver注册DriverEndpoint节点, DriverEndpoint处理Rpc消息(关键):
+ *
+ *   1': StatusUpdate[Executor ShuffleMapTask/ResultTask计算结果], 其调用链:
+ *
+ *      CoarseGrainedExecutorBackend.statusUpdate(StatusUpdate)[Executor]
+ *        |
+ *        +--> CoarseGrainedSchedulerBackend.DriverEndpoint.receive(StatusUpdate)[Driver]
+ *               |
+ *               +--> TaskScheduler.statusUpdate(StatusUpdate)[Driver]
+ *                      |
+ *                      +--> TaskResultGetter.enqueueSuccessfulTask()/enqueueFailedTask()[Driver]
+ *                      |
+ *                      +--> DAGScheduler.handleExecutorLost()[Task run Failure, Driver]
+ *                             |
+ *                             +--> MapOutputTrackerMaster.removeOutputOnHost()/removeOutputOnExecutor[Driver]
+ *
+ *
+ *   2': RegisterExecutor[Executor注册], 调用链:
+ *
+ *      CoarseGrainedExecutorBackend.onStart()[Executor]
+ *        |
+ *        +--> CoarseGrainedExecutorBackend.receive(RegisteredExecutor)[Executor]
+ *               |
+ *               +--> CoarseGrainedSchedulerBackend.DriverEndpoint.receiveAndReply(RegisteredExecutor)[Driver]
+ *
+ * 3: Executor资源管理
  *
  *  1': 向Spark Master申请Executor资源
  *
@@ -129,24 +156,24 @@ public abstract class CoarseGrainedSchedulerBackend implements ExecutorAllocatio
         public void onStart() {
             long reviveIntervalMs = conf.getTimeAsMs("spark.scheduler.revive.interval", "1s");
             reviveThread.scheduleAtFixedRate(() -> self().send(new ReviveOffers()),
-                                0, reviveIntervalMs, TimeUnit.MILLISECONDS);
+                                             0,
+                                             reviveIntervalMs,
+                                             TimeUnit.MILLISECONDS);
         }
 
         @Override
         public void receive(Object msg) {
             if (msg instanceof StatusUpdate) {
-                StatusUpdate statusUpdate = (StatusUpdate) msg;
-                scheduler.statusUpdate(statusUpdate.taskId, statusUpdate.state, statusUpdate.data.buffer);
-                if (TaskState.isFinished(statusUpdate.state)) {
-                    ExecutorData executorData = executorDataMap.get(statusUpdate.executorId);
+                StatusUpdate update = (StatusUpdate) msg;
+                scheduler.statusUpdate(update.taskId, update.state, update.data.buffer);
+                if (TaskState.isFinished(update.state)) {
+                    ExecutorData executorData = executorDataMap.get(update.executorId);
                     if (executorData != null) {
-                        LOGGER.info("Executor(execId = {})运行完Spark Task(taskId = {}, taskState = {}), 重新分发Spark Task",
-                                statusUpdate.executorId, statusUpdate.taskId, statusUpdate.state);
                         executorData.freeCores += scheduler.CPUS_PER_TASK;
-                        makeOffers(statusUpdate.executorId);
+                        makeOffers(update.executorId);
                     } else {
-                        LOGGER.info("收到未知Executor(execId = {}) Spark Task状态变更: taskId = {}, state = {}",
-                                statusUpdate.executorId, statusUpdate.taskId, statusUpdate.state);
+                        LOGGER.warn("Ignored task status update ({} state {}) from unknown executor with ID {}",
+                                    update.taskId, update.state, update.executorId);
                     }
                 }
             } else if (msg instanceof ReviveOffers){
@@ -526,22 +553,33 @@ public abstract class CoarseGrainedSchedulerBackend implements ExecutorAllocatio
 
             executorsToKill.forEach(execId -> executorsPendingToRemove.put(execId, !replace));
 
+            // If we do not wish to replace the executors we kill, sync the target number of executors
+            // with the cluster manager to avoid allocating new ones. When computing the new target,
+            // take into account executors that are pending to be added or removed.
+            CompletableFuture<Boolean> adjustTotalExecutors;
             if (!replace) {
                 requestedTotalExecutors = Math.max(requestedTotalExecutors - executorsToKill.size(), 0);
+                adjustTotalExecutors = doRequestTotalExecutors(requestedTotalExecutors);
             } else {
                 numPendingExecutors += t._1().size();
+                adjustTotalExecutors = CompletableFuture.completedFuture(true);
             }
 
+            CompletableFuture<Boolean> killResponse = adjustTotalExecutors.thenApplyAsync(reqResp -> {
+                if (CollectionUtils.isNotEmpty(executorsToKill)) {
+                    try {
+                        CompletableFuture<Boolean> f = doKillExecutors(executorsToKill);
+                        return f.get();
+                    } catch (Exception e) {
+                        throw new SparkException("kill executor (" + join(executorsToKill, ", ") + ") failure", e);
+                    }
+                }
+                return true;
+            });
 
-            if (CollectionUtils.isNotEmpty(executorsToKill)) {
-                killExecutors = doKillExecutors(executorsToKill);
-            } else {
-                killExecutors = CompletableFuture.completedFuture(true);
-            }
+            boolean killResp = getFutureResult(killResponse);
 
-            boolean response = getFutureResult(killExecutors);
-
-            return response ? executorsToKill : Collections.emptyList();
+            return killResp ? executorsToKill : Collections.emptyList();
         }
     }
 

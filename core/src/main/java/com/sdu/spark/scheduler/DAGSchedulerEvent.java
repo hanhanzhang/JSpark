@@ -1,5 +1,6 @@
 package com.sdu.spark.scheduler;
 
+import com.sdu.spark.executor.ExecutorExitCode.*;
 import com.sdu.spark.rdd.RDD;
 import com.sdu.spark.scheduler.action.RDDAction;
 import com.sdu.spark.utils.CallSite;
@@ -48,4 +49,13 @@ public interface DAGSchedulerEvent {
         }
     }
 
+    class ExecutorLost implements DAGSchedulerEvent {
+        public String execId;
+        public ExecutorLossReason reason;
+
+        public ExecutorLost(String execId, ExecutorLossReason reason) {
+            this.execId = execId;
+            this.reason = reason;
+        }
+    }
 }

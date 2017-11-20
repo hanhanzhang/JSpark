@@ -76,7 +76,7 @@ public class BlockManager implements BlockDataManager, BlockEvictionHandler {
     private SecurityManager securityManager;
     private int numUsableCores;
 
-    private boolean externalShuffleServiceEnabled;
+    public boolean externalShuffleServiceEnabled;
 
     public BlockManagerId blockManagerId;
 

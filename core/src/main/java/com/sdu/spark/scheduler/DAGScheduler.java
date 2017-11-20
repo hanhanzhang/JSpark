@@ -5,7 +5,10 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.sdu.spark.*;
 import com.sdu.spark.broadcast.Broadcast;
+import com.sdu.spark.executor.ExecutorExitCode.ExecutorLossReason;
+import com.sdu.spark.executor.ExecutorExitCode.SlaveLost;
 import com.sdu.spark.rdd.RDD;
+import com.sdu.spark.scheduler.DAGSchedulerEvent.ExecutorLost;
 import com.sdu.spark.scheduler.DAGSchedulerEvent.JobCancelled;
 import com.sdu.spark.scheduler.DAGSchedulerEvent.JobSubmitted;
 import com.sdu.spark.scheduler.JobResult.JobFailed;
@@ -16,9 +19,12 @@ import com.sdu.spark.scheduler.SparkListenerEvent.SparkListenerStageSubmitted;
 import com.sdu.spark.scheduler.action.RDDAction;
 import com.sdu.spark.scheduler.action.ResultHandler;
 import com.sdu.spark.serializer.SerializerInstance;
-import com.sdu.spark.storage.*;
-import com.sdu.spark.storage.BlockManagerMessages.*;
+import com.sdu.spark.storage.BlockId;
 import com.sdu.spark.storage.BlockId.RDDBlockId;
+import com.sdu.spark.storage.BlockManagerId;
+import com.sdu.spark.storage.BlockManagerMaster;
+import com.sdu.spark.storage.BlockManagerMessages.BlockManagerHeartbeat;
+import com.sdu.spark.storage.StorageLevel;
 import com.sdu.spark.utils.CallSite;
 import com.sdu.spark.utils.Clock;
 import com.sdu.spark.utils.Clock.SystemClock;
@@ -32,9 +38,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.NotSerializableException;
 import java.util.*;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
@@ -42,6 +46,7 @@ import static com.sdu.spark.SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL;
 import static com.sdu.spark.network.utils.JavaUtils.bufferToArray;
 import static com.sdu.spark.utils.Utils.exceptionString;
 import static org.apache.commons.lang3.BooleanUtils.toBoolean;
+import static org.apache.commons.lang3.StringUtils.isNotEmpty;
 
 /**
  * {@link DAGScheduler}职责:
@@ -73,6 +78,10 @@ import static org.apache.commons.lang3.BooleanUtils.toBoolean;
  *    3':
  *
  * 2: {@link #cancelJob(int, String)}终止作业及Job关联的Stage信息
+ *
+ * Note:
+ *
+ *  DAGScheduler只运行在Driver端
  *
  * @author hanhan.zhang
  * */
@@ -106,7 +115,13 @@ public class DAGScheduler {
     // key = rdd标识, value = [分区][当前分区任务运行位置](即: 行表示分区, 列表示任务运行位置)
     private final Map<Integer, TaskLocation[][]> cacheLocs = Maps.newHashMap();
 
-
+    // For tracking failed nodes, we use the MapOutputTracker's epoch number, which is sent with
+    // every task. When we detect a node failing, we note the current epoch number and failed
+    // executor, increment it for new tasks, and use this to ignore stray ShuffleMapTask results.
+    //
+    // TODO: Garbage collect information about failure epochs when we know there are no more
+    //       stray messages to detect.
+    private Map<String, Long> failedEpoch = Maps.newHashMap();
 
     // DAGEvent消息处理
     private DAGSchedulerEventProcessLoop eventProcessLoop;
@@ -160,6 +175,10 @@ public class DAGScheduler {
         } catch (Exception e) {
             throw new SparkException("Ask BlockManagerHeartbeat failure", e);
         }
+    }
+
+    public void executorLost(String execId, ExecutorLossReason reason) {
+        eventProcessLoop.post(new ExecutorLost(execId, reason));
     }
 
     /********************************Spark DAG State调度*********************************/
@@ -957,7 +976,7 @@ public class DAGScheduler {
             serviceTime = String.format("%.03f", (clock.getTimeMillis() - stage.latestInfo().submissionTime()) / 1000.0);
         }
 
-        if (StringUtils.isNotEmpty(errorMessage)) {
+        if (isNotEmpty(errorMessage)) {
             LOGGER.info("{} ({}) finished in {} s", stage, stage.name, serviceTime);
             stage.latestInfo().setCompletionTime(clock.getTimeMillis());
 
@@ -974,6 +993,44 @@ public class DAGScheduler {
         outputCommitCoordinator.stageEnd(stage.id);
         listenerBus.post(new SparkListenerStageCompleted(stage.latestInfo()));
         runningStages.remove(stage);
+    }
+
+    private void handleExecutorLost(String execId, boolean workerLost) {
+        // if the cluster manager explicitly tells us that the entire worker was lost, then
+        // we know to unregister shuffle output.  (Note that "worker" specifically refers to the process
+        // from a Standalone cluster, where the shuffle service lives in the Worker.)
+        boolean fileLost = workerLost || !env.blockManager.externalShuffleServiceEnabled;
+        removeExecutorAndUnregisterOutputs(execId,
+                                           fileLost,
+                                           null,
+                                           -1);
+    }
+
+    private void removeExecutorAndUnregisterOutputs(String execId,
+                                                    boolean fileLost,
+                                                    String hostToUnregisterOutputs,
+                                                    long maybeEpoch) {
+        long currentEpoch = maybeEpoch;
+        if (maybeEpoch == -1) {
+            currentEpoch = mapOutputTracker.getEpoch();
+        }
+        if (!failedEpoch.containsKey(execId) || failedEpoch.get(execId) < currentEpoch) {
+            failedEpoch.put(execId, currentEpoch);
+            LOGGER.info("Executor lost: {} (epoch {})", execId, currentEpoch);
+            blockManagerMaster.removeExecutor(execId);
+            if (fileLost) {
+                if (isNotEmpty(hostToUnregisterOutputs)) {
+                    LOGGER.info("Shuffle files lost for host: {} (epoch {})", hostToUnregisterOutputs, currentEpoch);
+                    mapOutputTracker.removeOutputsOnHost(hostToUnregisterOutputs);
+                } else {
+                    LOGGER.info("Shuffle files lost for executor: {} (epoch {})", execId, currentEpoch);
+                    mapOutputTracker.removeOutputsOnExecutor(execId);
+                }
+                clearCacheLocs();
+            } else {
+                LOGGER.debug("Additional executor lost message for {} (epoch {})", execId, currentEpoch);
+            }
+        }
     }
 
     private class DAGSchedulerEventProcessLoop extends EventLoop<DAGSchedulerEvent> {
@@ -1017,6 +1074,13 @@ public class DAGScheduler {
                 JobCancelled jobCancelled = (JobCancelled) event;
                 dagScheduler.handleJobCancellation(jobCancelled.jobId,
                                                    jobCancelled.reason);
+            } else if (event instanceof ExecutorLost) {
+                ExecutorLost lost = (ExecutorLost) event;
+                boolean workerLost = false;
+                if (lost.reason instanceof SlaveLost) {
+                    workerLost = true;
+                }
+                dagScheduler.handleExecutorLost(lost.execId, workerLost);
             }
         }
     }

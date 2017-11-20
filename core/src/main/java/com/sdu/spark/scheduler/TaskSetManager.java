@@ -37,4 +37,9 @@ public class TaskSetManager implements Schedulable {
     public void abort(String msg) {
         throw new UnsupportedOperationException("");
     }
+
+    /** If the given task ID is in the set of running tasks, removes it. */
+    public void removeRunningTask(long tid) {
+        throw new UnsupportedOperationException("");
+    }
 }

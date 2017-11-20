@@ -1,22 +1,35 @@
 package com.sdu.spark.scheduler;
 
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.sdu.spark.ExecutorAllocationClient;
 import com.sdu.spark.SparkContext;
-import com.sdu.spark.executor.ExecutorExitCode.*;
+import com.sdu.spark.executor.ExecutorExitCode.ExecutorLossReason;
+import com.sdu.spark.executor.ExecutorExitCode.SlaveLost;
 import com.sdu.spark.rpc.SparkConf;
-import com.sdu.spark.scheduler.SchedulableBuilder.*;
+import com.sdu.spark.scheduler.SchedulableBuilder.FIFOSchedulableBuilder;
+import com.sdu.spark.scheduler.SchedulableBuilder.FairSchedulableBuilder;
 import com.sdu.spark.storage.BlockManagerId;
+import lombok.val;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
 
+import static com.google.common.base.Strings.isNullOrEmpty;
+import static java.lang.String.format;
+import static org.apache.commons.lang3.StringUtils.isNotEmpty;
+
 /**
  * @author hanhan.zhang
  * */
 public class TaskSchedulerImpl implements TaskScheduler {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(TaskSchedulerImpl.class);
 
     public static final String SCHEDULER_MODE_PROPERTY = "spark.scheduler.mode";
 
@@ -39,7 +52,7 @@ public class TaskSchedulerImpl implements TaskScheduler {
     private Map<Integer, Map<Integer, TaskSetManager>> taskSetsByStageIdAndAttempt = Maps.newHashMap();
     public Map<Long, TaskSetManager> taskIdToTaskSetManager = Maps.newHashMap();
     private Map<Long, String> taskIdToExecutorId = Maps.newHashMap();
-    private Map<String, Set<String>> executorIdToRunningTaskIds = Maps.newHashMap();
+    private Map<String, Set<Long>> executorIdToRunningTaskIds = Maps.newHashMap();
     private volatile boolean hasReceivedTask = false;
     private volatile boolean hasLaunchedTask = false;
     private AtomicLong nextTaskId = new AtomicLong(0);
@@ -47,6 +60,7 @@ public class TaskSchedulerImpl implements TaskScheduler {
     private int maxTaskFailures;
     private DAGScheduler dagScheduler = null;
     private long STARVATION_TIMEOUT_MS;
+    private TaskResultGetter taskResultGetter;
 
 
     /*****************************Spark Executor**********************************/
@@ -76,6 +90,7 @@ public class TaskSchedulerImpl implements TaskScheduler {
 
         this.schedulingMode = SchedulingMode.withName(this.conf.get(SCHEDULER_MODE_PROPERTY, SchedulingMode.FIFO.name()));
         this.rootPool = new Pool("", schedulingMode, 0, 0);
+        this.taskResultGetter = new TaskResultGetter(sc.env, this);
     }
 
     public void initialize(SchedulerBackend schedulerBackend) {
@@ -145,7 +160,7 @@ public class TaskSchedulerImpl implements TaskScheduler {
                 }
             }
             if (conflictingTaskSet) {
-                throw new IllegalStateException(String.format("Stage[id = %s]超过两个TaskSet: %s", stage,
+                throw new IllegalStateException(format("Stage[id = %s]超过两个TaskSet: %s", stage,
                                                 StringUtils.join(stageTaskSets.values(), '\n')));
             }
 
@@ -233,7 +248,52 @@ public class TaskSchedulerImpl implements TaskScheduler {
 
     /*****************************Spark Job Task运行状态变更******************************/
     public void statusUpdate(long taskId, TaskState state, ByteBuffer value) {
+        String failedExecutor = null;
+        ExecutorLossReason reason = null;
+        synchronized (this) {
+            try {
+                TaskSetManager taskSet = taskIdToTaskSetManager.get(taskId);
+                if (taskSet == null) {
+                    LOGGER.warn("Ignoring update with state {} for TID {} because its task set is gone (this is " +
+                                "likely the result of receiving duplicate task finished status updates) or its " +
+                                "executor has been marked as failed.", state, taskId);
+                } else {
+                    if (state == TaskState.LOST) {
+                        String execId = taskIdToExecutorId.get(taskId);
+                        if (isNullOrEmpty(execId)) {
+                            throw new IllegalStateException("taskIdToTaskSetManager.contains(tid) <=> taskIdToExecutorId.contains(tid)");
+                        }
+                        if (executorIdToRunningTaskIds.containsKey(execId)) {
+                            reason = new SlaveLost(format("Task %s was lost, so marking the executor as lost as well.", taskId));
+                            removeExecutor(execId, reason);
+                            failedExecutor = execId;
+                        }
+                    }
+                    if (TaskState.isFinished(state)) {
+                        cleanupTaskState(taskId);
+                        taskSet.removeRunningTask(taskId);
+                        if (state == TaskState.FINISHED) {
+                            taskResultGetter.enqueueSuccessfulTask(taskSet,
+                                                                   taskId,
+                                                                   value);
+                        } else if (Sets.newHashSet(TaskState.FAILED, TaskState.KILLED, TaskState.LOST).contains(state)) {
+                            taskResultGetter.enqueueFailedTask(taskSet,
+                                                               taskId,
+                                                               state,
+                                                               value);
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                LOGGER.error("Exception in statusUpdate", e);
+            }
+        }
 
+        // Update the DAGScheduler without holding a lock on this, since that can deadlock
+        if (failedExecutor != null) {
+            dagScheduler.executorLost(failedExecutor, reason);
+            backend.reviveOffers();
+        }
     }
 
     /******************************Spark Job Task分发***********************************/
@@ -241,9 +301,24 @@ public class TaskSchedulerImpl implements TaskScheduler {
         throw new UnsupportedOperationException("");
     }
 
+    private void cleanupTaskState(long tid) {
+        taskIdToTaskSetManager.remove(tid);
+        String execId = taskIdToExecutorId.remove(tid);
+        if (isNotEmpty(execId)) {
+            Set<Long> runningTaskIds = executorIdToRunningTaskIds.get(execId);
+            if (CollectionUtils.isNotEmpty(runningTaskIds)) {
+                runningTaskIds.remove(tid);
+            }
+        }
+    }
+
     /******************************Spark Executor运行状态********************************/
     public boolean isExecutorBusy(String executorId) {
         throw new UnsupportedOperationException("");
+    }
+
+    private void removeExecutor(String execId, ExecutorLossReason reason) {
+
     }
 
     public void error(String message) {

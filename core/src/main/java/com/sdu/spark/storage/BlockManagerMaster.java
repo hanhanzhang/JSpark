@@ -16,15 +16,14 @@ import static com.sdu.spark.utils.RpcUtils.getRpcAskTimeout;
 /**
  * {@link BlockManagerMaster}职责:
  *
- *  1: Driver、Executor都会实例化BlockManagerMaster, 但区别在于:
+ *  1: BlockManagerMaster实例化(Driver与Executor会在SparkEnv中构建), 调用链:
  *
- *   1': Driver端
- *
- *      SparkEnv向Driver RpcEnv注册BlockManagerMasterEndpoint节点, BlockManager.driverEndpoint为该节点引用
- *
- *   2': Executor端
- *
- *      SparkEnv向Driver查找BlockManagerMasterEndpoint节点引用, 并赋值给BlockManager.driverEndpoint
+ *     SparkEnv.create(isDriver)
+ *       |
+ *       +---> SparkEnv.registerOrLookupEndpoint()[Driver注册BlockManagerMasterEndpoint(Name=BlockManagerMaster)
+ *               |                                 Executor向Driver询问BlockManagerMaster节点]
+ *               |
+ *               +---> 实例化BlockManagerMaster组件
  *
  * 2: 管理Block数据信息
  *

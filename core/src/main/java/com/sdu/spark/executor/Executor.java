@@ -55,13 +55,7 @@ import static org.apache.commons.lang3.StringUtils.join;
  *      |   未注册BlockManager
  *      +----------------------> BlockManagerMaster.reregister(RegisterBlockManager)
  *
- * 2: Executor执行计算任务并计算结果上报Driver, 根据计算结果数据量向Driver上报内容不同:
- *
- *    1':
- *
- *    2':
- *
- *    3':
+ * 2: Executor Shuffle
  *
  * 3: Executor Kill运行中Task
  *
@@ -178,7 +172,10 @@ public class Executor {
     private void startDriverHeartbeat() {
         long intervalMs = conf.getTimeAsMs("spark.executor.heartbeatInterval", "10s");
         long initialDelay = (long) (intervalMs + Math.random() * intervalMs);
-        heartbeater.scheduleAtFixedRate(this::reportHeartBeat, initialDelay, intervalMs, TimeUnit.MILLISECONDS);
+        heartbeater.scheduleAtFixedRate(this::reportHeartBeat,
+                                        initialDelay,
+                                        intervalMs,
+                                        TimeUnit.MILLISECONDS);
     }
 
     private void reportHeartBeat() {

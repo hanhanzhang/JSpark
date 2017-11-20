@@ -29,6 +29,7 @@ import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.*;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -152,12 +153,10 @@ public class Utils {
         try {
             return future.get();
         } catch (InterruptedException e) {
-            e.printStackTrace();
             LOGGER.error("future task interrupted exception", e);
             throw new RuntimeException("future task interrupted exception", e);
         } catch (ExecutionException e) {
             LOGGER.error("future task execute exception", e);
-            e.printStackTrace();
             throw new RuntimeException("future task execute exception", e);
         }
     }

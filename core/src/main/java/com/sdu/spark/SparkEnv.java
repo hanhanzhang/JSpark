@@ -235,11 +235,15 @@ public class SparkEnv {
                 numUsableCores
         );
         // step3: Block Manager Master RpcEndpoint(负责接收消息, 获取Block数据、注册及状态等)
-        GeneralRpcEndPointCreator rpcEndPointCreator = () -> new BlockManagerMasterEndpoint(rpcEnv, isLocal, conf, liveListenerBus);
-        BlockManagerMaster blockManagerMaster = new BlockManagerMaster(
-                registerOrLookupEndpoint(conf, isDriver, rpcEnv, BlockManagerMaster.DRIVER_ENDPOINT_NAME, rpcEndPointCreator),
-                conf,
-                isDriver
+        GeneralRpcEndPointCreator endPointCreator = () -> new BlockManagerMasterEndpoint(rpcEnv, isLocal, conf, liveListenerBus);
+        RpcEndpointRef driverEndpointRef = registerOrLookupEndpoint(conf,
+                                                                    isDriver,
+                                                                    rpcEnv,
+                                                                    BlockManagerMaster.DRIVER_ENDPOINT_NAME,
+                                                                    endPointCreator);
+        BlockManagerMaster blockManagerMaster = new BlockManagerMaster(driverEndpointRef,
+                                                                       conf,
+                                                                       isDriver
         );
         // step4: 创建BlockManager(Executor、Driver都创建且BlockManager只有initialize()方可有效)
         BlockManager blockManager = new BlockManager(
@@ -261,13 +265,11 @@ public class SparkEnv {
         OutputCommitCoordinator outputCommitCoordinator = mockOutputCommitCoordinator == null ? new OutputCommitCoordinator(conf, isDriver)
                                                                                               : mockOutputCommitCoordinator;
         GeneralRpcEndPointCreator outputCommitRpcEndPointCreator = () -> new OutputCommitCoordinatorEndpoint(rpcEnv, outputCommitCoordinator);
-        outputCommitCoordinator.coordinatorRef = registerOrLookupEndpoint(
-                conf,
-                isDriver,
-                rpcEnv,
-                "OutputCommitCoordinator",
-                outputCommitRpcEndPointCreator
-        );
+        outputCommitCoordinator.coordinatorRef = registerOrLookupEndpoint(conf,
+                                                                          isDriver,
+                                                                          rpcEnv,
+                                                                          "OutputCommitCoordinator",
+                                                                          outputCommitRpcEndPointCreator);
 
         SparkEnv envInstance = new SparkEnv(executorId,
                                             rpcEnv,
@@ -321,8 +323,12 @@ public class SparkEnv {
         return instantiateClass(conf, isDriver, conf.get(propertyName, defaultClassName));
     }
 
-    private static RpcEndpointRef registerOrLookupEndpoint(SparkConf conf, boolean isDriver, RpcEnv rpcEnv,
-                                                           String name, MapOutputTracker mapOutputTracker, MapOutputTrackerRpcEndPointCreator creator) {
+    private static RpcEndpointRef registerOrLookupEndpoint(SparkConf conf,
+                                                           boolean isDriver,
+                                                           RpcEnv rpcEnv,
+                                                           String name,
+                                                           MapOutputTracker mapOutputTracker,
+                                                           MapOutputTrackerRpcEndPointCreator creator) {
         if (isDriver) {
             LOGGER.info("Registering {}", name);
             return rpcEnv.setRpcEndPointRef(name, creator.create((MapOutputTrackerMaster) mapOutputTracker));
@@ -331,8 +337,11 @@ public class SparkEnv {
         }
     }
 
-    private static RpcEndpointRef registerOrLookupEndpoint(SparkConf conf, boolean isDriver, RpcEnv rpcEnv,
-                                                           String name, GeneralRpcEndPointCreator creator) {
+    private static RpcEndpointRef registerOrLookupEndpoint(SparkConf conf,
+                                                           boolean isDriver,
+                                                           RpcEnv rpcEnv,
+                                                           String name,
+                                                           GeneralRpcEndPointCreator creator) {
         if (isDriver) {
             LOGGER.info("Registering {}", name);
             return rpcEnv.setRpcEndPointRef(name, creator.create());
