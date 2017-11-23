@@ -4,13 +4,13 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.sdu.spark.ExecutorAllocationClient;
 import com.sdu.spark.SparkContext;
+import com.sdu.spark.scheduler.TaskEndReason.*;
 import com.sdu.spark.executor.ExecutorExitCode.ExecutorLossReason;
 import com.sdu.spark.executor.ExecutorExitCode.SlaveLost;
 import com.sdu.spark.rpc.SparkConf;
 import com.sdu.spark.scheduler.SchedulableBuilder.FIFOSchedulableBuilder;
 import com.sdu.spark.scheduler.SchedulableBuilder.FairSchedulableBuilder;
 import com.sdu.spark.storage.BlockManagerId;
-import lombok.val;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
@@ -58,7 +58,7 @@ public class TaskSchedulerImpl implements TaskScheduler {
     private AtomicLong nextTaskId = new AtomicLong(0);
     // Spark Task失败重试次数
     private int maxTaskFailures;
-    private DAGScheduler dagScheduler = null;
+    public DAGScheduler dagScheduler = null;
     private long STARVATION_TIMEOUT_MS;
     private TaskResultGetter taskResultGetter;
 
@@ -186,6 +186,10 @@ public class TaskSchedulerImpl implements TaskScheduler {
         return new TaskSetManager(this, taskSet, maxTaskFailures, blacklistTrackerOpt);
     }
 
+    public synchronized void handleTaskGettingResult(TaskSetManager taskSetManager, long tid) {
+        taskSetManager.handleTaskGettingResult(tid);
+    }
+
     @Override
     public Pool rootPool() {
         return rootPool;
@@ -294,6 +298,24 @@ public class TaskSchedulerImpl implements TaskScheduler {
             dagScheduler.executorLost(failedExecutor, reason);
             backend.reviveOffers();
         }
+    }
+
+    public synchronized void handleFailedTask(TaskSetManager taskSetManager,
+                                              long tid,
+                                              TaskState taskState,
+                                              TaskFailedReason reason) {
+        taskSetManager.handleFailedTask(tid, taskState, reason);
+        if (!taskSetManager.isZombie && !taskSetManager.someAttemptSucceeded(tid)) {
+            // Need to revive offers again now that the task set manager state has been updated to
+            // reflect failed tasks that need to be re-run.
+            backend.reviveOffers();
+        }
+    }
+
+    public synchronized void handleSuccessfulTask(TaskSetManager taskSetManager,
+                                                  long tid,
+                                                  DirectTaskResult<?> taskResult) {
+        taskSetManager.handleSuccessfulTask(tid, taskResult);
     }
 
     /******************************Spark Job Task分发***********************************/

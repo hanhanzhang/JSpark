@@ -428,6 +428,10 @@ public class BlockManager implements BlockDataManager, BlockEvictionHandler {
         throw new SparkException("Block " + blockId + " was not found even though it's read-locked");
     }
 
+    public ChunkedByteBuffer getRemoteBytes(BlockId blockId) {
+        throw new UnsupportedOperationException("");
+    }
+
     public DiskBlockObjectWriter getDiskWriter(BlockId blockId,
                                                File file,
                                                SerializerInstance serializerInstance,

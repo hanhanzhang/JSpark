@@ -5,7 +5,7 @@ import com.sdu.spark.SparkEnv;
 import com.sdu.spark.TaskContext;
 import com.sdu.spark.broadcast.Broadcast;
 import com.sdu.spark.rdd.RDD;
-import com.sdu.spark.scheduler.action.RDDAction;
+import com.sdu.spark.scheduler.action.JobAction;
 import com.sdu.spark.serializer.SerializerInstance;
 import com.sdu.spark.utils.scala.Tuple2;
 
@@ -53,16 +53,16 @@ public class ResultTask<T, U> extends Task<U> implements Serializable {
         SerializerInstance serializer = SparkEnv.env.closureSerializer.newInstance();
 
         // DAGScheduler.submitMissingTasks()
-        // ResultStage ===> Tuple2<RDD, RDDAction<T, U>>
+        // ResultStage ===> Tuple2<RDD, JobAction<T, U>>
         // RDDAction即触发Spark Job动作因子
-        Tuple2<RDD<T>, RDDAction<T, U>> res = serializer.deserialize(wrap(taskBinary.value()),
+        Tuple2<RDD<T>, JobAction<T, U>> res = serializer.deserialize(wrap(taskBinary.value()),
                                                                                    currentThread().getContextClassLoader());
         executorDeserializeTime = System.currentTimeMillis() - deserializeStartTime;
         executorDeserializeCpuTime = bean.isCurrentThreadCpuTimeSupported() ? bean.getCurrentThreadCpuTime() - deserializeStartCpuTime
                                                                                     : 0L;
 
         assert res != null;
-        RDDAction<T, U> action = res._2();
+        JobAction<T, U> action = res._2();
         RDD<T> rdd = res._1();
         Iterator<T> iterator = rdd.iterator(partition, context);
         return action.func(context, iterator);

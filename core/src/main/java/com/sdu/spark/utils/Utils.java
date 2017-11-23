@@ -77,6 +77,19 @@ public class Utils {
         return Utils.class.getClass().getClassLoader();
     }
 
+    public static long getMaxResultSize(SparkConf conf) {
+        return ((long) memoryStringToMb(conf.get("spark.driver.maxResultSize", "1g"))) << 20;
+    }
+
+    /**
+     * Convert a Java memory parameter passed to -Xmx (such as 300m or 1g) to a number of mebibytes.
+     * */
+    private static int memoryStringToMb(String str) {
+        // Convert to bytes, rather than directly to MB, because when no units are specified the unit
+        // is assumed to be bytes
+        return (int) (JavaUtils.byteStringAsBytes(str) / 1024 / 1024);
+    }
+
     public static String exceptionString(Throwable e) {
         if (e == null) {
             return "";

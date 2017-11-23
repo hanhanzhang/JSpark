@@ -10,7 +10,7 @@ import java.util.Iterator;
  *
  * @author hanhan.zhang
  * */
-public interface RDDAction<T, U> extends Serializable{
+public interface JobAction<T, U> extends Serializable{
 
     U func(TaskContext context, Iterator<T> dataIterator);
 

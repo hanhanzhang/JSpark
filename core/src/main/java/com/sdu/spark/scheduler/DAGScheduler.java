@@ -8,15 +8,10 @@ import com.sdu.spark.broadcast.Broadcast;
 import com.sdu.spark.executor.ExecutorExitCode.ExecutorLossReason;
 import com.sdu.spark.executor.ExecutorExitCode.SlaveLost;
 import com.sdu.spark.rdd.RDD;
-import com.sdu.spark.scheduler.DAGSchedulerEvent.ExecutorLost;
-import com.sdu.spark.scheduler.DAGSchedulerEvent.JobCancelled;
-import com.sdu.spark.scheduler.DAGSchedulerEvent.JobSubmitted;
+import com.sdu.spark.scheduler.DAGSchedulerEvent.*;
 import com.sdu.spark.scheduler.JobResult.JobFailed;
-import com.sdu.spark.scheduler.SparkListenerEvent.SparkListenerJobEnd;
-import com.sdu.spark.scheduler.SparkListenerEvent.SparkListenerJobStart;
-import com.sdu.spark.scheduler.SparkListenerEvent.SparkListenerStageCompleted;
-import com.sdu.spark.scheduler.SparkListenerEvent.SparkListenerStageSubmitted;
-import com.sdu.spark.scheduler.action.RDDAction;
+import com.sdu.spark.scheduler.SparkListenerEvent.*;
+import com.sdu.spark.scheduler.action.JobAction;
 import com.sdu.spark.scheduler.action.ResultHandler;
 import com.sdu.spark.serializer.SerializerInstance;
 import com.sdu.spark.storage.BlockId;
@@ -32,7 +27,6 @@ import com.sdu.spark.utils.EventLoop;
 import com.sdu.spark.utils.scala.Tuple2;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.ArrayUtils;
-import org.apache.commons.lang3.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -46,12 +40,13 @@ import static com.sdu.spark.SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL;
 import static com.sdu.spark.network.utils.JavaUtils.bufferToArray;
 import static com.sdu.spark.utils.Utils.exceptionString;
 import static org.apache.commons.lang3.BooleanUtils.toBoolean;
+import static org.apache.commons.lang3.StringUtils.endsWith;
 import static org.apache.commons.lang3.StringUtils.isNotEmpty;
 
 /**
  * {@link DAGScheduler}职责:
  *
- * 1: {@link #runJob(RDD, RDDAction, List, CallSite, ResultHandler, Properties)}划分并提及Stage
+ * 1: {@link #runJob(RDD, JobAction, List, CallSite, ResultHandler, Properties)}划分并提及Stage
  *
  *  DAGScheduler.runJob()
  *    |
@@ -184,7 +179,7 @@ public class DAGScheduler {
     /********************************Spark DAG State调度*********************************/
     /**
      * @param rdd target RDD to run tasks on
-     * @param rddAction a function to run on each partition of the RDD
+     * @param jobAction a function to run on each partition of the RDD
      * @param partitions set of partitions to run on; some jobs may not want to compute on all
      *                   partitions of the target RDD, e.g. for operations like first()
      * @param callSite where in the user program this job was called
@@ -192,13 +187,13 @@ public class DAGScheduler {
      * @param properties scheduler properties to attach to this job, e.g. fair scheduler pool name
      * */
     public <T, U> void runJob(RDD<T> rdd,
-                              RDDAction<T, U> rddAction,
+                              JobAction<T, U> jobAction,
                               List<Integer> partitions,
                               CallSite callSite,
                               ResultHandler<U> resultHandler,
                               Properties properties) throws Exception {
         long start = System.nanoTime();
-        JobWaiter<U> waiter = submitJob(rdd, rddAction, partitions, callSite, resultHandler, properties);
+        JobWaiter<U> waiter = submitJob(rdd, jobAction, partitions, callSite, resultHandler, properties);
         Future<Boolean> future = waiter.completionFuture();
         try {
             boolean success = future.get();
@@ -219,7 +214,7 @@ public class DAGScheduler {
     }
 
     private <T, U> JobWaiter<U> submitJob(RDD<T> rdd,
-                                          RDDAction<T, U> rddAction,
+                                          JobAction<T, U> jobAction,
                                           List<Integer> partitions,
                                           CallSite callSite,
                                           ResultHandler<U> resultHandler,
@@ -245,7 +240,7 @@ public class DAGScheduler {
         // 提交作业事件
         eventProcessLoop.post(new JobSubmitted<>(jobId,
                                                  rdd,
-                                                 rddAction,
+                jobAction,
                                                  partitions,
                                                  callSite,
                                                  waiter,
@@ -255,7 +250,7 @@ public class DAGScheduler {
 
     private <T, U> void handleJobSubmitted(int jobId,
                                            RDD<T> finalRDD,
-                                           RDDAction<T, U> rddAction,
+                                           JobAction<T, U> jobAction,
                                            List<Integer> partitions,
                                            CallSite callSite,
                                            JobListener listener,
@@ -264,7 +259,7 @@ public class DAGScheduler {
         try {
             // New stage creation may throw an exception if, for example, jobs are run on a
             // HadoopRDD whose underlying HDFS files have been deleted.
-            finalStage = createResultStage(finalRDD, rddAction, partitions, jobId, callSite);
+            finalStage = createResultStage(finalRDD, jobAction, partitions, jobId, callSite);
         } catch (Exception e){
             listener.jobFailed(e);
             return;
@@ -678,7 +673,7 @@ public class DAGScheduler {
 
     /**Create a ResultStage associated with the provided jobId*/
     private ResultStage createResultStage(RDD<?> rdd,
-                                          RDDAction<?, ?> rddAction,
+                                          JobAction<?, ?> jobAction,
                                           List<Integer> partitions,
                                           int jobId,
                                           CallSite callSite) {
@@ -696,7 +691,7 @@ public class DAGScheduler {
         int id = nextStageId.getAndIncrement();
         ResultStage stage = new ResultStage(id,
                                             rdd,
-                                            rddAction,
+                jobAction,
                                             partitions,
                                             parents,
                                             jobId,
@@ -1033,6 +1028,33 @@ public class DAGScheduler {
         }
     }
 
+    /**
+     * Called by the TaskSetManager to cancel an entire TaskSet due to either repeated failures or
+     * cancellation of the job itself.
+     * */
+    public void taskSetFailed(TaskSet taskSet, String reason, Throwable exception) {
+        eventProcessLoop.post(new TaskSetFailed(taskSet, reason, exception));
+    }
+
+    private void handleTaskSetFailed(TaskSet taskSet, String reason, Throwable exception) {
+        Stage abortStage = stageIdToStage.get(taskSet.stageId);
+        if (abortStage != null) {
+            abortStage(abortStage, reason, exception);
+        }
+    }
+
+    /**
+     * Called by the TaskSetManager to report that a task has completed
+     * and results are being fetched remotely.
+     * */
+    public void taskGettingResult(TaskInfo taskInfo) {
+        eventProcessLoop.post(new GettingResultEvent(taskInfo));
+    }
+
+    private void handleGetTaskResult(TaskInfo taskInfo) {
+        listenerBus.post(new SparkListenerTaskGettingResult(taskInfo));
+    }
+
     private class DAGSchedulerEventProcessLoop extends EventLoop<DAGSchedulerEvent> {
         private final Logger LOGGER = LoggerFactory.getLogger(DAGSchedulerEventProcessLoop.class);
 
@@ -1064,7 +1086,7 @@ public class DAGScheduler {
                 JobSubmitted jobSubmitted = (JobSubmitted) event;
                 dagScheduler.handleJobSubmitted(jobSubmitted.jobId,
                                                 jobSubmitted.finalRDD,
-                                                jobSubmitted.rddAction,
+                                                jobSubmitted.jobAction,
                                                 jobSubmitted.partitions,
                                                 jobSubmitted.callSite,
                                                 jobSubmitted.listener,
@@ -1081,6 +1103,14 @@ public class DAGScheduler {
                     workerLost = true;
                 }
                 dagScheduler.handleExecutorLost(lost.execId, workerLost);
+            } else if (event instanceof TaskSetFailed) {
+                TaskSetFailed taskSetFailed = (TaskSetFailed) event;
+                dagScheduler.handleTaskSetFailed(taskSetFailed.taskSet,
+                                                 taskSetFailed.reason,
+                                                 taskSetFailed.exception);
+            } else if (event instanceof GettingResultEvent) {
+                GettingResultEvent gettingResultEvent = (GettingResultEvent) event;
+                dagScheduler.handleGetTaskResult(gettingResultEvent.taskInfo);
             }
         }
     }

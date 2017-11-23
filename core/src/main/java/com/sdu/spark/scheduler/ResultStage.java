@@ -2,7 +2,7 @@ package com.sdu.spark.scheduler;
 
 import com.google.common.collect.Lists;
 import com.sdu.spark.rdd.RDD;
-import com.sdu.spark.scheduler.action.RDDAction;
+import com.sdu.spark.scheduler.action.JobAction;
 import com.sdu.spark.utils.CallSite;
 
 import java.util.Collections;
@@ -17,17 +17,17 @@ public class ResultStage extends Stage  {
 
     private ActiveJob activeJob;
 
-    public RDDAction<?, ?> func;
+    public JobAction<?, ?> func;
 
     public ResultStage(int id,
                        RDD<?> rdd,
-                       RDDAction<?, ?> rddAction,
+                       JobAction<?, ?> jobAction,
                        List<Integer> partitions,
                        List<Stage> parents,
                        int firstJobId,
                        CallSite callSite) {
         super(id, rdd, partitions.size(), parents, firstJobId, callSite);
-        this.func = rddAction;
+        this.func = jobAction;
         this.partitions = partitions;
     }
 

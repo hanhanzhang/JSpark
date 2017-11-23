@@ -19,6 +19,13 @@ public interface TaskEndReason extends Serializable {
         }
     }
 
+    class TaskResultLost extends TaskFailedReason {
+        @Override
+        public String toErrorString() {
+            return "TaskResultLost (result lost from block manager)";
+        }
+    }
+
     class TaskKilled extends TaskFailedReason {
 
         private String reason;
