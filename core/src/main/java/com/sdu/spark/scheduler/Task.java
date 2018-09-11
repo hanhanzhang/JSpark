@@ -15,7 +15,7 @@ import java.util.Properties;
  * */
 public abstract class Task<T> {
     protected int stageId;
-    private int stageAttemptId;
+    public int stageAttemptId;
     protected int partitionId;
     public transient Properties localProperties = new Properties();
     private int jobId;

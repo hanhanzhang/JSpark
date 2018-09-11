@@ -3,7 +3,6 @@ package com.sdu.spark.scheduler;
 import com.google.common.collect.Lists;
 import com.sdu.spark.rdd.RDD;
 import com.sdu.spark.scheduler.action.JobAction;
-import com.sdu.spark.utils.CallSite;
 
 import java.util.Collections;
 import java.util.List;
@@ -17,16 +16,15 @@ public class ResultStage extends Stage  {
 
     private ActiveJob activeJob;
 
-    public JobAction<?, ?> func;
+    private JobAction<?, ?> func;
 
     public ResultStage(int id,
                        RDD<?> rdd,
                        JobAction<?, ?> jobAction,
                        List<Integer> partitions,
                        List<Stage> parents,
-                       int firstJobId,
-                       CallSite callSite) {
-        super(id, rdd, partitions.size(), parents, firstJobId, callSite);
+                       int firstJobId) {
+        super(id, rdd, partitions.size(), parents, firstJobId);
         this.func = jobAction;
         this.partitions = partitions;
     }
@@ -36,7 +34,7 @@ public class ResultStage extends Stage  {
         if (activeJob != null) {
             List<Integer> unfinished = Lists.newLinkedList();
             for (int i = 0; i < activeJob.numPartitions; ++i) {
-                if (!activeJob.finished[i]) {
+                if (!activeJob.isPartitionTaskFinished(i)) {
                     unfinished.add(i);
                 }
             }
@@ -47,6 +45,10 @@ public class ResultStage extends Stage  {
 
     public void removeActiveJob() {
         activeJob = null;
+    }
+
+    public JobAction<?, ?> getJobAction() {
+        return func;
     }
 
     public ActiveJob getActiveJob() {

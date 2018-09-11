@@ -2,6 +2,9 @@ package com.sdu.spark.rpc;
 
 import java.io.File;
 
+import static com.sdu.spark.utils.Utils.stripPrefix;
+import static com.sdu.spark.utils.Utils.stripSuffix;
+
 /**
  * @author hanhan.zhang
  * */
@@ -34,4 +37,10 @@ public interface RpcEnvFileServer {
      * @return URI for the root of the directory in the file server.
      */
     String addDirectory(String baseUri, File path);
+
+    default String validateDirectoryUri(String baseUri) {
+        String fixedBaseUri = "/" + stripSuffix(stripPrefix(baseUri, "/"), "/");
+        assert !fixedBaseUri.endsWith("/files") && fixedBaseUri.endsWith("/jars") : "Directory URI cannot be /files nor /jars.";
+        return fixedBaseUri;
+    }
 }

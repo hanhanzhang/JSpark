@@ -22,7 +22,12 @@ import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 
 /**
- * {@link MapOutputTracker}
+ * MapOutputTracker跟踪Map任务的输出状态, 便于Reduce任务定位Map结果输出所在节点地址进而获取中间输出结果.
+ *
+ * 每个Map任务或Reduce任务都有唯一标识, 分别为mapId和reduceId. 每个Reduce任务的输入可能是多个Map任务的
+ * 的输出, Reduce会到各个Map任务所在节点拉取Block, 这过程称为Shuffle.
+ *
+ * DAGSchedule创建ShuffleMapStage时, 会向MapOutputTrackerMaster注册shuffleId
  *
  * @author hanhan.zhang
  * */
@@ -39,7 +44,7 @@ public abstract class MapOutputTracker {
      *
      * Executor: Driver RpcEnv MapOutputTrackerMasterEndPoint节点引用
      * */
-    public RpcEndpointRef trackerEndpoint;
+    protected RpcEndpointRef trackerEndpoint;
 
     /**
      * 当Shuffle的结果输出失效时, Driver会更新epoch值并将此值作为Task一部分发送给Executor, Executor根据
@@ -47,7 +52,7 @@ public abstract class MapOutputTracker {
      * 的结果输出
      * */
     protected long epoch = 0L;
-    protected Object epochLock = new Object();
+    protected final Object epochLock = new Object();
 
     protected SparkConf conf;
 
@@ -83,8 +88,10 @@ public abstract class MapOutputTracker {
     // Serialize an array of map combiner locations into an efficient byte format so that we can send
     // it to reduce tasks. We do this by compressing the serialized bytes using GZIP. They will
     // generally be pretty compressible because many map outputs will be on the same hostname.
-    public static Pair<byte[], Broadcast<byte[]>> serializeMapStatuses(MapStatus[] statuses, BroadcastManager broadcastManager,
-                                                                       boolean isLocal, int minBroadcastSize) throws IOException {
+    public static Pair<byte[], Broadcast<byte[]>> serializeMapStatuses(MapStatus[] statuses,
+                                                                       BroadcastManager broadcastManager,
+                                                                       boolean isLocal,
+                                                                       int minBroadcastSize) throws IOException {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         out.write(DIRECT);
         ObjectOutputStream objOut = new ObjectOutputStream(new GZIPOutputStream(out));
@@ -124,7 +131,8 @@ public abstract class MapOutputTracker {
         }
     }
 
-    public static MapStatus[] deserializeMapStatuses(byte[] bytes) {
+    @SuppressWarnings("unchecked")
+    protected static MapStatus[] deserializeMapStatuses(byte[] bytes) {
         assert (bytes.length > 0);
         int type = bytes[0];
         try {
@@ -143,10 +151,10 @@ public abstract class MapOutputTracker {
         }
     }
 
-    public static Multimap<BlockManagerId, Tuple2<BlockId, Long>> convertMapStatuses(int shuffleId,
-                                                                                               int startPartition,
-                                                                                               int endPartition,
-                                                                                               MapStatus[] statuses) {
+    protected static Multimap<BlockManagerId, Tuple2<BlockId, Long>> convertMapStatuses(int shuffleId,
+                                                                                        int startPartition,
+                                                                                        int endPartition,
+                                                                                        MapStatus[] statuses) {
         assert (statuses != null);
         Multimap<BlockManagerId, Tuple2<BlockId, Long>> splitsByAddress = LinkedHashMultimap.create();
         for (int i = 0; i < statuses.length; ++i) {

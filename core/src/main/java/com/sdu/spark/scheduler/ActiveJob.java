@@ -15,24 +15,22 @@ public class ActiveJob {
     public Properties properties;
 
     public int numPartitions = 0;
-    public boolean[] finished;
+    private int numFinished;
+    private boolean[] finished;
 
     /**
      * @param jobId A unique ID for this job.
      * @param finalStage The stage that this job computes (either a ResultStage for an action or a
      *                   ShuffleMapStage for submitMapStage).
-     * @param callSite Where this job was initiated in the user's program (shown on UI).
      * @param listener A listener to notify if tasks in this job finish or the job fails.
      * @param properties Scheduling properties attached to the job, such as fair scheduler pool name.
      * */
     public ActiveJob(int jobId,
                      Stage finalStage,
-                     CallSite callSite,
                      JobListener listener,
                      Properties properties) {
         this.jobId = jobId;
         this.finalStage = finalStage;
-        this.callSite = callSite;
         this.listener = listener;
         this.properties = properties;
 
@@ -42,7 +40,11 @@ public class ActiveJob {
            this.numPartitions = ((ShuffleMapStage) finalStage).rdd.partitions().length;
         }
 
+        this.numFinished = 0;
         this.finished = new boolean[this.numPartitions];
+        for (int i = 0; i < this.numPartitions; ++i) {
+            this.finished[i] = false;
+        }
     }
 
     public int jobId() {
@@ -55,6 +57,19 @@ public class ActiveJob {
 
     public Stage finalStage() {
         return finalStage;
+    }
+
+    public boolean isPartitionTaskFinished(int partitionId) {
+        return this.finished[partitionId];
+    }
+
+    public void markPartitionTaskFinished(int partitionId) {
+        this.finished[partitionId] = true;
+        this.numFinished += 1;
+    }
+
+    public boolean isJobFinished() {
+        return numFinished == numPartitions;
     }
 
     @Override

@@ -18,6 +18,14 @@ public class RpcUtils {
         return rpcEnv.setRpcEndPointRef(name, new RpcAddress(driverHost, driverPort));
     }
 
+    public static int numRetries(SparkConf conf) {
+        return conf.getInt("spark.rpc.numRetries", 3);
+    }
+
+    public static long retryWaitMs(SparkConf conf) {
+        return conf.getTimeAsMs("spark.rpc.retry.wait", "3s");
+    }
+
     public static int maxMessageSizeBytes(SparkConf conf) {
         int maxSizeInMB = conf.getInt("spark.rpc.message.maxSize", 128);
         if (maxSizeInMB > MAX_MESSAGE_SIZE_IN_MB) {

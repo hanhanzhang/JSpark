@@ -29,7 +29,6 @@ import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -591,6 +590,33 @@ public class Utils {
         return (System.currentTimeMillis() - startTimeMs) + " ms";
     }
 
+
+    public static String encodeFileNameToURIRawPath(String fileName) {
+        throw new UnsupportedOperationException();
+    }
+
+
+    public static CallSite getCallSite() {
+        throw new UnsupportedOperationException();
+    }
+
+    public static String getFormattedClassName(Object obj) {
+        return obj.getClass().getSimpleName().replace("$", "");
+    }
+
+    public static String stripPrefix(String text, String prefix) {
+        if (text.startsWith(prefix)) {
+            return text.substring(prefix.length());
+        }
+        return text;
+    }
+
+    public static String stripSuffix(String text, String suffix) {
+        if (text.endsWith(suffix)) {
+            return text.substring(0, text.length() - suffix.length());
+        }
+        return text;
+    }
 
     public static <T> Tuple2<List<T>, List<T>> partition(List<T> list, Function<T> f) {
         List<T> trueList = Lists.newLinkedList();

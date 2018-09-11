@@ -20,7 +20,6 @@ public abstract class Stage {
     public int numTasks;
     public List<Stage> parents;
     public int firstJobId;
-    public CallSite callSite;
 
     private Set<Integer> jobIds = Sets.newHashSet();
     private int nextAttemptId = 0;
@@ -36,18 +35,14 @@ public abstract class Stage {
                  RDD<?> rdd,
                  int numTasks,
                  List<Stage> parents,
-                 int firstJobId,
-                 CallSite callSite) {
+                 int firstJobId) {
         this.id = id;
         this.rdd = rdd;
         this.numTasks = numTasks;
         this.parents = parents;
         this.firstJobId = firstJobId;
-        this.callSite = callSite;
 
         this.numPartitions = this.rdd.partitions().length;
-        this.name = this.callSite.shortForm;
-        this.details = this.callSite.longForm;
         this.latestInfo = StageInfo.fromStage(this, nextAttemptId);
     }
 

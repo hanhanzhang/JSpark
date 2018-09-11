@@ -2,15 +2,16 @@ package com.sdu.spark.rpc.netty;
 
 import com.sdu.spark.network.client.TransportClient;
 import com.sdu.spark.rpc.RpcAddress;
-import com.sdu.spark.rpc.RpcEndpointRef;
 import com.sdu.spark.rpc.RpcEndpointAddress;
+import com.sdu.spark.rpc.RpcEndpointRef;
 
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
-import java.util.concurrent.*;
-
-import static com.sdu.spark.utils.RpcUtils.getRpcAskTimeout;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
  * Note:
@@ -36,15 +37,12 @@ public class NettyRpcEndpointRef extends RpcEndpointRef {
     // RpcEndPoint节点客户端
     public transient volatile TransportClient client;
 
-    public transient volatile NettyRpcEnv nettyEnv;
-
-    private final long defaultAskTimeout;
+    private transient volatile NettyRpcEnv nettyEnv;
 
     public NettyRpcEndpointRef(RpcEndpointAddress address, NettyRpcEnv nettyEnv) {
+        super(nettyEnv.conf);
         this.endpointAddress = address;
         this.nettyEnv = nettyEnv;
-
-        this.defaultAskTimeout = getRpcAskTimeout(nettyEnv.conf);
     }
 
 

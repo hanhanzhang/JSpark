@@ -5,11 +5,11 @@ import com.sdu.spark.network.client.TransportClient;
 import io.netty.channel.Channel;
 
 /**
- * 管理Netty数据块读写
+ * NettyRpcEnv提供文件服务能力
  *
  * @author hanhan.zhang
  * */
-public interface StreamManager {
+public abstract class StreamManager {
     /**
      * Called in response to a fetchChunk() request. The returned buffer will be passed as-is to the
      * client. A single stream will be associated with a single TCP connection, so this method
@@ -23,7 +23,7 @@ public interface StreamManager {
      * @param streamId id of a stream that has been previously registered with the StreamManager.
      * @param chunkIndex 0-indexed chunk of the stream that's requested
      */
-    ManagedBuffer getChunk(long streamId, int chunkIndex);
+    public abstract ManagedBuffer getChunk(long streamId, int chunkIndex);
 
     /**
      * Called in response to a stream() request. The returned data is streamed to the client
@@ -35,7 +35,9 @@ public interface StreamManager {
      * @param streamId id of a stream that has been previously registered with the StreamManager.
      * @return A managed buffer for the stream, or null if the stream was not found.
      */
-    ManagedBuffer openStream(String streamId);
+    public ManagedBuffer openStream(String streamId) {
+        throw new UnsupportedOperationException();
+    }
 
     /**
      * Associates a stream with a single client connection, which is guaranteed to be the only reader
@@ -45,39 +47,47 @@ public interface StreamManager {
      * This must be called before the first getChunk() on the stream, but it may be invoked multiple
      * times with the same channel and stream id.
      */
-    void registerChannel(Channel channel, long streamId);
+    public void registerChannel(Channel channel, long streamId) {
 
-    void connectionTerminated(Channel channel);
+    }
 
-    long chunksBeingTransferred();
+    public void connectionTerminated(Channel channel) {
+
+    }
+
+    public long chunksBeingTransferred() {
+        return 0;
+    }
 
     /**
      * Verify that the client is authorized to read from the given stream.
      *
      * @throws SecurityException If client is not authorized.
      */
-    void checkAuthorization(TransportClient client, long streamId);
+    public void checkAuthorization(TransportClient client, long streamId) {
+
+    }
 
 
     /**
      * Called when start sending a chunk.
      */
-    void chunkBeingSent(long streamId);
+    public void chunkBeingSent(long streamId) {}
 
     /**
      * Called when start sending a stream.
      */
-    void streamBeingSent(String streamId);
+    public void streamBeingSent(String streamId) {}
 
     /**
      * Called when a chunk is successfully sent.
      */
-    void chunkSent(long streamId);
+    public void chunkSent(long streamId) {}
 
     /**
      * Called when a stream is successfully sent.
      */
-    void streamSent(String streamId);
+    public void streamSent(String streamId) {}
 
 
 }

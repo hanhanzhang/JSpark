@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicLong;
  *
  * @author hanhan.zhang
  * */
-public class OneForOneStreamManager implements StreamManager {
+public class OneForOneStreamManager extends StreamManager {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(OneForOneStreamManager.class);
 

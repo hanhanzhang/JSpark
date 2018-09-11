@@ -333,4 +333,7 @@ public class NettyRpcEnv extends RpcEnv {
         return Collections.emptyList();
     }
 
+    public TransportConf getTransportConf() {
+        return transportConf;
+    }
 }

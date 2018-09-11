@@ -7,6 +7,7 @@ import com.sdu.spark.broadcast.Broadcast;
 import com.sdu.spark.rdd.RDD;
 import com.sdu.spark.scheduler.action.JobAction;
 import com.sdu.spark.serializer.SerializerInstance;
+import com.sdu.spark.utils.TIterator;
 import com.sdu.spark.utils.scala.Tuple2;
 
 import java.io.IOException;
@@ -27,6 +28,7 @@ public class ResultTask<T, U> extends Task<U> implements Serializable {
     private transient TaskLocation[] preferredLocs;
     private Broadcast<byte[]> taskBinary;
     private Partition partition;
+    private int outputId;
 
     public ResultTask(int stageId,
                       int stageAttemptId,
@@ -40,6 +42,7 @@ public class ResultTask<T, U> extends Task<U> implements Serializable {
                       String appAttemptId) {
         super(stageId, stageAttemptId, partition.index(), localProperties, jobId, appId, appAttemptId);
         this.preferredLocs = locs;
+        this.outputId = outputId;
         this.taskBinary = taskBinary;
         this.partition = partition;
     }
@@ -64,8 +67,12 @@ public class ResultTask<T, U> extends Task<U> implements Serializable {
         assert res != null;
         JobAction<T, U> action = res._2();
         RDD<T> rdd = res._1();
-        Iterator<T> iterator = rdd.iterator(partition, context);
+        TIterator<T> iterator = rdd.iterator(partition, context);
         return action.func(context, iterator);
+    }
+
+    public int getOutputId() {
+        return outputId;
     }
 
     @Override

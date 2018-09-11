@@ -1,6 +1,7 @@
 package com.sdu.spark.broadcast;
 
 import com.sdu.spark.rpc.SparkConf;
+import com.sdu.spark.SecurityManager;
 
 /**
  * @author hanhan.zhang

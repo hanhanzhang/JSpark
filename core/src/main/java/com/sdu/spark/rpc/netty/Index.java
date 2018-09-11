@@ -20,27 +20,23 @@ public class Index {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(Index.class);
 
-    /**消息发送方*/
     private RpcEndpoint endPoint;
-    /**消息接收方*/
     private RpcEndpointRef endPointRef;
-    /**消息信箱*/
     private LinkedList<IndexMessage> messageBox = new LinkedList<>();
+
+    // 并发控制
     private boolean enableConcurrent = false;
     private int numActiveThreads = 0;
 
-    private boolean stopped = false;
+    private volatile boolean stopped = false;
 
     public Index(RpcEndpoint endPoint, RpcEndpointRef endPointRef) {
         this.endPoint = endPoint;
         this.endPointRef = endPointRef;
-        /**投递启动消息, EndPoint调用OnStart方法*/
         messageBox.add(new OnStart());
     }
 
-    /**
-     * 投递消息
-     * */
+    /** 投递消息 */
     public synchronized void post(IndexMessage message) {
         if (stopped) {
             onDrop(message);
@@ -49,9 +45,7 @@ public class Index {
         }
     }
 
-    /**
-     * 处理消息
-     * */
+    /** 处理消息 */
     public void process(Dispatcher dispatcher) {
         IndexMessage message;
         synchronized (this) {
@@ -69,42 +63,7 @@ public class Index {
 
         // 处理消息
         while (true) {
-            safelyCall(endPoint, message, (msg) -> {
-                if (msg instanceof OnStart) {                           // 信箱启动
-                    endPoint.onStart();
-                    // 允许多个线程访问, 进行消息处理
-                    if (!(endPoint instanceof ThreadSafeRpcEndpoint)) {
-                        synchronized (this) {
-                            if (!stopped) {
-                                enableConcurrent = true;
-                            }
-                        }
-                    }
-                } else if (msg instanceof OnStop) {                     // 信箱关闭
-                    int activeThreads = 0;
-                    synchronized (this) {
-                        activeThreads = numActiveThreads;
-                    }
-                    assert activeThreads == 1 :
-                            String.format("There should be only a single active thread but found %d threads.", activeThreads);
-                    dispatcher.removeRpcEndPointRef(endPoint);
-                    endPoint.onStop();
-                    assert isEmpty() : "OnStop should be the last message";
-                } else if (msg instanceof RpcMessage) {                 // 向远端发送消息
-                    RpcMessage rpcMessage = (RpcMessage) msg;
-                    endPoint.receiveAndReply(rpcMessage.content, rpcMessage.context);
-                } else if (msg instanceof RemoteProcessConnect) {       // 远端连接到RpcEnv[广播给每个RpcEndPoint]
-                    endPoint.onConnected(((RemoteProcessConnect) msg).address);
-                } else if (msg instanceof RemoteProcessDisconnected) {    // 远端关闭RpcEnv连接[广播给每个RpcEndPoint]
-                    endPoint.onDisconnected(((RemoteProcessDisconnected) msg).remoteAddress);
-                } else if (msg instanceof OneWayMessage) {
-                    OneWayMessage oneWayMessage = (OneWayMessage) msg;
-                    endPoint.receive(oneWayMessage.content);
-                } else if (msg instanceof RemoteProcessConnectionError) {
-                    RemoteProcessConnectionError connectionError = (RemoteProcessConnectionError) msg;
-                    endPoint.onNetworkError(connectionError.cause, connectionError.address);
-                }
-            });
+            safelyCall(endPoint, message, new IndexMessageHandler(dispatcher));
             synchronized (this) {
                 // 被当前线程访问, numActiveThreads至少等于1
                 if (!enableConcurrent && numActiveThreads != 1) {
@@ -117,7 +76,6 @@ public class Index {
                     return;
                 }
             }
-
         }
     }
 
@@ -147,5 +105,52 @@ public class Index {
 
     private interface MessageHandler {
         void handle(IndexMessage message);
+    }
+
+    private class IndexMessageHandler implements MessageHandler {
+
+        private Dispatcher dispatcher;
+
+        IndexMessageHandler(Dispatcher dispatcher) {
+            this.dispatcher = dispatcher;
+        }
+
+        @Override
+        public void handle(IndexMessage message) {
+            if (message instanceof OnStart) {                        // 信箱启动
+                endPoint.onStart();
+                // ThreadSafeRpcEndpoint线程安全, 逐条处理消息
+                if (!(endPoint instanceof ThreadSafeRpcEndpoint)) {
+                    synchronized (this) {
+                        if (!stopped) {
+                            enableConcurrent = true;
+                        }
+                    }
+                }
+            } else if (message instanceof OnStop) {                   // 信箱关闭
+                int activeThreads;
+                synchronized (this) {
+                    activeThreads = numActiveThreads;
+                }
+                assert activeThreads == 1 :
+                        String.format("There should be only a single active thread but found %d threads.", activeThreads);
+                dispatcher.removeRpcEndPointRef(endPoint);
+                endPoint.onStop();
+                assert isEmpty() : "OnStop should be the last message";
+            } else if (message instanceof RpcMessage) {                 // 向远端发送消息
+                RpcMessage rpcMessage = (RpcMessage) message;
+                endPoint.receiveAndReply(rpcMessage.content, rpcMessage.context);
+            } else if (message instanceof RemoteProcessConnect) {       // 远端连接到RpcEnv[广播给每个RpcEndPoint]
+                endPoint.onConnected(((RemoteProcessConnect) message).address);
+            } else if (message instanceof RemoteProcessDisconnected) {    // 远端关闭RpcEnv连接[广播给每个RpcEndPoint]
+                endPoint.onDisconnected(((RemoteProcessDisconnected) message).remoteAddress);
+            } else if (message instanceof OneWayMessage) {
+                OneWayMessage oneWayMessage = (OneWayMessage) message;
+                endPoint.receive(oneWayMessage.content);
+            } else if (message instanceof RemoteProcessConnectionError) {
+                RemoteProcessConnectionError connectionError = (RemoteProcessConnectionError) message;
+                endPoint.onNetworkError(connectionError.cause, connectionError.address);
+            }
+        }
     }
 }

@@ -16,12 +16,24 @@ public class BroadcastManager {
 
     private BroadcastFactory broadcastFactory;
 
+    private boolean initialized = false;
     private AtomicLong nextBroadcastId = new AtomicLong(0);
 
     public BroadcastManager(boolean isDriver, SparkConf conf, SecurityManager securityManager) {
         this.isDriver = isDriver;
         this.conf = conf;
         this.securityManager = securityManager;
+        initialize();
+    }
+
+    private void initialize() {
+        synchronized (this) {
+            if (!initialized) {
+                broadcastFactory = new TorrentBroadcastFactory();
+                broadcastFactory.initialize(isDriver, conf, securityManager);
+                initialized = true;
+            }
+        }
     }
 
     public <T> Broadcast<T> newBroadcast(T value, boolean isLocal) {
@@ -29,7 +41,7 @@ public class BroadcastManager {
     }
 
     public void stop() {
-
+        broadcastFactory.stop();
     }
 }
 

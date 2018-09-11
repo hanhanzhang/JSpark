@@ -11,6 +11,7 @@ import com.sdu.spark.rdd.RDD;
 import com.sdu.spark.scheduler.DAGSchedulerEvent.*;
 import com.sdu.spark.scheduler.JobResult.JobFailed;
 import com.sdu.spark.scheduler.SparkListenerEvent.*;
+import com.sdu.spark.scheduler.TaskEndReason.*;
 import com.sdu.spark.scheduler.action.JobAction;
 import com.sdu.spark.scheduler.action.ResultHandler;
 import com.sdu.spark.serializer.SerializerInstance;
@@ -20,10 +21,10 @@ import com.sdu.spark.storage.BlockManagerId;
 import com.sdu.spark.storage.BlockManagerMaster;
 import com.sdu.spark.storage.BlockManagerMessages.BlockManagerHeartbeat;
 import com.sdu.spark.storage.StorageLevel;
-import com.sdu.spark.utils.CallSite;
 import com.sdu.spark.utils.Clock;
 import com.sdu.spark.utils.Clock.SystemClock;
 import com.sdu.spark.utils.EventLoop;
+import com.sdu.spark.utils.SparkDriverExecutionException;
 import com.sdu.spark.utils.scala.Tuple2;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.ArrayUtils;
@@ -39,14 +40,15 @@ import java.util.stream.Collectors;
 import static com.sdu.spark.SparkContext.SPARK_JOB_INTERRUPT_ON_CANCEL;
 import static com.sdu.spark.network.utils.JavaUtils.bufferToArray;
 import static com.sdu.spark.utils.Utils.exceptionString;
+import static com.sdu.spark.utils.Utils.getFormattedClassName;
 import static org.apache.commons.lang3.BooleanUtils.toBoolean;
-import static org.apache.commons.lang3.StringUtils.endsWith;
 import static org.apache.commons.lang3.StringUtils.isNotEmpty;
+import static org.apache.commons.lang3.StringUtils.join;
 
 /**
  * {@link DAGScheduler}职责:
  *
- * 1: {@link #runJob(RDD, JobAction, List, CallSite, ResultHandler, Properties)}划分并提及Stage
+ * 1: {@link #runJob(RDD, JobAction, List, ResultHandler, Properties)}划分并提及Stage
  *
  *  DAGScheduler.runJob()
  *    |
@@ -182,28 +184,24 @@ public class DAGScheduler {
      * @param jobAction a function to run on each partition of the RDD
      * @param partitions set of partitions to run on; some jobs may not want to compute on all
      *                   partitions of the target RDD, e.g. for operations like first()
-     * @param callSite where in the user program this job was called
      * @param resultHandler callback to pass each result to
      * @param properties scheduler properties to attach to this job, e.g. fair scheduler pool name
      * */
     public <T, U> void runJob(RDD<T> rdd,
                               JobAction<T, U> jobAction,
                               List<Integer> partitions,
-                              CallSite callSite,
                               ResultHandler<U> resultHandler,
                               Properties properties) throws Exception {
         long start = System.nanoTime();
-        JobWaiter<U> waiter = submitJob(rdd, jobAction, partitions, callSite, resultHandler, properties);
+        JobWaiter<U> waiter = submitJob(rdd, jobAction, partitions, resultHandler, properties);
         Future<Boolean> future = waiter.completionFuture();
         try {
             boolean success = future.get();
             if (success) {
-                LOGGER.info("Job {} finished: {}, took {} s", waiter.jobId, callSite.shortForm,
-                            (System.nanoTime() - start) / 1e9);
+                LOGGER.info("Job {} finished: {}, took {} s", waiter.jobId, (System.nanoTime() - start) / 1e9);
             }
         } catch (Exception e) {
-            LOGGER.error("Job {} failed: {}, took {} s", waiter.jobId, callSite.shortForm,
-                        (System.nanoTime() - start) / 1e9);
+            LOGGER.error("Job {} failed: {}, took {} s", waiter.jobId, (System.nanoTime() - start) / 1e9);
             // SPARK-8644: Include user stack trace in exceptions coming from DAGScheduler.
             StackTraceElement[] stackTraces = Thread.currentThread().getStackTrace();
             StackTraceElement callerStackTrace = stackTraces[stackTraces.length - 1];
@@ -216,7 +214,6 @@ public class DAGScheduler {
     private <T, U> JobWaiter<U> submitJob(RDD<T> rdd,
                                           JobAction<T, U> jobAction,
                                           List<Integer> partitions,
-                                          CallSite callSite,
                                           ResultHandler<U> resultHandler,
                                           Properties properties) {
         // 校验传入RDD分区数是否正确
@@ -240,9 +237,8 @@ public class DAGScheduler {
         // 提交作业事件
         eventProcessLoop.post(new JobSubmitted<>(jobId,
                                                  rdd,
-                jobAction,
+                                                 jobAction,
                                                  partitions,
-                                                 callSite,
                                                  waiter,
                                                  new Properties(properties)));
         return waiter;
@@ -252,23 +248,21 @@ public class DAGScheduler {
                                            RDD<T> finalRDD,
                                            JobAction<T, U> jobAction,
                                            List<Integer> partitions,
-                                           CallSite callSite,
                                            JobListener listener,
                                            Properties properties) {
         ResultStage finalStage;
         try {
             // New stage creation may throw an exception if, for example, jobs are run on a
             // HadoopRDD whose underlying HDFS files have been deleted.
-            finalStage = createResultStage(finalRDD, jobAction, partitions, jobId, callSite);
+            finalStage = createResultStage(finalRDD, jobAction, partitions, jobId);
         } catch (Exception e){
             listener.jobFailed(e);
             return;
         }
 
-        ActiveJob job = new ActiveJob(jobId, finalStage, callSite, listener, properties);
+        ActiveJob job = new ActiveJob(jobId, finalStage, listener, properties);
         clearCacheLocs();
         LOGGER.info("Got job {} ({}) with {} combiner partitions", job.jobId(),
-                                                                   callSite.shortForm,
                                                                    partitions.size());
         LOGGER.info("Final stage: {}({})", finalStage, finalStage.name);
         LOGGER.info("Parents of final stage: {}", finalStage.parents);
@@ -437,11 +431,11 @@ public class DAGScheduler {
             if (stage instanceof ShuffleMapStage) {
                 ShuffleMapStage mapStage = (ShuffleMapStage) stage;
                 taskBinaryBytes = bufferToArray(closureSerializer.serialize(new Tuple2<>(stage.rdd,
-                                                                                         mapStage.shuffleDep)));
+                                                                                         mapStage.getShuffleDep())));
             } else if (stage instanceof ResultStage) {
                 ResultStage resultStage = (ResultStage) stage;
                 taskBinaryBytes = bufferToArray(closureSerializer.serialize(new Tuple2<>(stage.rdd,
-                                                                                         resultStage.func)));
+                                                                                         resultStage.getJobAction())));
             }
             // TODO: 待实现broadcast
             taskBinary = sc.broadcast(taskBinaryBytes);
@@ -461,11 +455,11 @@ public class DAGScheduler {
             // TODO: TaskMetric
             if (stage instanceof ShuffleMapStage) {
                 ShuffleMapStage mapStage = (ShuffleMapStage) stage;
-                mapStage.pendingPartitions.clear();
+                mapStage.clearWaitPartitionTask();
                 for (int partition : partitionsToCompute) {
                     TaskLocation[] locs = taskIdToLocations.get(partition);
                     Partition part = stage.rdd.partitions()[partition];
-                    mapStage.pendingPartitions.add(partition);
+                    mapStage.addWaitPartitionTask(partition);
                     tasks[partition] = new ShuffleMapTask(stage.id,
                                                           stage.latestInfo().attemptId,
                                                           taskBinary,
@@ -675,8 +669,7 @@ public class DAGScheduler {
     private ResultStage createResultStage(RDD<?> rdd,
                                           JobAction<?, ?> jobAction,
                                           List<Integer> partitions,
-                                          int jobId,
-                                          CallSite callSite) {
+                                          int jobId) {
         // step1: 计算final rdd依赖的所有ShuffleDependency
         // step2: 计算ShuffleDependency依赖的ShuffleMapStage
         // 调用链:
@@ -691,11 +684,10 @@ public class DAGScheduler {
         int id = nextStageId.getAndIncrement();
         ResultStage stage = new ResultStage(id,
                                             rdd,
-                jobAction,
+                                            jobAction,
                                             partitions,
                                             parents,
-                                            jobId,
-                                            callSite);
+                                            jobId);
         stageIdToStage.put(id, stage);
         updateJobIdStageIdMaps(jobId, Lists.newArrayList(stage));
         return stage;
@@ -799,7 +791,6 @@ public class DAGScheduler {
                                                     numTasks,
                                                     parents,
                                                     jobId,
-                                                    rdd.creationSite,
                                                     shuffleDep,
                                                     mapOutputTracker);
 
@@ -965,6 +956,25 @@ public class DAGScheduler {
         }
     }
 
+    private void markMapStageJobAsFinished(ActiveJob job, MapOutputStatistics stats) {
+        // In map stage jobs, we only create a single "task", which is to finish all of the stage
+        // (including reusing any previous map outputs, etc); so we just mark task 0 as done
+        job.markPartitionTaskFinished(0);
+        job.listener().taskSucceeded(0, stats);
+        cleanupStateForJobAndIndependentStages(job);
+        listenerBus.post(new SparkListenerJobEnd(job.jobId(), clock.getTimeMillis(), new JobResult.JobSucceeded()));
+    }
+
+    private void markMapStageJobsAsFinished(ShuffleMapStage shuffleStage) {
+        // Mark any map-stage jobs waiting on this stage as finished
+        if (shuffleStage.isAvailable() && shuffleStage.mapStageJobs.size() > 0) {
+            MapOutputStatistics stats = mapOutputTracker.getStatistics(shuffleStage.getShuffleDep());
+            for (ActiveJob job : shuffleStage.mapStageJobs) {
+                markMapStageJobAsFinished(job, stats);
+            }
+        }
+    }
+
     private void markStageAsFinished(Stage stage, String errorMessage) {
         String serviceTime = "Unknown";
         if (stage.latestInfo().submissionTime() != -1) {
@@ -1055,12 +1065,147 @@ public class DAGScheduler {
         listenerBus.post(new SparkListenerTaskGettingResult(taskInfo));
     }
 
+    private void postTaskEnd(CompletionEvent event) {
+        // TODO: Task Metric
+        Task<?> task = event.getTask();
+        listenerBus.post(new SparkListenerTaskEnd(task.stageId, task.stageAttemptId, getFormattedClassName(task), event.getReason(), event.getTaskInfo()));
+    }
+
+    private void handleTaskCompletion(CompletionEvent event) {
+        Task<?> task = event.getTask();
+        outputCommitCoordinator.taskCompleted(
+                task.stageId,
+                task.stageAttemptId,
+                task.partitionId,
+                event.getTaskInfo().attemptNumber,
+                event.getReason());
+
+        if (!stageIdToStage.containsKey(task.stageId)) {
+            postTaskEnd(event);
+            return;
+        }
+
+        Stage stage = stageIdToStage.get(task.stageId);
+
+        // Make sure the task's accumulators are updated before any other processing happens, so that
+        // we can post a task end event before any jobs or stages are updated. The accumulators are
+        // only updated in certain cases.
+        if (event.getReason() instanceof Success) {
+            // TODO: update task metric
+        } else if (event.getReason() instanceof ExceptionFailure) {
+            // TODO: update task metric
+        }
+
+        postTaskEnd(event);
+
+        TaskEndReason reason = event.getReason();
+        if (reason instanceof Success) {
+            if (task instanceof ResultTask) {
+                ResultTask rt = (ResultTask) task;
+                ResultStage resultStage = (ResultStage) stage;
+                ActiveJob job = resultStage.getActiveJob();
+                if (job == null) {
+                    LOGGER.info("Ignoring result from {} because its job has finished", task);
+                } else {
+                    if (!job.isPartitionTaskFinished(rt.getOutputId())) {
+                        job.markPartitionTaskFinished(rt.getOutputId());
+                        if (job.isJobFinished()) {
+                            markStageAsFinished(stage, null);
+                            cleanupStateForJobAndIndependentStages(job);
+                            listenerBus.post(new SparkListenerJobEnd(job.jobId(), System.currentTimeMillis(), new JobResult.JobSucceeded()));
+                        }
+                    }
+                    try {
+                        job.listener().taskSucceeded(rt.getOutputId(), event.getResult());
+                    } catch (Exception e) {
+                        job.listener().jobFailed(new SparkDriverExecutionException(e));
+                    }
+                }
+            } else if (task instanceof ShuffleMapTask) {
+                ShuffleMapTask smt = (ShuffleMapTask) task;
+                ShuffleMapStage mapStage = (ShuffleMapStage) stage;
+                MapStatus mapStatus = (MapStatus) event.getResult();
+                String execId = mapStatus.location().executorId;
+                LOGGER.debug("ShuffleMapTask finished on {}", execId);
+                if (stageIdToStage.get(task.stageId).latestInfo().attemptNumber() == task.stageAttemptId) {
+                    // This task was for the currently running attempt of the stage. Since the task
+                    // completed successfully from the perspective of the TaskSetManager, mark it as
+                    // no longer pending (the TaskSetManager may consider the task complete even
+                    // when the output needs to be ignored because the task's epoch is too small below.
+                    // In this case, when pending partitions is empty, there will still be missing
+                    // output locations, which will cause the DAGScheduler to resubmit the stage below.)
+                    mapStage.markPartitionTaskFinished(task.partitionId);
+                }
+                if (failedEpoch.containsKey(execId) && smt.epoch <= failedEpoch.get(execId)) {
+                    LOGGER.info("Ignoring possibly bogus {} completion from executor {}", smt, execId);
+                } else {
+                    // The epoch of the task is acceptable (i.e., the task was launched after the most
+                    // recent failure we're aware of for the executor), so mark the task's output as
+                    // available.
+                    // 注册MapTask的结果输出地址信息
+                    mapOutputTracker.registerMapOutput(mapStage.getShuffleDep().shuffleId(),
+                            smt.partitionId, mapStatus);
+                    // Remove the task's partition from pending partitions. This may have already been
+                    // done above, but will not have been done yet in cases where the task attempt was
+                    // from an earlier attempt of the stage (i.e., not the attempt that's currently
+                    // running).  This allows the DAGScheduler to mark the stage as complete when one
+                    // copy of each task has finished successfully, even if the currently active stage
+                    // still has tasks running.
+                    mapStage.markPartitionTaskFinished(task.partitionId);
+                }
+
+                if (runningStages.contains(stage) && mapStage.isWaitPartitionTaskFinished()) {
+                    markStageAsFinished(stage, null);
+                    LOGGER.info("looking for newly runnable stages");
+                    LOGGER.info("running: {}", runningStages);
+                    LOGGER.info("waiting: {}", waitingStages);
+                    LOGGER.info("failed: {}", failedStages);
+
+                    // This call to increment the epoch may not be strictly necessary, but it is retained
+                    // for now in order to minimize the changes in behavior from an earlier version of the
+                    // code. This existing behavior of always incrementing the epoch following any
+                    // successful shuffle map stage completion may have benefits by causing unneeded
+                    // cached map outputs to be cleaned up earlier on executors. In the future we can
+                    // consider removing this call, but this will require some extra investigation.
+                    // See https://github.com/apache/spark/pull/17955/files#r117385673 for more details.
+                    mapOutputTracker.incrementEpoch();
+
+                    clearCacheLocs();
+
+                    // 某个PartitionTask执行失败, 则重新运行Task
+                    if (!mapStage.isAvailable()) {
+                        // Some tasks had failed; let's resubmit this shuffleStage.
+                        // TODO: Lower-level scheduler should also deal with this
+                        LOGGER.info("Resubmitting {}({}) because some of its tasks had failed: {}",
+                                mapStage, mapStage.name, join(mapStage.findMissingPartitions(), ","));
+                        submitStage(mapStage);
+                    } else {
+                        markMapStageJobsAsFinished(mapStage);
+                        submitWaitingChildStages(stage);
+                    }
+                }
+            }
+        } else if (reason instanceof Resubmitted) {
+
+        } else if (reason instanceof FetchFailed) {
+
+        } else if (reason instanceof TaskCommitDenied) {
+
+        } else if (reason instanceof ExceptionFailure) {
+
+        } else if (reason instanceof TaskResultLost) {
+
+        } else if (reason instanceof ExecutorLostFailure || reason instanceof TaskKilled || reason instanceof UnknownReason) {
+
+        }
+    }
+
     private class DAGSchedulerEventProcessLoop extends EventLoop<DAGSchedulerEvent> {
         private final Logger LOGGER = LoggerFactory.getLogger(DAGSchedulerEventProcessLoop.class);
 
         private DAGScheduler dagScheduler;
 
-        public DAGSchedulerEventProcessLoop(DAGScheduler dagScheduler) {
+        DAGSchedulerEventProcessLoop(DAGScheduler dagScheduler) {
             super("dag-scheduler-event-loop");
             this.dagScheduler = dagScheduler;
         }
@@ -1088,7 +1233,6 @@ public class DAGScheduler {
                                                 jobSubmitted.finalRDD,
                                                 jobSubmitted.jobAction,
                                                 jobSubmitted.partitions,
-                                                jobSubmitted.callSite,
                                                 jobSubmitted.listener,
                                                 jobSubmitted.properties);
             } else if (event instanceof JobCancelled) {
@@ -1111,6 +1255,9 @@ public class DAGScheduler {
             } else if (event instanceof GettingResultEvent) {
                 GettingResultEvent gettingResultEvent = (GettingResultEvent) event;
                 dagScheduler.handleGetTaskResult(gettingResultEvent.taskInfo);
+            } else if (event instanceof CompletionEvent) {
+                CompletionEvent completionEvent = (CompletionEvent) event;
+                dagScheduler.handleTaskCompletion(completionEvent);
             }
         }
     }

@@ -34,6 +34,7 @@ public class OutputCommitCoordinatorEndpoint extends RpcEndpoint {
         if (msg instanceof AskPermissionToCommitOutput) {
             AskPermissionToCommitOutput output = (AskPermissionToCommitOutput) msg;
             context.reply(outputCommitCoordinator.handleAskPermissionToCommit(output.stageId,
+                                                                              output.stageAttempt,
                                                                               output.partition,
                                                                               output.attemptNumber
             ));

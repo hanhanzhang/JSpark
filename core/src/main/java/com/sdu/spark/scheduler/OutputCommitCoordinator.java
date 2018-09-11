@@ -5,8 +5,10 @@ import com.google.common.collect.Sets;
 import com.sdu.spark.SparkException;
 import com.sdu.spark.rpc.RpcEndpointRef;
 import com.sdu.spark.rpc.SparkConf;
-import com.sdu.spark.scheduler.OutputCommitCoordinationMessage.*;
-import com.sdu.spark.scheduler.TaskEndReason.*;
+import com.sdu.spark.scheduler.OutputCommitCoordinationMessage.AskPermissionToCommitOutput;
+import com.sdu.spark.scheduler.OutputCommitCoordinationMessage.StopCoordinator;
+import com.sdu.spark.scheduler.TaskEndReason.Success;
+import com.sdu.spark.scheduler.TaskEndReason.TaskCommitDenied;
 import com.sdu.spark.utils.RpcUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,24 +20,26 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 /**
- * {@link OutputCommitCoordinator}
+ * OutputCommitCoordinator授权是否将Task将输出落地HDFS
+ *
+ * Driver及Executor都会实例化OutputCommitCoordinator, 在Driver上注册OutputCommitCoordinatorEndpoint, 在Executor上
+ * 通过OutputCommitCoordinatorEndpoint的RpcEndpointRef询问授权
  *
  * @author hanhan.zhang 
  * */
 public class OutputCommitCoordinator {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(OutputCommitCoordinator.class);
-    private static final int NO_AUTHORIZED_COMMITTER = -1;
 
     private class StageState implements Serializable {
-        int[] authorizedCommitters;
+        TaskIdentifier[] authorizedCommitters;
         // key = partitionId, value = taskId
         Map<Integer, Set<Integer>> failures;
 
-        public StageState(int numPartitions) {
-            authorizedCommitters = new int[numPartitions];
+        StageState(int numPartitions) {
+            authorizedCommitters = new TaskIdentifier[numPartitions];
             for (int i = 0; i < numPartitions; ++i) {
-                authorizedCommitters[i] = NO_AUTHORIZED_COMMITTER;
+                authorizedCommitters[i] = null;
             }
             failures = Maps.newHashMap();
         }
@@ -59,8 +63,11 @@ public class OutputCommitCoordinator {
         return stageStates.isEmpty();
     }
 
-    public boolean canCommit(int stageId, int partitionId, int attemptNumber) {
-        AskPermissionToCommitOutput msg = new AskPermissionToCommitOutput(stageId, partitionId, attemptNumber);
+    public boolean canCommit(int stageId,
+                             int stageAttempt,
+                             int partitionId,
+                             int attemptNumber) {
+        AskPermissionToCommitOutput msg = new AskPermissionToCommitOutput(stageId, stageAttempt, partitionId, attemptNumber);
         if (coordinatorRef == null) {
             LOGGER.error("canCommit called after coordinator was stopped (is SparkEnv shutdown in progress)?");
             return false;
@@ -92,6 +99,7 @@ public class OutputCommitCoordinator {
 
     // Called by DAGScheduler
     public synchronized void taskCompleted(int stage,
+                                           int stageAttempt,
                                            int partition,
                                            int attemptNumber,
                                            TaskEndReason reason) {
@@ -106,16 +114,14 @@ public class OutputCommitCoordinator {
             LOGGER.info("Task was denied committing, stage: {}, partition: {}, attempt: {}",
                         stage, partition, attemptNumber);
         } else {
-            Set<Integer> failureTasks = stageState.failures.get(partition);
-            if (failureTasks == null) {
-                failureTasks = Sets.newHashSet();
-                stageState.failures.put(partition, failureTasks);
-            }
+            TaskIdentifier taskId = new TaskIdentifier(stageAttempt, attemptNumber);
+            Set<Integer> failureTasks = stageState.failures.computeIfAbsent(partition, (key) -> Sets.newHashSet());
             failureTasks.add(attemptNumber);
-            if (stageState.authorizedCommitters[partition] == attemptNumber) {
+            if (stageState.authorizedCommitters[partition] != null &&
+                    stageState.authorizedCommitters[partition].equals(taskId)) {
                 LOGGER.debug("Authorized committer (attemptNumber={}, stage={}, partition={}) failed; " +
                              "clearing lock", attemptNumber, stage, partition);
-                stageState.authorizedCommitters[partition] = NO_AUTHORIZED_COMMITTER;
+                stageState.authorizedCommitters[partition] = null;
             }
         }
     }
@@ -127,35 +133,32 @@ public class OutputCommitCoordinator {
         return failureTasks != null && failureTasks.contains(attemptNumber);
     }
 
-    public boolean handleAskPermissionToCommit(int stageId, int partition, int attemptNumber) {
+    public boolean handleAskPermissionToCommit(int stageId,
+                                               int stageAttempt,
+                                               int partition,
+                                               int attemptNumber) {
         StageState stageState = stageStates.get(stageId);
         if (stageState == null) {
-            LOGGER.debug("Stage {} has completed, so not allowing attempt number {} of partition {} to commit",
-                         stageId, attemptNumber, partition);
+            LOGGER.debug("Commit denied for stage={}.{}, partition={}: stage already marked as completed.",
+                    stageId, stageAttempt, partition);
             return false;
         }
 
         if (attemptFailed(stageState, partition, attemptNumber)) {
-            LOGGER.info("Denying attemptNumber={} to commit for stage={}, partition={} as task attempt {} has already failed.",
-                        attemptNumber, stageId, partition, attemptNumber);
+            LOGGER.debug("Commit denied for stage={}.{}, partition={}: task attempt {} already marked as failed.",
+                    stageId, stageAttempt, partition, attemptNumber);
             return false;
         }
-        int existingCommitter = stageState.authorizedCommitters[partition];
-        if (existingCommitter == NO_AUTHORIZED_COMMITTER) {
-            LOGGER.debug("Authorizing attemptNumber={} to commit for stage={}, partition={}",
-                         attemptNumber, stageId, partition);
-            stageState.authorizedCommitters[partition] = attemptNumber;
-            return true;
-        }
-        if (existingCommitter == attemptNumber) {
-            LOGGER.warn("Authorizing duplicate request to commit for attemptNumber={} to commit for stage={}, " +
-                        "partition={}; existingCommitter = {}. This can indicate dropped network traffic.",
-                        attemptNumber, stageId, partition, existingCommitter);
+        TaskIdentifier existingCommitter = stageState.authorizedCommitters[partition];
+        if (existingCommitter == null) {
+            LOGGER.debug("Commit allowed for stage={}.{}, partition={}, task attempt {}",
+                    stageId, stageAttempt, partition, attemptNumber);
+            stageState.authorizedCommitters[partition] = new TaskIdentifier(stageAttempt, attemptNumber);
             return true;
         }
 
-        LOGGER.debug("Denying attemptNumber={} to commit for stage={}, partition={}; existingCommitter={}",
-                      attemptNumber, stageId, partition, existingCommitter);
+        LOGGER.debug("Commit denied for stage={}.{}, partition={}: already committed by {}",
+                stageId, stageAttempt, partition, existingCommitter);
         return false;
     }
 
@@ -164,6 +167,42 @@ public class OutputCommitCoordinator {
             coordinatorRef.send(new StopCoordinator());
             coordinatorRef = null;
             stageStates.clear();
+        }
+    }
+
+    private class TaskIdentifier implements Serializable {
+        int stageAttempt;
+        int taskAttempt;
+
+        TaskIdentifier(int stageAttempt, int taskAttempt) {
+            this.stageAttempt = stageAttempt;
+            this.taskAttempt = taskAttempt;
+        }
+
+        @Override
+        public boolean equals(Object object) {
+            if (this == object) return true;
+            if (object == null || getClass() != object.getClass()) return false;
+
+            TaskIdentifier that = (TaskIdentifier) object;
+
+            if (stageAttempt != that.stageAttempt) return false;
+            return taskAttempt == that.taskAttempt;
+        }
+
+        @Override
+        public int hashCode() {
+            int result = stageAttempt;
+            result = 31 * result + taskAttempt;
+            return result;
+        }
+
+        @Override
+        public String toString() {
+            return "TaskIdentifier[" +
+                    "stageAttempt=" + stageAttempt +
+                    ", taskAttempt=" + taskAttempt +
+                    ']';
         }
     }
 }

@@ -2,7 +2,6 @@ package com.sdu.spark.rpc.netty;
 
 
 import com.google.common.collect.Maps;
-import com.google.common.util.concurrent.SettableFuture;
 import com.sdu.spark.SparkException;
 import com.sdu.spark.network.client.RpcResponseCallback;
 import com.sdu.spark.rpc.*;
@@ -62,7 +61,7 @@ public class Dispatcher {
     private Boolean stopped = false;
 
     /**Rpc Message分发线程池*/
-    private ThreadPoolExecutor threadpool;
+    private ThreadPoolExecutor threadPool;
 
     private class MessageLoop implements Runnable {
         @Override
@@ -84,7 +83,7 @@ public class Dispatcher {
     }
 
     /**
-     * @param numUsableCores Number of CPU cores allocated to the process, for sizing the thread threadpool.
+     * @param numUsableCores Number of CPU cores allocated to the process, for sizing the thread threadPool.
      *                       If 0, will consider the available CPUs on the host.
      * */
     public Dispatcher(NettyRpcEnv nettyRpcEnv, int numUsableCores) {
@@ -94,10 +93,10 @@ public class Dispatcher {
                                                 : Runtime.getRuntime().availableProcessors();
         int numThreads = nettyRpcEnv.conf.getInt("spark.rpc.netty.dispatcher.numThreads",
                                                  Math.max(availableCores, 2));
-        threadpool = ThreadUtils.newDaemonFixedThreadPool(numThreads, "dispatcher-event-loop-%d");
+        threadPool = ThreadUtils.newDaemonFixedThreadPool(numThreads, "dispatcher-event-loop-%d");
         // 启动消息处理任务
         for (int i = 0; i < numThreads; ++i) {
-            threadpool.execute(new MessageLoop());
+            threadPool.execute(new MessageLoop());
         }
     }
 
@@ -215,7 +214,7 @@ public class Dispatcher {
 
     public void awaitTermination() {
         try {
-            threadpool.awaitTermination(Long.MAX_VALUE, TimeUnit.SECONDS);
+            threadPool.awaitTermination(Long.MAX_VALUE, TimeUnit.SECONDS);
         } catch (InterruptedException e) {
             // ignore
         }
@@ -237,7 +236,7 @@ public class Dispatcher {
         // 删除已注册的Rpc节点
         endPoints.keySet().forEach(this::unregisterRpcEndpoint);
         receivers.offer(PoisonPill);
-        threadpool.shutdown();
+        threadPool.shutdown();
     }
 
     private interface ThrowableCallback {

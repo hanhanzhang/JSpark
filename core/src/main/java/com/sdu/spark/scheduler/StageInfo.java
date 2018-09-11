@@ -76,6 +76,10 @@ public class StageInfo {
         completionTime = System.currentTimeMillis();
     }
 
+    public int attemptNumber() {
+        return attemptId;
+    }
+
     public String getStatusString() {
         if (completionTime > 0) {
             if (StringUtils.isNotEmpty(failureReason)) {

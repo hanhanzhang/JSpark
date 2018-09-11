@@ -18,7 +18,6 @@ public interface DAGSchedulerEvent {
         public RDD<T> finalRDD;
         public JobAction<T, U> jobAction;
         public List<Integer> partitions;
-        public CallSite callSite;
         public JobListener listener;
         public Properties properties;
 
@@ -26,14 +25,12 @@ public interface DAGSchedulerEvent {
                             RDD<T> finalRDD,
                             JobAction<T, U> jobAction,
                             List<Integer> partitions,
-                            CallSite callSite,
                             JobListener listener,
                             Properties properties) {
             this.jobId = jobId;
             this.finalRDD = finalRDD;
             this.jobAction = jobAction;
             this.partitions = partitions;
-            this.callSite = callSite;
             this.listener = listener;
             this.properties = properties;
         }
@@ -76,6 +73,36 @@ public interface DAGSchedulerEvent {
 
         public GettingResultEvent(TaskInfo taskInfo) {
             this.taskInfo = taskInfo;
+        }
+    }
+
+    class CompletionEvent implements DAGSchedulerEvent {
+        private final Task<?> task;
+        private final TaskEndReason reason;
+        private final Object result;
+        private final TaskInfo taskInfo;
+
+        public CompletionEvent(Task<?> task, TaskEndReason reason, Object result, TaskInfo taskInfo) {
+            this.task = task;
+            this.reason = reason;
+            this.result = result;
+            this.taskInfo = taskInfo;
+        }
+
+        public Task<?> getTask() {
+            return task;
+        }
+
+        public TaskEndReason getReason() {
+            return reason;
+        }
+
+        public Object getResult() {
+            return result;
+        }
+
+        public TaskInfo getTaskInfo() {
+            return taskInfo;
         }
     }
 }

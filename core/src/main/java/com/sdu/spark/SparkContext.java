@@ -1,29 +1,29 @@
 package com.sdu.spark;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.sdu.spark.broadcast.Broadcast;
 import com.sdu.spark.rdd.RDD;
-import com.sdu.spark.rdd.Transaction;
 import com.sdu.spark.rpc.RpcEndpointRef;
 import com.sdu.spark.rpc.SparkConf;
 import com.sdu.spark.scheduler.*;
+import com.sdu.spark.scheduler.action.JobAction;
+import com.sdu.spark.scheduler.action.ResultHandler;
 import com.sdu.spark.scheduler.cluster.StandaloneSchedulerBackend;
 import com.sdu.spark.utils.CallSite;
 import com.sdu.spark.utils.scala.Tuple2;
-import org.apache.commons.lang3.tuple.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static com.sdu.spark.SparkApp.TaskSchedulerIsSet;
 import static com.sdu.spark.SparkMasterRegex.*;
-import static com.sdu.spark.utils.Utils.getFutureResult;
 import static com.sdu.spark.utils.Utils.isLocalMaster;
 import static org.apache.commons.lang3.math.NumberUtils.toInt;
 
@@ -233,11 +233,33 @@ public class SparkContext {
 
 
     /**************************Spark Transaction Action触发Job提交 ***************************/
-    public <T, U> void runJob(RDD<T> rdd,
-                              Transaction<Pair<TaskContext, Iterator<T>>, Void> func,
-                              List<Integer> partitions,
-                              Transaction<Pair<Integer, U>, Void> resultHandler) {
+    public <T, U> List<U> runJob(RDD<T> rdd,
+                                 JobAction<T, U> partitionFunc,
+                                 List<Integer> partitions) {
+        // 分区结果集, 下标为分区编号
+        List<U> results = Lists.newArrayListWithCapacity(partitions.size());
 
+        // 分区结果
+        ResultHandler<U> resultHandler = new PartitionResultHandler<>(results);
+        runJob(rdd, partitionFunc, partitions, resultHandler);
+
+        return results;
+    }
+
+    public <T, U> void runJob(RDD<T> rdd,
+                              JobAction<T, U> partitionFunc,
+                              List<Integer> partitions,
+                              ResultHandler<U> resultHandler) {
+        if (stopped.get()) {
+            throw new IllegalStateException("SparkContext has been shutdown");
+        }
+
+        try {
+            dagScheduler.runJob(rdd, partitionFunc, partitions, resultHandler, new Properties());
+            rdd.doCheckpoint();
+        } catch (Exception e) {
+            throw new SparkException("Spark run job failure", e);
+        }
     }
 
     public CallSite getCallSite() {
@@ -287,5 +309,19 @@ public class SparkContext {
         }
 
         // TODO: contextBeingConstructed
+    }
+
+    private static class PartitionResultHandler<U> implements ResultHandler<U> {
+
+        private final List<U> results;
+
+        public PartitionResultHandler(List<U> results) {
+            this.results = results;
+        }
+
+        @Override
+        public void callback(int index, U result) {
+            results.set(index, result);
+        }
     }
 }

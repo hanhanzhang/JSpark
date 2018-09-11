@@ -297,6 +297,7 @@ public class SparkEnv {
         return envInstance;
     }
 
+    @SuppressWarnings("unchecked")
     private static <T> T instantiateClass(SparkConf conf, boolean isDriver, String className) {
         Class<?> cls = classForName(className);
         try {

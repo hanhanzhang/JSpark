@@ -1,24 +1,24 @@
 package com.sdu.spark.rdd;
 
+import com.google.common.collect.Lists;
 import com.sdu.spark.*;
 import com.sdu.spark.storage.BlockId.RDDBlockId;
-import com.sdu.spark.storage.BlockResult;
 import com.sdu.spark.storage.StorageLevel;
 import com.sdu.spark.utils.CallSite;
-import org.apache.commons.lang3.tuple.Pair;
+import com.sdu.spark.utils.TIterator;
 
 import java.io.Serializable;
-import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 
 /**
  * @author hanhan.zhang
  * */
+@SuppressWarnings("unchecked")
 public abstract class RDD<T> implements Serializable {
 
     private transient SparkContext sc;
-    private transient List<Dependency<?>> deps;
+    private transient List<Dependency<?>> dependencies;
 
     public int id;
 
@@ -28,14 +28,19 @@ public abstract class RDD<T> implements Serializable {
 
     private RDDCheckpointData<T> checkpointData = null;
 
-    public RDD(SparkContext sc, List<Dependency<?>> deps) {
+    public RDD(SparkContext sc, List<Dependency<?>> dependencies) {
         this.sc = sc;
         this.id = this.sc.newRddId();
         this.creationSite = this.sc.getCallSite();
-        this.deps = deps;
+        this.dependencies = dependencies;
     }
 
-    public final Iterator<T> iterator(Partition split, TaskContext context) {
+    public RDD(RDD<?> oneParent) {
+        this(oneParent.sc, Lists.newArrayList(new OneToOneDependency<>(oneParent)));
+    }
+
+    /** 读取分区数据, 返回该分区数据遍历器 */
+    public final TIterator<T> iterator(Partition split, TaskContext context) {
         if (storageLevel != StorageLevel.NONE) {
             return getOrCompute(split, context);
         } else {
@@ -43,32 +48,19 @@ public abstract class RDD<T> implements Serializable {
         }
     }
 
-    @SuppressWarnings("unchecked")
     protected <U> RDD<U> firstParent() {
         return (RDD<U>) dependencies().poll().rdd();
     }
 
-    @SuppressWarnings("unchecked")
-    private Iterator<T> computeOrReadCheckpoint(Partition split, TaskContext context) {
-        if (isCheckpointedAndMaterialized()) {
-            return (Iterator<T>) firstParent().iterator(split, context);
-        } else {
-            return compute(split, context);
-        }
+    private TIterator<T> computeOrReadCheckpoint(Partition split, TaskContext context) {
+        // TODO: 待实现
+        throw new RuntimeException("");
     }
 
-    @SuppressWarnings("unchecked")
-    private Iterator<T> getOrCompute(Partition partition, TaskContext context) {
+    private TIterator<T> getOrCompute(Partition partition, TaskContext context) {
         RDDBlockId blockId = new RDDBlockId(id, partition.index());
-        Pair<BlockResult, Iterator<T>> res = SparkEnv.env.blockManager.getOrElseUpdate(blockId, storageLevel, () ->
-            computeOrReadCheckpoint(partition, context)
-        );
-        if (res.getLeft() != null) {
-            return new InterruptibleIterator<>(context, (Iterator<T>) res.getLeft().data);
-        } else if (res.getRight() != null) {
-            return new InterruptibleIterator<>(context, res.getRight());
-        }
-        throw new SparkException(String.format("Got partition %d of rdd %s failure", partition.index(), blockId));
+        // TODO: 待实现
+        throw new RuntimeException("");
     }
 
     public SparkContext context() {
@@ -80,10 +72,6 @@ public abstract class RDD<T> implements Serializable {
         throw new UnsupportedOperationException("");
     }
 
-    public Partition[] partitions() {
-        throw new UnsupportedOperationException("");
-    }
-
     public String[] preferredLocations(Partition split) {
         throw new UnsupportedOperationException("");
     }
@@ -92,9 +80,15 @@ public abstract class RDD<T> implements Serializable {
         throw new UnsupportedOperationException("");
     }
 
+    public void doCheckpoint() {
+
+    }
+
     private boolean isCheckpointedAndMaterialized() {
         return checkpointData != null && checkpointData.isCheckpointed();
     }
 
-    public abstract Iterator<T> compute(Partition split, TaskContext context);
+    public abstract Partition[] partitions();
+
+    public abstract TIterator<T> compute(Partition split, TaskContext context);
 }

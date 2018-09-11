@@ -7,7 +7,7 @@ public class TaskInfo {
 
     private long taskId;
     public int index;
-    private int attemptNumber;
+    public int attemptNumber;
     private long launchTime;
     private String executorId;
     private String host;

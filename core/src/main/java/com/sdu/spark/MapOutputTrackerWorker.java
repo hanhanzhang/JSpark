@@ -30,7 +30,7 @@ public class MapOutputTrackerWorker extends MapOutputTracker {
     private Map<Integer, MapStatus[]> mapStatuses = Maps.newConcurrentMap();
 
     // 记录正在请求ShuffleId对应Shuffle的输出集合(保证线程安全)
-    private Set<Integer> fetching;
+    private final Set<Integer> fetching;
 
     public MapOutputTrackerWorker(SparkConf conf) {
         super(conf);
@@ -84,7 +84,7 @@ public class MapOutputTrackerWorker extends MapOutputTracker {
                     try {
                         wait();
                     } catch (InterruptedException e) {
-
+                        // ignore
                     }
                 }
 

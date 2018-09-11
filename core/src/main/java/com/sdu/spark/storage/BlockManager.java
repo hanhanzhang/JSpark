@@ -28,6 +28,7 @@ import com.sdu.spark.storage.memory.MemoryStore;
 import com.sdu.spark.unfase.Platform;
 import com.sdu.spark.utils.ChunkedByteBuffer;
 import com.sdu.spark.utils.IdGenerator;
+import com.sdu.spark.utils.TIterator;
 import com.sdu.spark.utils.scala.Either;
 import com.sdu.spark.utils.scala.Left;
 import com.sdu.spark.utils.scala.Right;
@@ -256,9 +257,9 @@ public class BlockManager implements BlockDataManager, BlockEvictionHandler {
     }
 
 
-    public <T> Pair<BlockResult, Iterator<T>> getOrElseUpdate(BlockId blockId,
-                                                              StorageLevel storageLevel,
-                                                              RDDIterator<T> rddIterator) {
+    public <T> Pair<BlockResult, TIterator<T>> getOrElseUpdate(BlockId blockId,
+                                                               StorageLevel storageLevel,
+                                                               RDDIterator<T> rddIterator) {
         // TODO: 待实现
         throw new UnsupportedOperationException("");
     }
