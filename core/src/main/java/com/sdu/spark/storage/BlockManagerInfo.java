@@ -12,7 +12,9 @@ import java.util.Set;
 import static com.sdu.spark.utils.Utils.bytesToString;
 
 /**
- * {@link BlockManagerInfo}维护BlockManger数据块存储信息, 每个BlockManger对应一个BlockManagerInfo
+ * BlockManagerInfo管理BlockManger数据块存储信息.
+ *
+ * BlockManagerInfo对Block块管理采用共享锁和排它锁, 读锁共享, 写锁互斥.
  *
  * @author hanhan.zhang
  * */
@@ -35,8 +37,11 @@ public class BlockManagerInfo {
     private Map<BlockId, BlockStatus> blocks;
     private Set<BlockId> cachedBlocks;
 
-    public BlockManagerInfo(BlockManagerId blockManagerId, long maxOnHeapMem,
-                            long maxOffHeapMem, RpcEndpointRef slaveEndpoint, long timeMs) {
+    public BlockManagerInfo(BlockManagerId blockManagerId,
+                            long maxOnHeapMem,
+                            long maxOffHeapMem,
+                            RpcEndpointRef slaveEndpoint,
+                            long timeMs) {
         this.blockManagerId = blockManagerId;
         this.maxOnHeapMem = maxOnHeapMem;
         this.maxOffHeapMem = maxOffHeapMem;
@@ -61,15 +66,15 @@ public class BlockManagerInfo {
         BlockStatus originBlockStatus = getStatus(blockId);
         if (originBlockStatus != null) {
             // BlockId的数据块已被记录
-            StorageLevel originStorageLevel = originBlockStatus.storageLevel;
-            if (originStorageLevel.useMemory) {
-                remainingMem += originBlockStatus.memorySize;
+            StorageLevel originStorageLevel = originBlockStatus.getStorageLevel();
+            if (originStorageLevel.isUseMemory()) {
+                remainingMem += originBlockStatus.getMemorySize();
             }
         }
 
         if (storageLevel.isValid()) {
             BlockStatus blockStatus = null;
-            if (storageLevel.useMemory) {
+            if (storageLevel.isUseMemory()) {
                 blockStatus = new BlockStatus(storageLevel, memorySize, 0);
                 remainingMem -= memorySize;
                 blocks.put(blockId, blockStatus);
@@ -77,7 +82,7 @@ public class BlockManagerInfo {
                 // 打印日志
                 if (originBlockStatus != null) {
                     LOGGER.info("Updated {} in memory on {} (current size: {}, original size: {}, free: {})",
-                            blockId, blockManagerId.hostPort(), bytesToString(originBlockStatus.memorySize),
+                            blockId, blockManagerId.hostPort(), bytesToString(originBlockStatus.getMemorySize()),
                             bytesToString(memorySize), bytesToString(remainingMem));
                 } else {
                     LOGGER.info("Updated {} in memory on {} (size: {}, free: {})", blockId,
@@ -85,12 +90,12 @@ public class BlockManagerInfo {
                 }
             }
 
-            if (storageLevel.useDisk) {
+            if (storageLevel.isUseDisk()) {
                 blockStatus = new BlockStatus(storageLevel, 0, diskSize);
                 blocks.put(blockId, blockStatus);
                 if (originBlockStatus != null) {
                     LOGGER.info("Updated {} on disk on {} (current size: {}, original size: {})", blockId, blockManagerId.hostPort(),
-                            bytesToString(diskSize), bytesToString(originBlockStatus.diskSize));
+                            bytesToString(diskSize), bytesToString(originBlockStatus.getDiskSize()));
                 } else {
                     LOGGER.info("Added {} on disk on {} (size: {})", blockId, blockManagerId.hostPort(), bytesToString(diskSize));
                 }
@@ -104,20 +109,20 @@ public class BlockManagerInfo {
             // TODO: 为啥没有重新计算remainMem
             blocks.remove(blockId);
             cachedBlocks.remove(blockId);
-            if (originBlockStatus.storageLevel.useMemory) {
+            if (originBlockStatus.getStorageLevel().isUseMemory()) {
                 LOGGER.info("Removed {} on {} in memory (size: {}, free: {})", blockId, blockManagerId.hostPort(),
-                        bytesToString(originBlockStatus.memorySize), bytesToString(remainingMem));
+                        bytesToString(originBlockStatus.getMemorySize()), bytesToString(remainingMem));
             }
-            if (originBlockStatus.storageLevel.useDisk) {
+            if (originBlockStatus.getStorageLevel().isUseDisk()) {
                 LOGGER.info("Removed {} on {} on disk (size: {})", blockId, blockManagerId.hostPort(),
-                        bytesToString(originBlockStatus.diskSize));
+                        bytesToString(originBlockStatus.getDiskSize()));
             }
         }
     }
 
     public void removeBlock(BlockId blockId) {
         if (blocks.containsKey(blockId)) {
-            remainingMem += blocks.get(blockId).memorySize;
+            remainingMem += blocks.get(blockId).getMemorySize();
             blocks.remove(blockId);
         }
         cachedBlocks.remove(blockId);
@@ -147,26 +152,5 @@ public class BlockManagerInfo {
     @Override
     public String toString() {
         return "BlockManagerInfo " + lastSeenMs + " " + remainingMem;
-    }
-
-    public static class BlockStatus {
-        public StorageLevel storageLevel;
-        public long memorySize;
-        public long diskSize;
-
-        public BlockStatus(StorageLevel storageLevel, long memorySize, long diskSize) {
-            this.storageLevel = storageLevel;
-            this.memorySize = memorySize;
-            this.diskSize = diskSize;
-        }
-
-        boolean isCached() {
-            return memorySize + diskSize > 0;
-        }
-
-        // 标识BlockStatus待删除
-        static BlockStatus empty() {
-            return new BlockStatus(StorageLevel.NONE, 0L, 0L);
-        }
     }
 }

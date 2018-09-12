@@ -3,17 +3,17 @@ package com.sdu.spark.storage;
 import com.google.common.collect.ConcurrentHashMultiset;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 import com.sdu.spark.SparkException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static com.google.common.collect.Sets.newHashSet;
+import static java.lang.String.format;
 
 /**
  *
@@ -44,7 +44,7 @@ public class BlockInfoManager {
 
     public synchronized void registerTask(long taskAttemptId) {
         checkArgument(!readLocksByTask.containsKey(taskAttemptId),
-                        String.format("Task attempt %s is already registered", taskAttemptId));
+                        format("Task attempt %s is already registered", taskAttemptId));
         readLocksByTask.put(taskAttemptId, ConcurrentHashMultiset.create());
     }
 
@@ -65,7 +65,7 @@ public class BlockInfoManager {
             }
             // 没有写锁
             if (blockInfo.writerTask() == BlockInfo.NO_WRITER) {
-                blockInfo.readerCount += 1;
+                blockInfo.readerCount(1, true);
                 ConcurrentHashMultiset<BlockId> readingBlockIds = readLocksByTask.get(currentTaskAttemptId());
                 if (readingBlockIds == null) {
                     readingBlockIds = ConcurrentHashMultiset.create();
@@ -101,12 +101,8 @@ public class BlockInfoManager {
             }
             // 数据块没有读写
             if (blockInfo.readerCount() == 0 && blockInfo.writerTask() == BlockInfo.NO_WRITER) {
-                blockInfo.writerTask = currentTaskAttemptId();
-                Set<BlockId> writingBlockIds =  writeLocksByTask.get(currentTaskAttemptId());
-                if (writingBlockIds == null) {
-                    writingBlockIds = Sets.newHashSet();
-                    writeLocksByTask.put(currentTaskAttemptId(), writingBlockIds);
-                }
+                blockInfo.writerTask(currentTaskAttemptId());
+                Set<BlockId> writingBlockIds =  writeLocksByTask.computeIfAbsent(currentTaskAttemptId(), key -> newHashSet());
                 writingBlockIds.add(blockId);
                 return blockInfo;
             }
@@ -129,11 +125,11 @@ public class BlockInfoManager {
     public synchronized BlockInfo assertBlockIsLockedForWriting(BlockId blockId) throws SparkException {
         BlockInfo blockInfo = infos.get(blockId);
         if (blockInfo == null) {
-            throw new SparkException(String.format("Block %s does not exist", blockId));
+            throw new SparkException(format("Block %s does not exist", blockId));
         }
 
-        if (blockInfo.writerTask != currentTaskAttemptId()) {
-            throw new SparkException(String.format("Task %s has not locked block $blockId for writing",
+        if (blockInfo.writerTask() != currentTaskAttemptId()) {
+            throw new SparkException(format("Task %s has not locked block $blockId for writing",
                                         currentTaskAttemptId()));
         }
         return blockInfo;
@@ -149,8 +145,8 @@ public class BlockInfoManager {
     public synchronized void downgradeLock(BlockId blockId) {
         LOGGER.trace("Task {} downgrading write lock for {}", currentTaskAttemptId(), blockId);
         BlockInfo info = get(blockId);
-        checkArgument(info.writerTask == currentTaskAttemptId(),
-                String.format("Task %s tried to downgrade a write lock that it does not hold on  block %s",
+        checkArgument(info.writerTask() == currentTaskAttemptId(),
+                format("Task %s tried to downgrade a write lock that it does not hold on  block %s",
                                 currentTaskAttemptId(), blockId));
         unlock(blockId, currentTaskAttemptId());
         BlockInfo lockOutcome = lockForReading(blockId, false);
@@ -175,19 +171,19 @@ public class BlockInfoManager {
         LOGGER.trace("Task {} releasing lock for {}", taskId, blockId);
         BlockInfo blockInfo = get(blockId);
         if (blockInfo == null) {
-            throw new IllegalStateException(String.format("Block %s not found", blockId));
+            throw new IllegalStateException(format("Block %s not found", blockId));
         }
 
-        if (blockInfo.writerTask != BlockInfo.NO_WRITER) {
-            blockInfo.writerTask = BlockInfo.NO_WRITER;
+        if (blockInfo.writerTask() != BlockInfo.NO_WRITER) {
+            blockInfo.writerTask(BlockInfo.NO_WRITER);
             writeLocksByTask.remove(taskId);
         } else {
-            checkArgument(blockInfo.readerCount > 0, String.format("Block %s is not locked for reading", blockId));
-            blockInfo.readerCount -= 1;
+            checkArgument(blockInfo.readerCount() > 0, format("Block %s is not locked for reading", blockId));
+            blockInfo.readerCount(1, false);
             ConcurrentHashMultiset<BlockId> countsForTask = readLocksByTask.get(taskId);
             int newPinCountForTask = countsForTask.remove(blockId, 1) - 1;
             assert newPinCountForTask >= 0 :
-                    String.format("Task %s release lock on block $blockId more times than it acquired it", taskId);
+                    format("Task %s release lock on block $blockId more times than it acquired it", taskId);
         }
         notifyAll();
     }
@@ -233,8 +229,8 @@ public class BlockInfoManager {
 
         writeLocks.forEach(blockId -> {
             BlockInfo blockInfo = infos.get(blockId);
-            assert blockInfo.writerTask == taskId;
-            blockInfo.writerTask = BlockInfo.NO_WRITER;
+            assert blockInfo.writerTask() == taskId;
+            blockInfo.writerTask(BlockInfo.NO_WRITER);
             blocksWithReleasedLocks.add(blockId);
         });
 
@@ -243,8 +239,8 @@ public class BlockInfoManager {
             blocksWithReleasedLocks.add(blockId);
             int lockCount = entry.getCount();
             BlockInfo blockInfo = infos.get(blockId);
-            blockInfo.readerCount -= lockCount;
-            assert blockInfo.readerCount >= 0;
+            blockInfo.readerCount(lockCount, false);
+            assert blockInfo.readerCount() >= 0;
         });
 
         notifyAll();
@@ -266,9 +262,10 @@ public class BlockInfoManager {
         if (blockInfo == null) {
             return;
         }
-        if (blockInfo.writerTask == currentTaskAttemptId()) {
-            blockInfo.writerTask = BlockInfo.NO_WRITER;
-            blockInfo.readerCount = 0;
+        if (blockInfo.writerTask() == currentTaskAttemptId()) {
+            blockInfo.writerTask(BlockInfo.NO_WRITER);
+            // 置零
+            blockInfo.readerCount(blockInfo.readerCount(), false);
             writeLocksByTask.remove(currentTaskAttemptId());
         }
         notifyAll();
@@ -276,8 +273,8 @@ public class BlockInfoManager {
 
     public synchronized void clear() {
         infos.values().forEach(blockInfo -> {
-            blockInfo.readerCount = 0;
-            blockInfo.writerTask = BlockInfo.NO_WRITER;
+            blockInfo.readerCount(blockInfo.readerCount(), false);
+            blockInfo.writerTask(BlockInfo.NO_WRITER);
         });
         infos.clear();
         readLocksByTask.clear();

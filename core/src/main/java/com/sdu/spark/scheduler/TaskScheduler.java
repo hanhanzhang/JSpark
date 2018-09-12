@@ -1,9 +1,13 @@
 package com.sdu.spark.scheduler;
 
-import com.sdu.spark.executor.ExecutorExitCode.*;
+import com.sdu.spark.executor.ExecutorExitCode.ExecutorLossReason;
 import com.sdu.spark.storage.BlockManagerId;
 
 /**
+ * TaskSchedule负责从DAGSchedule接收TaskSet并创建TaskSetManager对TaskSet管理.
+ *
+ * TaskSchedule由SchedulerBackend将Task提交Executor上运行.
+ *
  * @author hanhan.zhang
  * */
 public interface TaskScheduler {

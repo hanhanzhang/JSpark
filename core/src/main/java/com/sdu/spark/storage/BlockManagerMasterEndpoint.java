@@ -235,7 +235,7 @@ public class BlockManagerMasterEndpoint extends ThreadSafeRpcEndpoint {
         return memoryInfo;
     }
 
-    private Future<Map<BlockManagerId, BlockManagerInfo.BlockStatus>> blockStatus(BlockId blockId, boolean askSlaves) {
+    private Future<Map<BlockManagerId, BlockStatus>> blockStatus(BlockId blockId, boolean askSlaves) {
         GetBlockStatus blockStatus = new GetBlockStatus(blockId);
         throw new UnsupportedOperationException("");
     }

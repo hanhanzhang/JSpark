@@ -22,7 +22,6 @@ import com.sdu.spark.serializer.SerializerManager;
 import com.sdu.spark.shuffle.ShuffleManager;
 import com.sdu.spark.storage.BlockData.Allocator;
 import com.sdu.spark.storage.BlockData.ByteBufferBlockData;
-import com.sdu.spark.storage.BlockManagerInfo.BlockStatus;
 import com.sdu.spark.storage.memory.BlockEvictionHandler;
 import com.sdu.spark.storage.memory.MemoryStore;
 import com.sdu.spark.unfase.Platform;
@@ -52,11 +51,10 @@ import static com.sdu.spark.utils.Utils.classForName;
 import static org.apache.commons.lang3.math.NumberUtils.toInt;
 
 /**
- * {@link BlockManager}职责:
+ * BlockManager运行在每个节点上(Driver及Executor), 提供对本地或远端节点上内存、磁盘及堆外内存中Block的管理.
  *
- * 1: {@link com.sdu.spark.memory.StorageMemoryPool}申请存储内存时, 若没有足够内存则会将内存中Block数据Spill到磁盘
- *
- *    实现方法: {@link #dropFromMemory(BlockId, Either)}
+ * Spark的存储体系包括BlockManager、BlockInfoManager、DiskBlockManager、DiskStore、MemoryManager、MemoryStore及
+ * 对集群中所有BlockManager管理的BlockMangerMaster及各个节点上堆外提供Block上传与下载的BlockTransferService服务.
  *
  * @author hanhan.zhang
  * */
@@ -245,7 +243,7 @@ public class BlockManager implements BlockDataManager, BlockEvictionHandler {
             BlockId blockId = entries.getKey();
             BlockInfo blockInfo = entries.getValue();
             BlockStatus blockStatus = getCurrentBlockStatus(blockId, blockInfo);
-            if (blockInfo.tellMaster && !tryToReportBlockStatus(blockId, blockStatus, 0)) {
+            if (blockInfo.isTellMaster() && !tryToReportBlockStatus(blockId, blockStatus, 0)) {
                 LOGGER.error("Failed to report {} to master; giving up.", blockId);
                 return;
             }
@@ -311,9 +309,9 @@ public class BlockManager implements BlockDataManager, BlockEvictionHandler {
 
     private boolean tryToReportBlockStatus(BlockId blockId, BlockStatus blockStatus, long droppedMemorySize) {
         // 向BlockManagerMasterEndpoint汇报Block状态
-        long inMemSize = Math.max(blockStatus.memorySize, droppedMemorySize);
-        long onDiskSize = blockStatus.diskSize;
-        return master.updateBlockInfo(blockManagerId, blockId, blockStatus.storageLevel,
+        long inMemSize = Math.max(blockStatus.getMemorySize(), droppedMemorySize);
+        long onDiskSize = blockStatus.getDiskSize();
+        return master.updateBlockInfo(blockManagerId, blockId, blockStatus.getStorageLevel(),
                                       inMemSize, onDiskSize);
     }
 
@@ -333,17 +331,17 @@ public class BlockManager implements BlockDataManager, BlockEvictionHandler {
     }
 
     private BlockStatus getCurrentBlockStatus(BlockId blockId, BlockInfo blockInfo) {
-        StorageLevel level = blockInfo.storageLevel;
+        StorageLevel level = blockInfo.getStorageLevel();
         if (level == null) {
             return BlockStatus.empty();
         }
         // 只能存在内存或磁盘
-        boolean inMemory = level.useMemory && memoryStore.contains(blockId);
-        boolean inDisk = level.useDisk && diskStore.contains(blockId);
-        boolean deserialized = inMemory && level.deserialized;
-        int replication = inMemory || inDisk ? level.replication : 1;
+        boolean inMemory = level.isUseMemory() && memoryStore.contains(blockId);
+        boolean inDisk = level.isUseDisk() && diskStore.contains(blockId);
+        boolean deserialized = inMemory && level.isDeserialized();
+        int replication = inMemory || inDisk ? level.getReplication() : 1;
 
-        StorageLevel storageLevel = StorageLevel.apply(inDisk, inMemory, level.useOffHeap, deserialized, replication);
+        StorageLevel storageLevel = StorageLevel.apply(inDisk, inMemory, level.isUseOffHeap(), deserialized, replication);
 
         long memSize = inMemory ? memoryStore.getSize(blockId) : 0L;
         long diskSize = inDisk ? diskStore.getSize(blockId) : 0L;
@@ -362,24 +360,24 @@ public class BlockManager implements BlockDataManager, BlockEvictionHandler {
     }
 
     private BlockData doGetLocalBytes(BlockId blockId, BlockInfo blockInfo) {
-        StorageLevel level = blockInfo.storageLevel;
-        if (level.deserialized) {
-            if (level.useDisk && diskStore.contains(blockId)) {
+        StorageLevel level = blockInfo.getStorageLevel();
+        if (level.isDeserialized()) {
+            if (level.isUseDisk() && diskStore.contains(blockId)) {
                 return diskStore.getBytes(blockId);
-            } else if (level.useMemory && memoryStore.contains(blockId)) {
+            } else if (level.isUseMemory() && memoryStore.contains(blockId)) {
                 return new ByteBufferBlockData(serializerManager.dataSerializeWithExplicitClassTag(
                         blockId, memoryStore.getValues(blockId)), true);
             } else {
                 handleLocalReadFailure(blockId);
             }
         } else {
-            if (level.useDisk && diskStore.contains(blockId)) {
+            if (level.isUseDisk() && diskStore.contains(blockId)) {
                 BlockData diskData = diskStore.getBytes(blockId);
                 ChunkedByteBuffer cacheBuf = maybeCacheDiskBytesInMemory(blockId, blockInfo, level, diskData);
                 if (cacheBuf != null) {
                     return new ByteBufferBlockData(cacheBuf, false);
                 }
-            } else if (level.useMemory && memoryStore.contains(blockId)) {
+            } else if (level.isUseMemory() && memoryStore.contains(blockId)) {
                 return new ByteBufferBlockData(memoryStore.getBytes(blockId), false);
             } else {
                 handleLocalReadFailure(blockId);
@@ -391,8 +389,8 @@ public class BlockManager implements BlockDataManager, BlockEvictionHandler {
     /**磁盘读取Block数据块缓存在内存中*/
     private ChunkedByteBuffer maybeCacheDiskBytesInMemory(BlockId blockId, final BlockInfo blockInfo,
                                                           StorageLevel level, BlockData diskData) {
-        assert !level.deserialized;
-        if (level.useMemory) {
+        assert !level.isDeserialized();
+        if (level.isUseMemory()) {
             // 防止多个线程同时将Block缓存内存, 单进程处理
             synchronized (blockInfo) {
                 if (memoryStore.contains(blockId)) {
@@ -470,18 +468,18 @@ public class BlockManager implements BlockDataManager, BlockEvictionHandler {
         return doPut(blockId, level, tellMaster, keepReadLock, blockInfo -> {
             long startTimeMs = System.currentTimeMillis();
             Future<?> replicationFuture = null;
-            if (level.replication > 1) {
+            if (level.getReplication() > 1) {
                 replicationFuture = futureExecutionContext.submit(() -> {
                     BlockData blockData = new ByteBufferBlockData(bytes, false);
                     replicate(blockId, blockData, level);
                 });
             }
 
-            if (level.useMemory) {
+            if (level.isUseMemory()) {
                 boolean putSucceeded = false;
                 // Put it in memory first, even if it also has useDisk set to true;
                 // We will drop it to disk later if the memory store can't hold it.
-                if (level.deserialized) {
+                if (level.isDeserialized()) {
                     Iterator<?> values = serializerManager.dataDeserializeStream(blockId, bytes.toInputStream());
                     Pair<MemoryStore.PartiallyUnrolledIterator<?>, Long> result = memoryStore.putIteratorAsValues(blockId, values);
                     if (result.getLeft() != null) {
@@ -508,25 +506,25 @@ public class BlockManager implements BlockDataManager, BlockEvictionHandler {
                     });
                 }
 
-                if (!putSucceeded && level.useDisk) {
+                if (!putSucceeded && level.isUseDisk()) {
                     LOGGER.warn("Persisting block {} to disk instead.", blockId);
                     diskStore.putBytes(blockId, bytes);
                 }
-            } else if (level.useDisk) {
+            } else if (level.isUseDisk()) {
                 diskStore.putBytes(blockId, bytes);
             }
 
             BlockStatus putBlockStatus = getCurrentBlockStatus(blockId, blockInfo);
-            boolean blockWasSuccessfullyStored = putBlockStatus.storageLevel.isValid();
+            boolean blockWasSuccessfullyStored = putBlockStatus.getStorageLevel().isValid();
             if (blockWasSuccessfullyStored) {
-                blockInfo.size = bytes.size();
-                if (tellMaster && blockInfo.tellMaster) {
+                blockInfo.size(bytes.size());
+                if (tellMaster && blockInfo.isTellMaster()) {
                     reportBlockStatus(blockId, putBlockStatus, 0);
                 }
                 // TODO: Block Metric
             }
             LOGGER.debug("Put block {} locally took {} ms", blockId, System.currentTimeMillis() - startTimeMs);
-            if (level.replication > 1 && replicationFuture != null) {
+            if (level.getReplication() > 1 && replicationFuture != null) {
                 // 等待副本创建完成
                 try {
                     while (replicationFuture.isDone()) {
@@ -554,15 +552,15 @@ public class BlockManager implements BlockDataManager, BlockEvictionHandler {
                                        StorageLevel level, Set<BlockManagerId> existingReplicas) {
         int maxReplicationFailures = conf.getInt("spark.storage.maxReplicationFailures", 1);
         StorageLevel tLevel = StorageLevel.apply(
-                level.useDisk,
-                level.useMemory,
-                level.useOffHeap,
-                level.deserialized,
+                level.isUseDisk(),
+                level.isUseMemory(),
+                level.isUseOffHeap(),
+                level.isDeserialized(),
                 1
         );
 
         // 需创建副本数
-        int numPeersToReplicateTo = level.replication - 1;
+        int numPeersToReplicateTo = level.getReplication() - 1;
         // Block副本存储地址
         Set<BlockManagerId> peersReplicatedTo = Sets.newHashSet(existingReplicas);
         Set<BlockManagerId> peersFailedToReplicateTo = Sets.newHashSet();
@@ -716,10 +714,10 @@ public class BlockManager implements BlockDataManager, BlockEvictionHandler {
         // 确保当前Block处于写状态
         BlockInfo blockInfo = blockInfoManager.assertBlockIsLockedForWriting(blockId);
         boolean blockIsUpdated = false;
-        StorageLevel level = blockInfo.storageLevel;
+        StorageLevel level = blockInfo.getStorageLevel();
 
         // Spill到磁盘
-        if (level.useDisk && !diskStore.contains(blockId)) {
+        if (level.isUseDisk() && !diskStore.contains(blockId)) {
             LOGGER.info("Writing block {} to disk", blockId);
             if (data instanceof Left) {
                 Left<List<T>, ChunkedByteBuffer> elements = (Left<List<T>, ChunkedByteBuffer>) data;
@@ -759,13 +757,13 @@ public class BlockManager implements BlockDataManager, BlockEvictionHandler {
         }
 
         BlockStatus status = getCurrentBlockStatus(blockId, blockInfo);
-        if (blockInfo.tellMaster) {
+        if (blockInfo.isTellMaster()) {
             reportBlockStatus(blockId, status, droppedMemorySize);
         }
         if (blockIsUpdated) {
             // TODO: Block Update Metric
         }
-        return status.storageLevel;
+        return status.getStorageLevel();
     }
 
     interface BlockDataConvert<T> {

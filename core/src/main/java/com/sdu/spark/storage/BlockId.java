@@ -8,6 +8,8 @@ import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import static java.lang.String.format;
+
 /**
  * @author hanhan.zhang
  * */
@@ -118,7 +120,7 @@ public abstract class BlockId implements Serializable {
 
         @Override
         public String name() {
-            return String.format("rdd_%d_%d", rddId, splitIndex);
+            return format("rdd_%d_%d", rddId, splitIndex);
         }
     }
 
@@ -135,7 +137,7 @@ public abstract class BlockId implements Serializable {
 
         @Override
         public String name() {
-            return String.format("shuffle_%d_%d_%d", shuffleId, mapId, reduceId);
+            return format("shuffle_%d_%d_%d", shuffleId, mapId, reduceId);
         }
     }
 
@@ -153,7 +155,7 @@ public abstract class BlockId implements Serializable {
 
         @Override
         public String name() {
-            return String.format("shuffle_%d_%d_%d.data", shuffleId, mapId, reduceId);
+            return format("shuffle_%d_%d_%d.data", shuffleId, mapId, reduceId);
         }
     }
 
@@ -171,7 +173,7 @@ public abstract class BlockId implements Serializable {
 
         @Override
         public String name() {
-            return String.format("shuffle_%d_%d_%d.index", shuffleId, mapId, reduceId);
+            return format("shuffle_%d_%d_%d.index", shuffleId, mapId, reduceId);
         }
     }
 
@@ -205,7 +207,7 @@ public abstract class BlockId implements Serializable {
 
         @Override
         public String name() {
-            return String.format("taskresult_%d", taskId);
+            return format("taskresult_%d", taskId);
         }
     }
 
@@ -220,7 +222,7 @@ public abstract class BlockId implements Serializable {
 
         @Override
         public String name() {
-            return String.format("input-%d-%d", streamId, uniqueId);
+            return format("input-%d-%d", streamId, uniqueId);
         }
     }
 
@@ -233,7 +235,7 @@ public abstract class BlockId implements Serializable {
 
         @Override
         public String name() {
-            return String.format("temp_local_%s", id);
+            return format("temp_local_%s", id);
         }
     }
 
@@ -246,7 +248,7 @@ public abstract class BlockId implements Serializable {
 
         @Override
         public String name() {
-            return String.format("temp_shuffle_%s", id);
+            return format("temp_shuffle_%s", id);
         }
     }
 

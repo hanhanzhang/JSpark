@@ -46,7 +46,9 @@ import static org.apache.commons.lang3.StringUtils.isNotEmpty;
 import static org.apache.commons.lang3.StringUtils.join;
 
 /**
- * {@link DAGScheduler}职责:
+ * DAGSchedule负责接收由RDD构成的DAG并将RDD划分到不同Stage. 根据Stage的不同类型(目前只有ShuffleMapStage和ResultStage)为
+ * Stage中RDD未完成的Partition创建Task(目前有ShuffleMapTask和ResultTask). 最后DAGSchedule将每个Stage中的Task以任务集
+ * 合(TaskSet)的形式提交给TaskSchedule处理.
  *
  * 1: {@link #runJob(RDD, JobAction, List, ResultHandler, Properties)}划分并提及Stage
  *

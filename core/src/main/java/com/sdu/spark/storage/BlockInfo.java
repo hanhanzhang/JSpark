@@ -1,7 +1,9 @@
 package com.sdu.spark.storage;
 
 /**
- * {@link BlockInfo}标识Block数据块读写状态
+ * BlockInfo描述块元数据信息, 包括存储级别, Block类型, 大小及锁信息等.
+ *
+ * BlockInfo线程不安全, 并发访问由BlockInfoManager控制.
  *
  * @author hanhan.zhang
  * */
@@ -15,13 +17,13 @@ public class BlockInfo {
     // 标识Block被"非任务"线程标记写(如Driver线程)
     public static final long NON_TASK_WRITER = -1024;
 
-    public StorageLevel storageLevel;
-    public boolean tellMaster;
+    private StorageLevel storageLevel;
+    private boolean tellMaster;
 
     // Block's size
-    public long size;
+    private long size;
     // The number of times that this block has been locked for reading.
-    public int readerCount;
+    private int readerCount;
     /**
      * The task attempt id of the task which currently holds the write lock for this block, or
      * [[BlockInfo.NON_TASK_WRITER]] if the write lock is held by non-task code, or
@@ -30,7 +32,7 @@ public class BlockInfo {
      * Note:
      *    writeTask = taskId
      * */
-    public long writerTask = NO_WRITER;
+    private long writerTask = NO_WRITER;
 
     public BlockInfo(StorageLevel storageLevel, boolean tellMaster) {
         this.storageLevel = storageLevel;
@@ -49,8 +51,12 @@ public class BlockInfo {
         return readerCount;
     }
 
-    public void readerCount(int c) {
-        readerCount = c;
+    public void readerCount(int c, boolean add) {
+        if (add) {
+            readerCount += c;
+        } else {
+            readerCount -= c;
+        }
         checkInvariants();
     }
 
@@ -70,5 +76,13 @@ public class BlockInfo {
     public void size(long s) {
         size = s;
         checkInvariants();
+    }
+
+    public StorageLevel getStorageLevel() {
+        return storageLevel;
+    }
+
+    public boolean isTellMaster() {
+        return tellMaster;
     }
 }

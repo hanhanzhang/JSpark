@@ -163,7 +163,7 @@ public class BlockManagerMaster {
      * updated block statuses. This is useful when the master is not informed of the given block
      * by all block managers.
      */
-    public Map<BlockManagerId, BlockManagerInfo.BlockStatus> getBlockStatus(BlockId blockId, boolean askSlaves) {
+    public Map<BlockManagerId, BlockStatus> getBlockStatus(BlockId blockId, boolean askSlaves) {
         throw new UnsupportedOperationException("");
     }
 
