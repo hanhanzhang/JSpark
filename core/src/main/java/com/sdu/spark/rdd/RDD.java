@@ -40,7 +40,7 @@ public abstract class RDD<T> implements Serializable {
     // 是否已调用doCheckpoint方法设置检查点, 防止对RDD多次设置检查点
     private transient boolean doCheckpointCalled = false;
 
-    public CallSite creationSite;
+    private CallSite creationSite;
 
 
     public RDD(SparkContext sc, List<Dependency<?>> dependencies) {
@@ -168,6 +168,21 @@ public abstract class RDD<T> implements Serializable {
         throw new RuntimeException("");
     }
 
+    public String getName() {
+        return name;
+    }
+
+    public int getId() {
+        return id;
+    }
+
+    public StorageLevel getStorageLevel() {
+        return storageLevel;
+    }
+
+    public CallSite getCreationSite() {
+        return creationSite;
+    }
 
     private void clearDependencies() {
         dependencies = null;

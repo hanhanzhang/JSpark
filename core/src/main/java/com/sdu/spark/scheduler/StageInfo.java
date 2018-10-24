@@ -96,23 +96,23 @@ public class StageInfo {
                                       int attemptId,
                                       int numTasks,
                                       TaskLocation[][] taskLocalityPreferences){
-        List<RDDInfo> ancestorRddInfos = stage.rdd.getNarrowAncestors().stream()
+        List<RDDInfo> ancestorRddInfos = stage.getRdd().getNarrowAncestors().stream()
                                                                         .map(RDDInfo::fromRDD)
                                                                         .collect(Collectors.toList());
-        ancestorRddInfos.add(RDDInfo.fromRDD(stage.rdd));
+        ancestorRddInfos.add(RDDInfo.fromRDD(stage.getRdd()));
 
-        List<Integer> parentIds = stage.parents.stream().map(s -> s.id).collect(Collectors.toList());
-        return new StageInfo(stage.id,
+        List<Integer> parentIds = stage.getParents().stream().map(Stage::getId).collect(Collectors.toList());
+        return new StageInfo(stage.getId(),
                              attemptId,
-                             stage.name,
+                             stage.getName(),
                              numTasks,
                              ancestorRddInfos,
                              parentIds,
-                             stage.details,
+                             stage.getDetails(),
                              taskLocalityPreferences);
     }
 
     public static StageInfo fromStage(Stage stage, int attemptId) {
-        return fromStage(stage, attemptId, stage.numTasks, new TaskLocation[0][0]);
+        return fromStage(stage, attemptId, stage.getNumTasks(), new TaskLocation[0][0]);
     }
 }

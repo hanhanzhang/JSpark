@@ -97,10 +97,6 @@ public interface SparkListenerEvent extends Serializable {
         public Properties properties;
         public List<Integer> stageIds;
 
-        public SparkListenerJobStart(int jobId, long time, List<StageInfo> stageInfos) {
-            this(jobId, time, stageInfos, null);
-        }
-
         public SparkListenerJobStart(int jobId, long time, List<StageInfo> stageInfos, Properties properties) {
             this.jobId = jobId;
             this.time = time;

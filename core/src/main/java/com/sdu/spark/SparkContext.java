@@ -7,11 +7,13 @@ import com.sdu.spark.rdd.RDD;
 import com.sdu.spark.rpc.RpcEndpointRef;
 import com.sdu.spark.rpc.SparkConf;
 import com.sdu.spark.scheduler.*;
-import com.sdu.spark.scheduler.action.JobAction;
-import com.sdu.spark.scheduler.action.ResultHandler;
+import com.sdu.spark.scheduler.action.PartitionFunction;
+import com.sdu.spark.scheduler.action.PartitionResultHandler;
 import com.sdu.spark.scheduler.cluster.StandaloneSchedulerBackend;
 import com.sdu.spark.utils.CallSite;
+import com.sdu.spark.utils.Utils;
 import com.sdu.spark.utils.scala.Tuple2;
+import org.apache.commons.lang3.SerializationUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -109,6 +111,8 @@ public class SparkContext {
     private String applicationId;
     private String applicationAttemptId;
 
+    private InheritableThreadLocal<Properties> localProperties;
+
     private AtomicInteger nextShuffleId = new AtomicInteger(0);
     private AtomicInteger nextRddId = new AtomicInteger(0);
 
@@ -117,6 +121,19 @@ public class SparkContext {
 
     public SparkContext(SparkConf conf) {
         this.conf = conf;
+
+        this.localProperties = new InheritableThreadLocal<Properties>(){
+            @Override
+            protected Properties childValue(Properties parentValue) {
+                return SerializationUtils.clone(parentValue);
+            }
+
+            @Override
+            protected Properties initialValue() {
+                return new Properties();
+            }
+        };
+
         init();
     }
 
@@ -234,28 +251,30 @@ public class SparkContext {
 
     /**************************Spark Transaction Action触发Job提交 ***************************/
     public <T, U> List<U> runJob(RDD<T> rdd,
-                                 JobAction<T, U> partitionFunc,
+                                 PartitionFunction<T, U> partitionFunc,
                                  List<Integer> partitions) {
         // 分区结果集, 下标为分区编号
         List<U> results = Lists.newArrayListWithCapacity(partitions.size());
 
         // 分区结果
-        ResultHandler<U> resultHandler = new PartitionResultHandler<>(results);
-        runJob(rdd, partitionFunc, partitions, resultHandler);
+        PartitionResultHandler<U> partitionResultHandler = new PartitionResultHandlerImpl<>(results);
+        runJob(rdd, partitionFunc, partitions, partitionResultHandler);
 
         return results;
     }
 
     public <T, U> void runJob(RDD<T> rdd,
-                              JobAction<T, U> partitionFunc,
+                              PartitionFunction<T, U> partitionFunc,
                               List<Integer> partitions,
-                              ResultHandler<U> resultHandler) {
+                              com.sdu.spark.scheduler.action.PartitionResultHandler<U> partitionResultHandler) {
         if (stopped.get()) {
             throw new IllegalStateException("SparkContext has been shutdown");
         }
 
+        CallSite callSite = getCallSite();
+
         try {
-            dagScheduler.runJob(rdd, partitionFunc, partitions, resultHandler, new Properties());
+            dagScheduler.runJob(rdd, partitionFunc, partitions, callSite, partitionResultHandler, new Properties());
             rdd.doCheckpoint();
         } catch (Exception e) {
             throw new SparkException("Spark run job failure", e);
@@ -263,7 +282,11 @@ public class SparkContext {
     }
 
     public CallSite getCallSite() {
-        throw new UnsupportedOperationException("");
+        CallSite callSite = Utils.getCallSite();
+        String shortForm = getLocalProperty(CallSite.SHORT_FORM);
+        String longFrom = getLocalProperty(CallSite.LONG_FORM);
+        return new CallSite(shortForm == null ? callSite.shortForm : shortForm,
+                            longFrom == null ? callSite.longForm : longFrom);
     }
 
     public int newShuffleId() {
@@ -277,6 +300,26 @@ public class SparkContext {
     public <T> Broadcast<T> broadcast(T value) {
         // TODO: 待实现
         throw new UnsupportedOperationException("");
+    }
+
+    public Properties getLocalProperties() {
+        return localProperties.get();
+    }
+
+    public void setLocalProperties(Properties props) {
+        localProperties.set(props);
+    }
+
+    public void setLocalProperty(String key, String value) {
+        if (value == null) {
+            localProperties.get().remove(key);
+        } else {
+            localProperties.get().setProperty(key, value);
+        }
+    }
+
+    public String getLocalProperty(String key) {
+        return localProperties.get().getProperty(key);
     }
 
     private void assertNotStopped() {
@@ -311,16 +354,16 @@ public class SparkContext {
         // TODO: contextBeingConstructed
     }
 
-    private static class PartitionResultHandler<U> implements ResultHandler<U> {
+    private static class PartitionResultHandlerImpl<U> implements PartitionResultHandler<U> {
 
         private final List<U> results;
 
-        public PartitionResultHandler(List<U> results) {
+        public PartitionResultHandlerImpl(List<U> results) {
             this.results = results;
         }
 
         @Override
-        public void callback(int index, U result) {
+        public void handle(int index, U result) {
             results.set(index, result);
         }
     }

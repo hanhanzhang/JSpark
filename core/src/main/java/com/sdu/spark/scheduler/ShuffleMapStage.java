@@ -11,6 +11,8 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Set;
 
+import static java.lang.String.format;
+
 /**
  * @author hanhan.zhang
  * */
@@ -19,7 +21,7 @@ public class ShuffleMapStage extends Stage {
     private MapOutputTrackerMaster mapOutputTrackerMaster;
     private ShuffleDependency<?, ?, ?> shuffleDep;
 
-    public List<ActiveJob> mapStageJobs;
+    private List<ActiveJob> mapStageJobs;
     private Set<Integer> pendingPartitions;
 
     public ShuffleMapStage(int id,
@@ -27,27 +29,22 @@ public class ShuffleMapStage extends Stage {
                            int numTasks,
                            List<Stage> parents,
                            int firstJobId,
+                           CallSite callSite,
                            ShuffleDependency<?, ?, ?> shuffleDep,
                            MapOutputTrackerMaster mapOutputTrackerMaster) {
-        super(id, rdd, numTasks, parents, firstJobId);
+        super(id, rdd, numTasks, parents, firstJobId, callSite);
         this.mapOutputTrackerMaster = mapOutputTrackerMaster;
         this.shuffleDep = shuffleDep;
         this.pendingPartitions = Sets.newHashSet();
         this.mapStageJobs = Lists.newLinkedList();
     }
 
-    @Override
-    public List<Integer> findMissingPartitions() {
-        return Arrays.asList(mapOutputTrackerMaster.findMissingPartitions(shuffleDep.shuffleId()));
-    }
-
-    @Override
-    public String toString() {
-        return String.format("ShuffleMapStage[stageId = %s]", id);
-    }
-
     public void addActiveJob(ActiveJob activeJob) {
         mapStageJobs.add(activeJob);
+    }
+
+    public void removeActiveJob(ActiveJob activeJob) {
+        mapStageJobs.remove(activeJob);
     }
 
     public ShuffleDependency<?, ?, ?> getShuffleDep() {
@@ -70,15 +67,26 @@ public class ShuffleMapStage extends Stage {
         pendingPartitions.remove(partitionId);
     }
 
-    public void removeActiveJob(ActiveJob activeJob) {
-        mapStageJobs.remove(activeJob);
-    }
-
     public int numAvailableOutputs() {
         return mapOutputTrackerMaster.getNumAvailableOutputs(shuffleDep.shuffleId());
     }
 
+    /** ShuffleMapStage的所有分区的Map任务都成功执行后, ShuffleMapStage才可用 */
     public boolean isAvailable() {
-        return numAvailableOutputs() == numPartitions;
+        return numAvailableOutputs() == getNumPartitions();
+    }
+
+    public List<ActiveJob> mapStageJobs() {
+        return mapStageJobs;
+    }
+
+    @Override
+    public List<Integer> findMissingPartitions() {
+        return Arrays.asList(mapOutputTrackerMaster.findMissingPartitions(shuffleDep.shuffleId()));
+    }
+
+    @Override
+    public String toString() {
+        return format("ShuffleMapStage %d", getId());
     }
 }

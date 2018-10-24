@@ -2,7 +2,7 @@ package com.sdu.spark.scheduler;
 
 import com.sdu.spark.executor.ExecutorExitCode.*;
 import com.sdu.spark.rdd.RDD;
-import com.sdu.spark.scheduler.action.JobAction;
+import com.sdu.spark.scheduler.action.PartitionFunction;
 import com.sdu.spark.utils.CallSite;
 
 import java.util.List;
@@ -14,25 +14,56 @@ import java.util.Properties;
 public interface DAGSchedulerEvent {
 
     class JobSubmitted<T, U> implements DAGSchedulerEvent {
-        public int jobId;
-        public RDD<T> finalRDD;
-        public JobAction<T, U> jobAction;
-        public List<Integer> partitions;
-        public JobListener listener;
-        public Properties properties;
+        private int jobId;
+        private RDD<T> finalRDD;
+        private PartitionFunction<T, U> partitionFunction;
+        private List<Integer> partitions;
+        private CallSite callSite;
+        private JobListener listener;
+        private Properties properties;
 
         public JobSubmitted(int jobId,
                             RDD<T> finalRDD,
-                            JobAction<T, U> jobAction,
+                            PartitionFunction<T, U> partitionFunction,
                             List<Integer> partitions,
+                            CallSite callSite,
                             JobListener listener,
                             Properties properties) {
             this.jobId = jobId;
             this.finalRDD = finalRDD;
-            this.jobAction = jobAction;
+            this.partitionFunction = partitionFunction;
             this.partitions = partitions;
+            this.callSite = callSite;
             this.listener = listener;
             this.properties = properties;
+        }
+
+        public int getJobId() {
+            return jobId;
+        }
+
+        public RDD<T> getFinalRDD() {
+            return finalRDD;
+        }
+
+        public PartitionFunction<T, U> getPartitionFunction() {
+            return partitionFunction;
+        }
+
+        public List<Integer> getPartitions() {
+            return partitions;
+        }
+
+        public CallSite getCallSite() {
+            return callSite;
+        }
+
+        public JobListener getListener() {
+            return listener;
+        }
+
+        public Properties getProperties() {
+            return properties;
         }
     }
 

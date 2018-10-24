@@ -8,14 +8,18 @@ import java.util.Properties;
  * @author hanhan.zhang
  * */
 public class ActiveJob {
+    /** Job身份标识 */
     private int jobId;
+    /** Job最下游Stage */
     private Stage finalStage;
+    /** 应用程序调用栈 */
     private CallSite callSite;
     private JobListener listener;
-    public Properties properties;
+    private Properties properties;
 
-    public int numPartitions = 0;
+    private int numPartitions = 0;
     private int numFinished;
+    /** 标识每个分区的Task是否完成 */
     private boolean[] finished;
 
     /**
@@ -27,17 +31,19 @@ public class ActiveJob {
      * */
     public ActiveJob(int jobId,
                      Stage finalStage,
+                     CallSite callSite,
                      JobListener listener,
                      Properties properties) {
         this.jobId = jobId;
         this.finalStage = finalStage;
+        this.callSite = callSite;
         this.listener = listener;
         this.properties = properties;
 
         if (finalStage instanceof ResultStage) {
-            this.numPartitions = ((ResultStage) finalStage).partitions.size();
+            this.numPartitions = ((ResultStage) finalStage).getPartitions().size();
         } else if (finalStage instanceof ShuffleMapStage) {
-           this.numPartitions = ((ShuffleMapStage) finalStage).rdd.partitions().length;
+           this.numPartitions = ((ShuffleMapStage) finalStage).getRdd().partitions().length;
         }
 
         this.numFinished = 0;
@@ -70,6 +76,14 @@ public class ActiveJob {
 
     public boolean isJobFinished() {
         return numFinished == numPartitions;
+    }
+
+    public int getNumPartitions() {
+        return numPartitions;
+    }
+
+    public Properties getProperties() {
+        return properties;
     }
 
     @Override

@@ -82,7 +82,7 @@ import static org.apache.commons.lang3.StringUtils.join;
  *
  * @author hanhan.zhang
  * */
-public abstract class CoarseGrainedSchedulerBackend implements ExecutorAllocationClient, SchedulerBackend {
+public abstract class CoarseGrainedSchedulerBackend extends SchedulerBackend implements ExecutorAllocationClient {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(CoarseGrainedSchedulerBackend.class);
 

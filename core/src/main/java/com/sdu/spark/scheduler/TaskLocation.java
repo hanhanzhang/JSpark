@@ -3,6 +3,7 @@ package com.sdu.spark.scheduler;
 import java.io.Serializable;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static java.lang.String.format;
 
 /**
  * @author hanhan.zhang
@@ -31,7 +32,7 @@ public abstract class TaskLocation implements Serializable {
 
         @Override
         public String toString() {
-            return String.format("%s%s_%s", executorLocationTag, host, executorId);
+            return format("%s%s_%s", executorLocationTag, host, executorId);
         }
     }
 
@@ -67,7 +68,7 @@ public abstract class TaskLocation implements Serializable {
 
         @Override
         public String toString() {
-            return String.format("%s%s", inMemoryLocationTag, host);
+            return format("%s%s", inMemoryLocationTag, host);
         }
     }
 
@@ -75,14 +76,20 @@ public abstract class TaskLocation implements Serializable {
         return new ExecutorCacheTaskLocation(host, executorId);
     }
 
+    /**
+     * Create a TaskLocation from a string returned by getPreferredLocations.
+     * These strings have the form executor_[hostname]_[executorid], [hostname], or
+     * hdfs_cache_[hostname], depending on whether the location is cached.
+     * */
     public static TaskLocation apply(String str) {
+        assert str != null && str.length() > 0 : "Illegal task location !!";
         if (str.startsWith(inMemoryLocationTag)) {
             String[] fields = str.split("_");
-            checkArgument(fields.length == 3, "Illegal executor location format: " + str);
+            checkArgument(fields.length == 3, format("Illegal hdfs location format: %s", str));
             return new HDFSCacheTaskLocation(fields[2]);
         } else if (str.startsWith(executorLocationTag)) {
             String[] fields = str.split("_");
-            checkArgument(fields.length == 3, "Illegal executor location format: " + str);
+            checkArgument(fields.length == 3, format("Illegal executor location format: %s", str));
             return new ExecutorCacheTaskLocation(fields[1], fields[2]);
         } else {
             return new HostTaskLocation(str);

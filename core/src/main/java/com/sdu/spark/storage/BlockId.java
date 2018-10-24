@@ -110,12 +110,20 @@ public abstract class BlockId implements Serializable {
 
     public static class RDDBlockId extends BlockId {
 
-        public int rddId;
-        public int splitIndex;
+        private int rddId;
+        private int splitIndex;
 
         public RDDBlockId(int rddId, int splitIndex) {
             this.rddId = rddId;
             this.splitIndex = splitIndex;
+        }
+
+        public int getRddId() {
+            return rddId;
+        }
+
+        public int getSplitIndex() {
+            return splitIndex;
         }
 
         @Override

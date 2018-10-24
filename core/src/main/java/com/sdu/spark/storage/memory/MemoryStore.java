@@ -213,7 +213,7 @@ public class MemoryStore {
     }
 
     private int getRddId(BlockId blockId) {
-        return blockId.asRDDId().rddId;
+        return blockId.asRDDId().getRddId();
     }
 
     private boolean blockIsEvictable(BlockId blockId, MemoryEntry<?> entry, int acquireMemoryRddId, MemoryMode needFreeMemoryModel) {

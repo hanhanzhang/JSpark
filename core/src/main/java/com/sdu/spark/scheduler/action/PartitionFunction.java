@@ -6,11 +6,11 @@ import com.sdu.spark.utils.TIterator;
 import java.io.Serializable;
 
 /**
- * RDD Job触发算子
+ * RDD分区计算函数
  *
  * @author hanhan.zhang
  * */
-public interface JobAction<T, U> extends Serializable {
+public interface PartitionFunction<T, U> extends Serializable {
 
     U func(TaskContext context, TIterator<T> dataIterator);
 

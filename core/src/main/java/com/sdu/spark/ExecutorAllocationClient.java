@@ -33,9 +33,7 @@ public interface ExecutorAllocationClient {
 
     boolean requestExecutors(int numAdditionalExecutors);
 
-    List<String> killExecutors(List<String> executorIds,
-                          boolean replace,
-                          boolean force);
+    List<String> killExecutors(List<String> executorIds, boolean replace, boolean force);
 
     default List<String> killExecutors(List<String> executorIds) {
         return killExecutors(executorIds, false, false);

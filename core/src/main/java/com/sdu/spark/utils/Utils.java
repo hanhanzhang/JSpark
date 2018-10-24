@@ -36,6 +36,8 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
+import static java.lang.String.format;
+import static org.apache.commons.lang3.StringUtils.join;
 import static org.apache.commons.lang3.math.NumberUtils.toInt;
 
 /**
@@ -48,6 +50,9 @@ public class Utils {
     private static boolean isWindows = SystemUtils.IS_OS_WINDOWS;
     private static boolean isMac = SystemUtils.IS_OS_MAC;
     private static int MAX_DIR_CREATION_ATTEMPTS = 10;
+
+    private static final Pattern SPARK_CORE_CLASS_REGEX = Pattern.compile("^org.sdu.spark(.api.java)?(.util)?(.rdd)?(.broadcast)?.[A-Z]");
+    private static final Pattern SPARK_SQL_CLASS_REGEX = Pattern.compile("^org.sdu.spark.sql.*");
 
     private static final ImmutableMap<String, TimeUnit> timeSuffixes = ImmutableMap.<String, TimeUnit> builder()
                                                                                     .put("us", TimeUnit.MICROSECONDS)
@@ -107,7 +112,7 @@ public class Utils {
 
     public static void checkHost(String host) {
         assert host != null && host.indexOf(':') == -1 :
-                String.format("Expected hostname (not IP) but got %s", host);
+                format("Expected hostname (not IP) but got %s", host);
     }
 
     public static void setCustomHostname(String hostname) {
@@ -246,11 +251,11 @@ public class Utils {
             count += input.transferTo(count + startPosition, bytesToCopy - count, out);
         }
         assert count == bytesToCopy :
-                String.format("需要复制%s字节数据, 实际复制%s字节数据", bytesToCopy, count);
+                format("需要复制%s字节数据, 实际复制%s字节数据", bytesToCopy, count);
         long finalPos = out.position();
         long expectedPos = initialPos + bytesToCopy;
         assert finalPos == expectedPos :
-                String.format("Current position %s do not equal to expected position %s", finalPos, expectedPos);
+                format("Current position %s do not equal to expected position %s", finalPos, expectedPos);
     }
 
     public static String resolveURIs(String paths) {
@@ -258,7 +263,7 @@ public class Utils {
             return "";
         } else {
             List<URI> uriList = Arrays.stream(paths.split(",")).filter(p -> !p.isEmpty()).map(Utils::resolveURI).collect(Collectors.toList());
-            return StringUtils.join(uriList, ",");
+            return join(uriList, ",");
         }
     }
 
@@ -369,24 +374,24 @@ public class Utils {
         } else {
             if (size.compareTo(BigInteger.valueOf(2 * EB)) > 0) {
                 String value = new BigDecimal(size).divide(new BigDecimal(EB), 1, RoundingMode.HALF_UP).toString();
-                return String.format("%s.1f %s", value, "EB");
+                return format("%s.1f %s", value, "EB");
             } else if (size.compareTo(BigInteger.valueOf(2 * PB)) > 0) {
                 String value = new BigDecimal(size).divide(new BigDecimal(PB), 1, RoundingMode.HALF_UP).toString();
-                return String.format("%s.1f %s", value, "PB");
+                return format("%s.1f %s", value, "PB");
             } else if (size.compareTo(BigInteger.valueOf(2 * TB)) > 0) {
                 String value = new BigDecimal(size).divide(new BigDecimal(TB), 1, RoundingMode.HALF_UP).toString();
-                return String.format("%s.1f %s", value, "TB");
+                return format("%s.1f %s", value, "TB");
             } else if (size.compareTo(BigInteger.valueOf(2 * GB)) > 0) {
                 String value = new BigDecimal(size).divide(new BigDecimal(GB), 1, RoundingMode.HALF_UP).toString();
-                return String.format("%s.1f %s", value, "GB");
+                return format("%s.1f %s", value, "GB");
             } else if (size.compareTo(BigInteger.valueOf(2 * MB)) > 0) {
                 String value = new BigDecimal(size).divide(new BigDecimal(MB), 1, RoundingMode.HALF_UP).toString();
-                return String.format("%s.1f %s", value, "MB");
+                return format("%s.1f %s", value, "MB");
             } else if (size.compareTo(BigInteger.valueOf(2 * KB)) > 0) {
                 String value = new BigDecimal(size).divide(new BigDecimal(KB), 1, RoundingMode.HALF_UP).toString();
-                return String.format("%s.1f %s", value, "KB");
+                return format("%s.1f %s", value, "KB");
             } else {
-                return String.format("%s.1f %s", size.toString(), "B");
+                return format("%s.1f %s", size.toString(), "B");
             }
         }
     }
@@ -531,7 +536,7 @@ public class Utils {
         String localDir = localRootDirs[0];
         if (StringUtils.isEmpty(localDir)) {
             String[] configuredLocalDirs = getConfiguredLocalDirs(conf);
-            throw new SparkException("Failed to get a temp directory under " + StringUtils.join(configuredLocalDirs, ","));
+            throw new SparkException("Failed to get a temp directory under " + join(configuredLocalDirs, ","));
         }
         return localDir;
     }
@@ -597,7 +602,59 @@ public class Utils {
 
 
     public static CallSite getCallSite() {
-        throw new UnsupportedOperationException();
+        String lastSparkMethod = "<unknown>";
+        String firstUserFile = "<unknown>";
+        int firstUserLine = 0;
+        boolean insideSpark = true;
+        List<String> callStack = Lists.newArrayList("<unknown>");
+
+        StackTraceElement[] stackTraceElements = Thread.currentThread().getStackTrace();
+        for (StackTraceElement ste : stackTraceElements) {
+            if (ste != null && ste.getMethodName() != null
+                    && !ste.getMethodName().contains("getStackTrace")) {
+                if (insideSpark) {
+                    if (sparkInternalExclusionFunction(ste.getClassName())) {
+                        if (ste.getMethodName().equals("<init>")) {
+                            lastSparkMethod = ste.getClassName().substring(ste.getClassName().lastIndexOf(".") + 1);
+                        } else {
+                            lastSparkMethod = ste.getMethodName();
+                        }
+                        callStack.set(0, ste.toString()); // Put last Spark method on top of the stack trace.
+                    } else {
+                        if (ste.getFileName() != null) {
+                            firstUserFile = ste.getFileName();
+                            if (ste.getLineNumber() >= 0) {
+                                firstUserLine = ste.getLineNumber();
+                            }
+                        }
+                        callStack.add(ste.toString());
+                        insideSpark = false;
+                    }
+                } else {
+                    callStack.add(ste.toString());
+                }
+            }
+        }
+
+        int callStackDepth = Integer.parseInt(System.getProperty("spark.callstack.depth", "20"));
+        String shortForm;
+        if (firstUserFile.equals("HiveSessionImpl.java")) {
+            // To be more user friendly, show a nicer string for queries submitted from the JDBC
+            // server.
+            shortForm = "Spark JDBC Server Query";
+        } else {
+            shortForm = format("%s at %s:%s", lastSparkMethod, firstUserFile, firstUserLine);
+        }
+        String longForm = join(callStack.subList(0, callStackDepth), "\n");
+
+        return new CallSite(shortForm, longForm);
+    }
+
+    private static boolean sparkInternalExclusionFunction(String className) {
+        boolean isSparkClass = SPARK_CORE_CLASS_REGEX.matcher(className).find() ||
+                               SPARK_SQL_CLASS_REGEX.matcher(className).find() ;
+        boolean isScalaClass = className.startsWith("scala");
+        return isScalaClass || isSparkClass;
     }
 
     public static String getFormattedClassName(Object obj) {
