@@ -46,12 +46,12 @@ public class MapOutputTrackerMaster extends MapOutputTracker {
     private boolean shuffleLocalityEnabled;
 
     // Number of map and reduce tasks above which we do not assign preferred locations based on map
-    // combiner sizes. We limit the size of jobs for which assign preferred locations as computing the
+    // combinerMerge sizes. We limit the size of jobs for which assign preferred locations as computing the
     // top locations by size becomes expensive.
     private int SHUFFLE_PREF_MAP_THRESHOLD = 1000;
     // NOTE: This should be less than 2000 as we use HighlyCompressedMapStatus beyond that
     private int SHUFFLE_PREF_REDUCE_THRESHOLD = 1000;
-    // Fraction of total map combiner that must be at a location for it to considered as a preferred
+    // Fraction of total map combinerMerge that must be at a location for it to considered as a preferred
     // location for a reduce task. Making this larger will focus on fewer locations where most data
     // can be read locally, but may lead to more delay in scheduling if those locations are busy.
     private double REDUCER_PREF_LOCS_FRACTION = 0.2;
@@ -85,7 +85,7 @@ public class MapOutputTrackerMaster extends MapOutputTracker {
 
         this.mapOutputRequests = new LinkedBlockingQueue<>();
         int numThreads = conf.getInt("spark.shuffle.mapOutput.dispatcher.numThreads", 8);
-        this.threadpool = ThreadUtils.newDaemonFixedThreadPool(numThreads, "map-combiner-dispatcher");
+        this.threadpool = ThreadUtils.newDaemonFixedThreadPool(numThreads, "map-combinerMerge-dispatcher");
         for (int i = 0; i < numThreads; ++i) {
             this.threadpool.execute(new MessageLoop());
         }
@@ -288,7 +288,7 @@ public class MapOutputTrackerMaster extends MapOutputTracker {
                 RpcCallContext context = message.context;
                 int shuffleId = message.shuffleId;
                 String hostPort = context.senderAddress().hostPort();
-                LOGGER.debug("Handling request to send map combiner locations for shuffle {} to {} ", shuffleId, hostPort);
+                LOGGER.debug("Handling request to send map combinerMerge locations for shuffle {} to {} ", shuffleId, hostPort);
                 ShuffleStatus shuffleStatus = shuffleStatuses.get(shuffleId);
                 context.reply(
                         shuffleStatus.serializedMapStatus(broadcastManager, isLocal, (int) minSizeForBroadcast));

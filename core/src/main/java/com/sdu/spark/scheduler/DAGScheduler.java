@@ -268,7 +268,7 @@ public class DAGScheduler {
 
         ActiveJob job = new ActiveJob(jobId, finalStage, callSite, listener, properties);
         clearCacheLocs();
-        LOGGER.info("Got job {} ({}) with {} combiner partitions", job.jobId(), callSite.shortForm, partitions.size());
+        LOGGER.info("Got job {} ({}) with {} combinerMerge partitions", job.jobId(), callSite.shortForm, partitions.size());
         LOGGER.info("Final stage: {}({})", finalStage, finalStage.getName());
         LOGGER.info("Parents of final stage: {}", finalStage.getParents());
         LOGGER.info("Missing parents: {}", getMissingParentStages(finalStage));
@@ -808,7 +808,7 @@ public class DAGScheduler {
 
         // step3: MapOutputTracker记录ShuffleId对应依赖RDD输出分区数
         if (!mapOutputTracker.containsShuffle(shuffleDep.shuffleId())) {
-            // Kind of ugly: need to register RDDs with the cache and map combiner tracker here
+            // Kind of ugly: need to register RDDs with the cache and map combinerMerge tracker here
             // since we can't do it in the RDD constructor because # of partitions is unknown
             LOGGER.info("Registering RDD {}({})", rdd.getId(), rdd.getCreationSite().shortForm);
             mapOutputTracker.registerShuffle(shuffleDep.shuffleId(), rdd.partitions().length);
@@ -1076,14 +1076,14 @@ public class DAGScheduler {
     private void postTaskEnd(CompletionEvent event) {
         // TODO: Task Metric
         Task<?> task = event.getTask();
-        listenerBus.post(new SparkListenerTaskEnd(task.stageId, task.stageAttemptId, getFormattedClassName(task), event.getReason(), event.getTaskInfo()));
+        listenerBus.post(new SparkListenerTaskEnd(task.stageId, task.stageAttemptId(), getFormattedClassName(task), event.getReason(), event.getTaskInfo()));
     }
 
     private void handleTaskCompletion(CompletionEvent event) {
         Task<?> task = event.getTask();
         outputCommitCoordinator.taskCompleted(
                 task.stageId,
-                task.stageAttemptId,
+                task.stageAttemptId(),
                 task.partitionId,
                 event.getTaskInfo().attemptNumber,
                 event.getReason());
@@ -1135,7 +1135,7 @@ public class DAGScheduler {
                 MapStatus mapStatus = (MapStatus) event.getResult();
                 String execId = mapStatus.location().executorId;
                 LOGGER.debug("ShuffleMapTask finished on {}", execId);
-                if (stageIdToStage.get(task.stageId).latestInfo().attemptNumber() == task.stageAttemptId) {
+                if (stageIdToStage.get(task.stageId).latestInfo().attemptNumber() == task.stageAttemptId()) {
                     // This task was for the currently running attempt of the stage. Since the task
                     // completed successfully from the perspective of the TaskSetManager, mark it as
                     // no longer pending (the TaskSetManager may consider the task complete even

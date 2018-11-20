@@ -174,7 +174,7 @@ public class TimSort<K, Buffer> {
     K key0 = s.newKey();
     K key1 = s.newKey();
 
-    Buffer pivotStore = s.allocate(1, a.getClass());
+    Buffer pivotStore = s.allocate(1);
     for ( ; start < hi; start++) {
       s.copyElement(a, start, pivotStore, 0);
       K pivot = s.getKey(pivotStore, 0, key0);
@@ -382,7 +382,7 @@ public class TimSort<K, Buffer> {
 
       // Allocate temp storage (which may be increased later if necessary)
       tmpLength = len < 2 * INITIAL_TMP_STORAGE_LENGTH ? len >>> 1 : INITIAL_TMP_STORAGE_LENGTH;
-      tmp = s.allocate(tmpLength, a.getClass());
+      tmp = s.allocate(tmpLength);
 
       /*
        * Allocate runs-to-be-merged stack (which cannot be expanded).  The
@@ -395,7 +395,7 @@ public class TimSort<K, Buffer> {
        * the MIN_MERGE declaration above for more information.
        */
       int stackLen = (len <    120  ?  5 :
-                      len <   1542  ? 10 :
+              len <   1542  ? 10 :
                       len < 119151  ? 19 : 40);
       runBase = new int[stackLen];
       runLen = new int[stackLen];
@@ -428,7 +428,7 @@ public class TimSort<K, Buffer> {
       while (stackSize > 1) {
         int n = stackSize - 2;
         if ( (n >= 1 && runLen[n-1] <= runLen[n] + runLen[n+1])
-          || (n >= 2 && runLen[n-2] <= runLen[n] + runLen[n-1])) {
+                || (n >= 2 && runLen[n-2] <= runLen[n] + runLen[n-1])) {
           if (runLen[n - 1] < runLen[n + 1])
             n--;
         } else if (runLen[n] > runLen[n + 1]) {
@@ -680,7 +680,7 @@ public class TimSort<K, Buffer> {
 
       // Copy first run into temp array
       Buffer a = this.a; // For performance
-      Buffer tmp = ensureCapacity(len1, a.getClass());
+      Buffer tmp = ensureCapacity(len1);
       s.copyRange(a, base1, tmp, 0, len1);
 
       int cursor1 = 0;       // Indexes into tmp array
@@ -776,7 +776,7 @@ public class TimSort<K, Buffer> {
         s.copyElement(tmp, cursor1, a, dest + len2); //  Last elt of run 1 to end of merge
       } else if (len1 == 0) {
         throw new IllegalArgumentException(
-            "Comparison method violates its general contract!");
+                "Comparison method violates its general contract!");
       } else {
         assert len2 == 0;
         assert len1 > 1;
@@ -800,7 +800,7 @@ public class TimSort<K, Buffer> {
 
       // Copy second run into temp array
       Buffer a = this.a; // For performance
-      Buffer tmp = ensureCapacity(len2, a.getClass());
+      Buffer tmp = ensureCapacity(len2);
       s.copyRange(a, base2, tmp, 0, len2);
 
       int cursor1 = base1 + len1 - 1;  // Indexes into a
@@ -900,7 +900,7 @@ public class TimSort<K, Buffer> {
         s.copyElement(tmp, cursor2, a, dest); // Move first elt of run2 to front of merge
       } else if (len2 == 0) {
         throw new IllegalArgumentException(
-            "Comparison method violates its general contract!");
+                "Comparison method violates its general contract!");
       } else {
         assert len1 == 0;
         assert len2 > 0;
@@ -916,7 +916,7 @@ public class TimSort<K, Buffer> {
      * @param minCapacity the minimum required capacity of the tmp array
      * @return tmp, whether or not it grew
      */
-    private Buffer ensureCapacity(int minCapacity, Class<?> cls) {
+    private Buffer ensureCapacity(int minCapacity) {
       if (tmpLength < minCapacity) {
         // Compute smallest power of 2 > minCapacity
         int newSize = minCapacity;
@@ -932,10 +932,11 @@ public class TimSort<K, Buffer> {
         else
           newSize = Math.min(newSize, aLength >>> 1);
 
-        tmp = s.allocate(newSize, cls);
+        tmp = s.allocate(newSize);
         tmpLength = newSize;
       }
       return tmp;
     }
   }
+
 }

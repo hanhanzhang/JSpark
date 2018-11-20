@@ -43,6 +43,6 @@ public abstract class SortDataFormat<K, Buffer> {
      * Allocates a Buffer that can hold up to 'length' elements.
      * All elements of the buffer should be considered invalid until data is explicitly copied in.
      */
-    public abstract Buffer allocate(int length, Class<?> cls);
+    public abstract Buffer allocate(int length);
 
 }

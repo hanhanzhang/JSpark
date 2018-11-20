@@ -1,6 +1,6 @@
 package com.sdu.spark.utils.colleciton;
 
-import java.lang.reflect.Array;
+import com.sdu.spark.utils.scala.Tuple2;
 
 /**
  * Supports sorting an array of key-value pairs where the elements of the array alternate between
@@ -43,8 +43,15 @@ public class KVArraySortDataFormat<K, T> extends SortDataFormat<K, T[]>{
     }
 
     @Override
-    public T[] allocate(int length, Class<?> cls) {
-        return (T[]) Array.newInstance(cls, 2 * length);
+    public T[] allocate(int length) {
+        return (T[]) new Object[length * 2];
+    }
+
+    public static void main(String[] args) {
+        Object[] buffer = new Object[]{new Tuple2<>(1, "A"), 63, new Tuple2<>(1, "B"), 56, new Tuple2<>(2, "C"), 58};
+        KVArraySortDataFormat<Tuple2<Integer, String>, Object> dataFormat = new KVArraySortDataFormat<>();
+        Tuple2<Integer, String> key = dataFormat.getKey(buffer, 0);
+        System.out.println("Partition: " + key._1() + ", Key: " + key._2());
     }
 
 }

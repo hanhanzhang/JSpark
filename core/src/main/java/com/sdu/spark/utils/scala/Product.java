@@ -5,7 +5,7 @@ import java.util.Iterator;
 /**
  * @author hanhan.zhang
  * */
-public interface Product extends Equals{
+public interface Product extends Equals {
 
     Object productElement(int n);
 

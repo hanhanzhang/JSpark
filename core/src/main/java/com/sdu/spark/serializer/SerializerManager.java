@@ -27,11 +27,11 @@ public class SerializerManager {
 
     // Whether to compress broadcast variables that are stored
     private boolean compressBroadcast;
-    // Whether to compress shuffle combiner that are stored
+    // Whether to compress shuffle combinerMerge that are stored
     private boolean compressShuffle;
     // Whether to compress RDD partitions that are stored serialized
     private boolean compressRdds;
-    // Whether to compress shuffle combiner temporarily spilled to disk
+    // Whether to compress shuffle combinerMerge temporarily spilled to disk
     private boolean compressShuffleSpill;
 
     /**
@@ -84,7 +84,7 @@ public class SerializerManager {
     }
 
     /**
-     * Wrap an combiner stream for compression if block compression is enabled for its block type
+     * Wrap an combinerMerge stream for compression if block compression is enabled for its block type
      * */
     private OutputStream wrapForCompression(BlockId blockId, OutputStream s) {
         if (shouldCompress(blockId)) {

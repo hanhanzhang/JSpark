@@ -9,8 +9,6 @@ import java.util.Comparator;
 import java.util.Iterator;
 
 /**
- *
- *
  * @author hanhan.zhang
  * */
 public interface WritablePartitionedPairCollection<K, V> {
@@ -18,7 +16,6 @@ public interface WritablePartitionedPairCollection<K, V> {
     void insert(int partition, K key, V value);
 
     Iterator<Tuple2<Tuple2<Integer, K>, V>> partitionedDestructiveSortedIterator(Comparator<K> keyComparator);
-
 
     default WritablePartitionedIterator destructiveSortedWritablePartitionedIterator(Comparator<K> keyComparator) {
         Iterator<Tuple2<Tuple2<Integer, K>, V>> it = partitionedDestructiveSortedIterator(keyComparator);
@@ -44,21 +41,6 @@ public interface WritablePartitionedPairCollection<K, V> {
             @Override
             public int nextPartition() {
                 return cur._1()._1();
-            }
-        };
-    }
-
-    default Comparator<Tuple2<Integer, K>> partitionComparator() {
-        return (a, b) -> a._1() - b._1();
-    }
-
-    default Comparator<Tuple2<Integer, K>> partitionKeyComparator(Comparator<K> keyComparator) {
-        return (a, b) -> {
-            int partitionDiff = a._1() - b._1();
-            if (partitionDiff != 0) {
-                return partitionDiff;
-            } else {
-                return keyComparator.compare(a._2(), b._2());
             }
         };
     }

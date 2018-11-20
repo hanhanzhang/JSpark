@@ -4,6 +4,7 @@ import com.google.common.collect.Lists;
 import com.sdu.spark.SparkTestUnit;
 import com.sdu.spark.storage.BlockId;
 import com.sdu.spark.storage.BlockManagerInfo.*;
+import com.sdu.spark.storage.BlockStatus;
 import com.sdu.spark.utils.scala.Tuple2;
 import org.junit.Test;
 

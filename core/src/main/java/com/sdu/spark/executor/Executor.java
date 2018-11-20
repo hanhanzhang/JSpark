@@ -379,7 +379,7 @@ public class Executor {
 
                 task = ser.deserialize(taskDescription.serializedTask,
                                        currentThread().getContextClassLoader());
-                task.localProperties = taskDescription.properties;
+                task.setLocalProperties(taskDescription.properties);
                 task.setTaskMemoryManager(taskMemoryManager);
 
                 if (reasonIfKilled != null) {
@@ -391,9 +391,9 @@ public class Executor {
                 // MapOutputTrackerMaster and its cache invalidation is not based on epoch numbers so
                 // we don't need to make any special calls here.
                 if (!isLocal) {
-                    LOGGER.debug("Task {}'s epoch is {}", taskId, task.epoch);
+                    LOGGER.debug("Task {}'s epoch is {}", taskId, task.epoch());
                     MapOutputTrackerWorker mapOutputTracker = (MapOutputTrackerWorker) env.mapOutputTracker;
-                    mapOutputTracker.updateEpoch(task.epoch);
+                    mapOutputTracker.updateEpoch(task.epoch());
                 }
 
                 // Task.run()
@@ -434,10 +434,10 @@ public class Executor {
                 }
 
                 // 作业运行状态
-                if (task.context.fetchFailed() != null) {
+                if (task.context().fetchFailed() != null) {
                     LOGGER.error("TID {} completed successfully though internally it encountered " +
                                  "unrecoverable fetch failures!  Most likely this means user code is incorrectly " +
-                                 "swallowing Spark's internal {}", FetchFailedException.class, task.context.fetchFailed());
+                                 "swallowing Spark's internal {}", FetchFailedException.class, task.context().fetchFailed());
                 }
 
                 long taskFinish = System.currentTimeMillis();
@@ -447,7 +447,7 @@ public class Executor {
                 }
 
                 // If the task has been killed, let's fail it.
-                task.context.killTaskIfInterrupted();
+                task.context().killTaskIfInterrupted();
 
                 SerializerInstance resultSer = env.closureSerializer.newInstance();
                 long beforeSerialization = System.currentTimeMillis();
@@ -455,10 +455,10 @@ public class Executor {
                 long afterSerialization = System.currentTimeMillis();
 
                 // TODO: TaskMetric
-                long executorDeserializeTime = (taskStart - deserializeStartTime) + task.executorDeserializeTime;
-                long executorDeserializeCpuTime = (taskStartCpu - deserializeStartCpuTime) + task.executorDeserializeCpuTime;
-                long executorRunTime = (taskFinish - taskStart) - task.executorDeserializeTime;
-                long executorCpuTime = (taskFinishCpu - taskStartCpu) - task.executorDeserializeCpuTime;
+                long executorDeserializeTime = (taskStart - deserializeStartTime) + task.executorDeserializeTime();
+                long executorDeserializeCpuTime = (taskStartCpu - deserializeStartCpuTime) + task.executorDeserializeCpuTime();
+                long executorRunTime = (taskFinish - taskStart) - task.executorDeserializeTime();
+                long executorCpuTime = (taskFinishCpu - taskStartCpu) - task.executorDeserializeCpuTime();
                 long executorGCTime = computeTotalGcTime() - startGCTime;
                 long resultSerializationTime = afterSerialization - beforeSerialization;
                 LOGGER.info("Task(TID = {}) take statistic: executorDeserializeTime = {}, executorDeserializeCpuTime = {}, " +
@@ -502,7 +502,7 @@ public class Executor {
                 }
             } catch (Throwable e) {
                 if (hasFetchFailure()) {
-                    TaskFailedReason reason = task.context.fetchFailed().toTaskFailedReason();
+                    TaskFailedReason reason = task.context().fetchFailed().toTaskFailedReason();
                     if (!(e instanceof FetchFailedException)) {
                         String fetchFailedCls = FetchFailedException.class.getName();
                         LOGGER.warn("TID {} encountered a {} and failed, but the {} was hidden by another " +
@@ -529,7 +529,7 @@ public class Executor {
         }
 
         private boolean hasFetchFailure() {
-            return task != null && task.context != null && task.context.fetchFailed() != null;
+            return task != null && task.context() != null && task.context().fetchFailed() != null;
         }
 
         private synchronized void setTaskFinishedAndClearInterruptStatus() {

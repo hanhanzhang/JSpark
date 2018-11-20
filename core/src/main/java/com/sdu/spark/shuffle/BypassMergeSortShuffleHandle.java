@@ -8,9 +8,9 @@ import com.sdu.spark.ShuffleDependency;
  * @author hanhan.zhang
  * */
 public class BypassMergeSortShuffleHandle<K, V> extends BaseShuffleHandle<K, V, V> {
-    public BypassMergeSortShuffleHandle(int shuffleId,
-                                        int numMaps,
-                                        ShuffleDependency<K, V, V> dependency) {
+
+    public BypassMergeSortShuffleHandle(int shuffleId, int numMaps, ShuffleDependency<K, V, V> dependency) {
         super(shuffleId, numMaps, dependency);
     }
+
 }

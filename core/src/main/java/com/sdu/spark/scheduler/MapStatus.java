@@ -56,7 +56,7 @@ public interface MapStatus extends Serializable {
                                          long avgSize,
                                          Map<Integer, Byte> hugeBlockSizes) {
             checkArgument(loc == null || avgSize > 0 || hugeBlockSizes.size() > 0 || numNonEmptyBlocks == 0,
-                          "Average size can only be zero for map stages that produced no combiner");
+                          "Average size can only be zero for map stages that produced no combinerMerge");
 
             this.loc = loc;
             this.numNonEmptyBlocks = numNonEmptyBlocks;
@@ -199,7 +199,7 @@ public interface MapStatus extends Serializable {
     }
 
     /**
-     * Compress a size in bytes to 8 bits for efficient reporting of map combiner sizes.
+     * Compress a size in bytes to 8 bits for efficient reporting of map combinerMerge sizes.
      * We do this by encoding the log base 1.1 of the size as an integer, which can support
      * sizes up to 35 GB with at most 10% error.
      */

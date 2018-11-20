@@ -3,9 +3,9 @@ package com.sdu.spark.utils.colleciton;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.io.ByteStreams;
-import com.sdu.spark.Aggregator.Initializer;
-import com.sdu.spark.Aggregator.AppendValue;
-import com.sdu.spark.Aggregator.Combiner;
+import com.sdu.spark.Aggregator;
+import com.sdu.spark.Aggregator.CombinerCreator;
+import com.sdu.spark.Aggregator.CombinerAdd;
 import com.sdu.spark.SparkEnv;
 import com.sdu.spark.SparkException;
 import com.sdu.spark.TaskContext;
@@ -30,7 +30,7 @@ import java.nio.file.StandardOpenOption;
 import java.util.*;
 
 /**
- * {@link ExternalAppendOnlyMap}类似Hadoop MapReduce中shuffle-appendValue-combine-sort过程
+ * {@link ExternalAppendOnlyMap}类似Hadoop MapReduce中shuffle-combinerAdd-combine-sort过程
  *
  * 1: {@link #currentMap}维护内存中Key-Value数据信息(每次插入/更新操作都会触发估算内存占用量, 超过阈值Spill内存数据到Disk)
  *
@@ -48,9 +48,9 @@ public class ExternalAppendOnlyMap<K, V, C> extends Spillable<AppendOnlyMap<K, C
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ExternalAppendOnlyMap.class);
 
-    private Initializer<V, C> initial;
-    private AppendValue<V, C> merge;
-    private Combiner<C> output;
+    private CombinerCreator<V, C> initial;
+    private CombinerAdd<V, C> merge;
+    private Aggregator.CombinerMerge<C> output;
 
     private Serializer serializer;
     private BlockManager blockManager;
@@ -71,9 +71,9 @@ public class ExternalAppendOnlyMap<K, V, C> extends Spillable<AppendOnlyMap<K, C
     private Comparator<K> keyComparator;
     private SpillableIterator readingIterator;
 
-    public ExternalAppendOnlyMap(Initializer<V, C> initial,
-                                 AppendValue<V, C> merge,
-                                 Combiner<C> output) {
+    public ExternalAppendOnlyMap(CombinerCreator<V, C> initial,
+                                 CombinerAdd<V, C> merge,
+                                 Aggregator.CombinerMerge<C> output) {
         super(TaskContext.get().taskMemoryManager());
 
         this.initial = initial;
@@ -508,11 +508,11 @@ public class ExternalAppendOnlyMap<K, V, C> extends Spillable<AppendOnlyMap<K, C
         }
 
         @Override
-        public C updateFunc(boolean hadValue, C value) {
+        public C valueUpdate(boolean hadValue, C value) {
             if (hadValue) {
-                return merge.appendValue(curEntry._2(), value);
+                return merge.mergeValue(curEntry._2(), value);
             }
-            return initial.createCollection(curEntry._2());
+            return initial.createCombiner(curEntry._2());
         }
     }
 }

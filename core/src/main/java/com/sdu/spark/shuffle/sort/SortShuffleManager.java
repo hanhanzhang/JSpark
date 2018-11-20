@@ -35,7 +35,7 @@ public class SortShuffleManager implements ShuffleManager {
     private static final int MAX_SHUFFLE_OUTPUT_PARTITIONS_FOR_SERIALIZED_MODE = MAXIMUM_PARTITION_ID + 1;
 
     /**
-     * A mapping from shuffle ids to the number of mappers producing combiner for those shuffles
+     * A mapping from shuffle ids to the number of mappers producing combinerMerge for those shuffles
      * */
     private ConcurrentMap<Integer, Integer> numMapsForShuffle = new ConcurrentHashMap<>();
 
@@ -69,52 +69,24 @@ public class SortShuffleManager implements ShuffleManager {
 
     @SuppressWarnings("unchecked")
     @Override
-    public <K, V> ShuffleWriter<K, V> getWriter(ShuffleHandle handle,
-                                                int mapId,
-                                                TaskContext context) {
-        numMapsForShuffle.putIfAbsent(handle.shuffleId, ((BaseShuffleHandle) handle).numMaps);
+    public <K, V> ShuffleWriter<K, V> getWriter(ShuffleHandle handle, int mapId, TaskContext context) {
+        numMapsForShuffle.putIfAbsent(handle.shuffleId, ((BaseShuffleHandle) handle).numMaps());
         SparkEnv env = SparkEnv.env;
         if (handle instanceof SerializedShuffleHandle) {
-            return new UnsafeShuffleWriter<>(
-                    env.blockManager,
-                    shuffleBlockResolver,
-                    context.taskMemoryManager(),
-                    (SerializedShuffleHandle<K, V>) handle,
-                    mapId,
-                    context,
-                    env.conf
-            );
+            return new UnsafeShuffleWriter<>(env.blockManager, shuffleBlockResolver, context.taskMemoryManager(),
+                    (SerializedShuffleHandle<K, V>) handle, mapId, context, env.conf);
         } else if (handle instanceof BypassMergeSortShuffleHandle) {
-            return new BypassMergeSortShuffleWriter<>(
-                    env.blockManager,
-                    shuffleBlockResolver,
-                    (BypassMergeSortShuffleHandle<K, V>) handle,
-                    mapId,
-                    context,
-                    env.conf
-            );
+            return new BypassMergeSortShuffleWriter<>(env.blockManager, shuffleBlockResolver,
+                    (BypassMergeSortShuffleHandle<K, V>) handle, mapId, context, env.conf);
         } else {
-            return new SortShuffleWriter<>(
-                    shuffleBlockResolver,
-                    (BaseShuffleHandle<K, V, ?>) handle,
-                    mapId,
-                    context
-            );
+            return new SortShuffleWriter<>(shuffleBlockResolver, (BaseShuffleHandle<K, V, ?>) handle, mapId, context);
         }
     }
 
     @SuppressWarnings("unchecked")
     @Override
-    public <K, C> ShuffleReader<K, C> getReader(ShuffleHandle handle,
-                                                int startPartition,
-                                                int endPartition,
-                                                TaskContext context) {
-        return new BlockStoreShuffleReader<>(
-                (BaseShuffleHandle<K, Object, C>)handle,
-                startPartition,
-                endPartition,
-                context
-        );
+    public <K, C> ShuffleReader<K, C> getReader(ShuffleHandle handle, int startPartition, int endPartition, TaskContext context) {
+        return new BlockStoreShuffleReader<>((BaseShuffleHandle<K, Object, C>)handle, startPartition, endPartition, context);
     }
 
     @Override

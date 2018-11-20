@@ -9,6 +9,7 @@ import java.util.Iterator;
 import java.util.NoSuchElementException;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static java.lang.String.format;
 
 /**
  * {@link AppendOnlyMap}仅支持(k, v)键值对添加, 不支持删除操作
@@ -23,28 +24,27 @@ import static com.google.common.base.Preconditions.checkArgument;
  * */
 public class AppendOnlyMap<K, V> implements Iterable<Tuple2<K, V>>, Serializable {
 
-    /**AppendOnlyMap申请数组长度: 2 * capacity, 故最大长度为 1 << 29*/
+    /** 申请数组长度: 2 * capacity, 最大长度为 1 << 29 */
     private static final int MAXIMUM_CAPACITY = 1 << 29;
-    /**AppendOnlyMap扩容因子(Map扩容代价: key需重新hash计算存储位置)*/
+    /** 扩容因子(Map扩容代价: key需重新hash计算存储位置) */
     private static final float LOAD_FACTOR = 0.7f;
 
-    /**AppendOnlyMap可存储元素数量*/
+    /** 存储元素数量(2^n) */
     private int capacity;
-    /**mask = capacity - 1, 计算hash值*/
+    /** mask = capacity - 1, 计算hash值 */
     private int mask;
-    /**AppendOnlyMap已存储元素数量*/
+    /** 已存储元素数量 */
     private int curSize;
-    /**AppendOnlyMap扩容阈值: capacity * LOAD_FACTOR*/
+    /** 扩容阈值: capacity * LOAD_FACTOR */
     private int growThreshold;
-    /**AppendOnly存储Key-Value, 偶数 = key, 奇数 = value*/
+    /** 存储Key-Value(偶数索引存储key, 奇数索引存储value), data.length = capacity * 2 */
     private Object[] data;
 
     private boolean haveNullValue = false;
-    private V nullValue= null;
+    private V nullValue = null;
 
-    /**AppendOnlyMap压缩后destroyed = true*/
+    /** 压缩标识, {@link #destructiveSortedIterator(Comparator)}调用后插入、更新操作不支持 */
     private boolean destroyed = false;
-    /**AppendOnlyMap压缩后, Map的插入、更新操作不支持*/
     private String destructionMessage = "Map state is invalid from destructive sorting!";
 
     public AppendOnlyMap() {
@@ -52,9 +52,8 @@ public class AppendOnlyMap<K, V> implements Iterable<Tuple2<K, V>>, Serializable
     }
 
     public AppendOnlyMap(int initialCapacity) {
-
-        checkArgument(initialCapacity <= MAXIMUM_CAPACITY, String.format("Can't make capacity bigger than %d elements", MAXIMUM_CAPACITY));
-        checkArgument(initialCapacity >= 1, "Invalid initializer capacity");
+        checkArgument(initialCapacity <= MAXIMUM_CAPACITY, format("Can't make capacity bigger than %d elements", MAXIMUM_CAPACITY));
+        checkArgument(initialCapacity >= 1, "Invalid initial capacity");
 
         this.capacity = nextPowerOf2(initialCapacity);
         this.mask = capacity -1;
@@ -122,7 +121,7 @@ public class AppendOnlyMap<K, V> implements Iterable<Tuple2<K, V>>, Serializable
     }
 
     /**
-     * Set the value for key to updateFunc(hadValue, oldValue), where oldValue will be the old value
+     * Set the value for key to valueUpdate(hadValue, oldValue), where oldValue will be the old value
      * for key, if any, or null otherwise. Returns the newly updated value.
      */
     @SuppressWarnings("unchecked")
@@ -132,7 +131,7 @@ public class AppendOnlyMap<K, V> implements Iterable<Tuple2<K, V>>, Serializable
             if (!haveNullValue) {
                 incrementSize();
             }
-            nullValue = updater.updateFunc(haveNullValue, nullValue);
+            nullValue = updater.valueUpdate(haveNullValue, nullValue);
             haveNullValue = true;
             return nullValue;
         }
@@ -142,13 +141,13 @@ public class AppendOnlyMap<K, V> implements Iterable<Tuple2<K, V>>, Serializable
         while (true) {
             K curKey = (K) data[pos * 2];
             if (curKey == null) {       // key不存在, value肯定为null
-                V newValue = updater.updateFunc(false, nullValue);
+                V newValue = updater.valueUpdate(false, nullValue);
                 data[2 * pos] = key;
                 data[2 * pos + 1] = newValue;
                 incrementSize();
                 return newValue;
             } else if (curKey.equals(key)) {
-                V newValue = updater.updateFunc(true, (V) data[2 * pos + 1]);
+                V newValue = updater.valueUpdate(true, (V) data[2 * pos + 1]);
                 data[2 * pos + 1] = newValue;
                 return newValue;
             } else {
@@ -277,7 +276,7 @@ public class AppendOnlyMap<K, V> implements Iterable<Tuple2<K, V>>, Serializable
 
         final int maxIndex = newIndex;
         // 排序
-        new Sorter<>(new KVArraySortDataFormat<K, Object>()).sort(data, 0, newIndex, keyComparator);
+        new Sorter<K, Object[]>(new KVArraySortDataFormat<>()).sort(data, 0, newIndex, keyComparator);
 
         return new Iterator<Tuple2<K, V>>() {
             int i = 0;
@@ -318,6 +317,30 @@ public class AppendOnlyMap<K, V> implements Iterable<Tuple2<K, V>>, Serializable
     }
 
     public interface Updater<V> {
-        V updateFunc(boolean hadValue, V value);
+        V valueUpdate(boolean hadValue, V value);
+    }
+
+    public static void main(String[] args) {
+        AppendOnlyMap<String, Integer> map = new AppendOnlyMap<>(2);
+        map.update("A", 65);
+        map.update("B", 66);
+        map.update("C", 67);
+
+        System.out.println(map.apply("A"));
+        System.out.println(map.apply("C"));
+
+        Updater<Integer> updater = (hadValue, oldValue) -> hadValue ? oldValue + 1 : 0;
+
+        map.changeValue("A", updater);
+        map.changeValue("D", updater);
+
+        Iterator<Tuple2<String, Integer>> iterator = map.destructiveSortedIterator(Comparator.naturalOrder());
+        while (iterator.hasNext()) {
+            Tuple2<String, Integer> t = iterator.next();
+            System.out.println("Key: " + t._1() + ", Value: " + t._2());
+        }
+
+        // map不在支持apply、update
+//        System.out.println(map.apply("B"));
     }
 }

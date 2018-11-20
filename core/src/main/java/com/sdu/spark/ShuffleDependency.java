@@ -20,17 +20,12 @@ public class ShuffleDependency<K, V, C> extends Dependency<Product2<K, V>> {
     public boolean mapSideCombine;
     private int shuffleId;
 
-    public ShuffleDependency(RDD<Product2<K, V>> rdd,
-                             Partitioner partitioner) {
+    public ShuffleDependency(RDD<Product2<K, V>> rdd, Partitioner partitioner) {
         this(rdd, partitioner, SparkEnv.env.serializer, null, null, true);
     }
 
-    public ShuffleDependency(RDD<Product2<K, V>> rdd,
-                             Partitioner partitioner,
-                             Serializer serializer,
-                             Comparator<K> keyOrdering,
-                             Aggregator<K, V, C> aggregator,
-                             boolean mapSideCombine) {
+    public ShuffleDependency(RDD<Product2<K, V>> rdd, Partitioner partitioner, Serializer serializer,
+                             Comparator<K> keyOrdering, Aggregator<K, V, C> aggregator, boolean mapSideCombine) {
         this.rdd = rdd;
         this.partitioner = partitioner;
         this.serializer = serializer;

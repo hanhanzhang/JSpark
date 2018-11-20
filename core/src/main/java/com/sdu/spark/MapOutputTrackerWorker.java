@@ -100,7 +100,7 @@ public class MapOutputTrackerWorker extends MapOutputTracker {
                 try {
                     byte[] fetchedBytes = (byte[]) askTracker(new MapOutputTrackerMessage.GetMapOutputStatuses(shuffleId));
                     fetchedStatuses = MapOutputTracker.deserializeMapStatuses(fetchedBytes);
-                    LOGGER.info("Got the combiner locations");
+                    LOGGER.info("Got the combinerMerge locations");
                     mapStatuses.put(shuffleId, fetchedStatuses);
                 } catch (SparkException e) {
                     // ignore
@@ -112,14 +112,14 @@ public class MapOutputTrackerWorker extends MapOutputTracker {
                 }
             }
 
-            LOGGER.debug("Fetching map combiner statuses for shuffle {} took {} ms", shuffleId, System.currentTimeMillis() - startTime);
+            LOGGER.debug("Fetching map combinerMerge statuses for shuffle {} took {} ms", shuffleId, System.currentTimeMillis() - startTime);
 
             if (fetchedStatuses != null) {
                 return fetchedStatuses;
             }
 
-            LOGGER.error("Missing all combiner locations for shuffle {}", shuffleId);
-            throw new FetchFailedException.MetadataFetchFailedException(shuffleId, -1, "Missing all combiner locations for shuffle " + shuffleId);
+            LOGGER.error("Missing all combinerMerge locations for shuffle {}", shuffleId);
+            throw new FetchFailedException.MetadataFetchFailedException(shuffleId, -1, "Missing all combinerMerge locations for shuffle " + shuffleId);
         }
         return statuses;
     }

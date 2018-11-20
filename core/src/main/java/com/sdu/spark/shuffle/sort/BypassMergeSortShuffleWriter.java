@@ -7,6 +7,7 @@ import com.sdu.spark.shuffle.BypassMergeSortShuffleHandle;
 import com.sdu.spark.shuffle.IndexShuffleBlockResolver;
 import com.sdu.spark.shuffle.ShuffleWriter;
 import com.sdu.spark.storage.BlockManager;
+import com.sdu.spark.utils.TIterator;
 import com.sdu.spark.utils.scala.Product2;
 
 import java.util.Iterator;
@@ -26,7 +27,7 @@ public class BypassMergeSortShuffleWriter<K, V> implements ShuffleWriter<K, V> {
     }
 
     @Override
-    public void write(Iterator<Product2<K, V>> records) {
+    public void write(TIterator<Product2<K, V>> records) {
 
     }
 

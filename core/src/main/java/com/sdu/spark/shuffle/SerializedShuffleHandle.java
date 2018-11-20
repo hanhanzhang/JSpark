@@ -9,9 +9,7 @@ import com.sdu.spark.ShuffleDependency;
  * */
 public class SerializedShuffleHandle<K, V> extends BaseShuffleHandle<K, V, V> {
 
-    public SerializedShuffleHandle(int shuffleId,
-                                   int numMaps,
-                                   ShuffleDependency<K, V, V> dependency) {
+    public SerializedShuffleHandle(int shuffleId, int numMaps, ShuffleDependency<K, V, V> dependency) {
         super(shuffleId, numMaps, dependency);
     }
     

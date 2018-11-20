@@ -5,7 +5,7 @@ import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.io.ByteStreams;
 import com.sdu.spark.*;
-import com.sdu.spark.Aggregator.Combiner;
+import com.sdu.spark.Aggregator.CombinerMerge;
 import com.sdu.spark.rpc.SparkConf;
 import com.sdu.spark.serializer.DeserializationStream;
 import com.sdu.spark.serializer.Serializer;
@@ -25,7 +25,6 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 import static com.sdu.spark.utils.Utils.bytesToString;
-import static org.apache.commons.lang3.math.NumberUtils.toInt;
 
 /**
  * {@link ExternalSorter}职责:
@@ -99,18 +98,11 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
 
     private Comparator<K> keyComparator;
 
-    public ExternalSorter(TaskContext context,
-                          Aggregator<K, V, C> aggregator,
-                          Partitioner partitioner,
-                          Comparator<K> ordering) {
+    public ExternalSorter(TaskContext context, Aggregator<K, V, C> aggregator, Partitioner partitioner, Comparator<K> ordering) {
         this(context, aggregator, partitioner, ordering, SparkEnv.env.serializer);
     }
 
-    public ExternalSorter(TaskContext context,
-                          Aggregator<K, V, C> aggregator,
-                          Partitioner partitioner,
-                          Comparator<K> ordering,
-                          Serializer serializer) {
+    public ExternalSorter(TaskContext context, Aggregator<K, V, C> aggregator, Partitioner partitioner, Comparator<K> ordering, Serializer serializer) {
         super(context.taskMemoryManager());
         this.context = context;
         this.aggregator = aggregator;
@@ -149,16 +141,20 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
     @SuppressWarnings("unchecked")
     public void insertAll(Iterator<? extends Product2<K, V>> records) {
         // TODO: stop combining if we find that the reduction factor isn't high
-        if (aggregator != null) {           // 聚合数据
+        if (aggregator != null) {
             while (records.hasNext()) {
                 addElementsRead();
                 Product2<K, V> kv = records.next();
                 int partition = getPartition(kv._1());
+                // PartitionedAppendOnlyMap
+                //  存储KEY: Tuple<Partition, Key>
+                //  存储VALUE: Collection
+                // 注意: 按照(Partition, Key)聚合Value
                 map.changeValue(new Tuple2<>(partition, kv._1()), (hadValue, value) -> {
                     if (hadValue) {
-                        return aggregator.appendValue.appendValue(kv._2(), value);
+                        return aggregator.combinerAdd.mergeValue(kv._2(), value);
                     } else {
-                        return aggregator.initializer.createCollection(kv._2());
+                        return aggregator.combinerCreator.createCombiner(kv._2());
                     }
                 });
                 // 是否Spill数据
@@ -169,6 +165,7 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
                 addElementsRead();
                 Product2<K, V> kv = records.next();
                 int partition = getPartition(kv._1());
+                // PartitionedPairBuffer追加元素, 未聚合元素
                 buffer.insert(partition, kv._1(), (C) kv._2());
                 maybeSpillCollection(false);
             }
@@ -197,10 +194,7 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
     public long[] writePartitionedFile(BlockId blockId, File outputFile) {
         // 每个分区
         long[] lengths = new long[numPartitions];
-        DiskBlockObjectWriter writer = blockManager.getDiskWriter(blockId,
-                                                                  outputFile,
-                                                                  serInstance,
-                                                                  fileBufferSize);
+        DiskBlockObjectWriter writer = blockManager.getDiskWriter(blockId, outputFile, serInstance, fileBufferSize);
 
         if (spills.isEmpty()) {
             // Case where we only have in-memory data
@@ -383,7 +377,7 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
 
             if (aggregator != null) {
                 partitionKeyValues.add(new Tuple2<>(p, mergeWithAggregation(
-                        iterators, aggregator.combiner, keyComparator, ordering != null
+                        iterators, aggregator.combinerMerge, keyComparator, ordering != null
                 )));
             } else if (ordering != null) {
                 partitionKeyValues.add(new Tuple2<>(p, mergeSort(
@@ -428,7 +422,7 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
     }
 
     private Iterator<Tuple2<K, C>> mergeWithAggregation(List<Iterator<Tuple2<K, C>>> iterators,
-                                                        Combiner<C> mergeCombines,
+                                                        CombinerMerge<C> mergeCombines,
                                                         Comparator<K> comparator,
                                                         boolean totalOrder) {
         if (totalOrder) {
@@ -837,10 +831,7 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
         // 记录每个分区Spill的元素数
         long[] elementsPerPartition;
 
-        public SpilledFile(File file,
-                           BlockId blockId,
-                           List<Long> serializerBatchSizes,
-                           long[] elementsPerPartition) {
+        SpilledFile(File file, BlockId blockId, List<Long> serializerBatchSizes, long[] elementsPerPartition) {
             this.file = file;
             this.blockId = blockId;
             this.serializerBatchSizes = serializerBatchSizes;

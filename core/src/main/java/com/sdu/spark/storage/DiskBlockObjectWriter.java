@@ -40,33 +40,13 @@ public class DiskBlockObjectWriter extends OutputStream {
 
     private long numRecordsWritten = 0L;
 
-
-    private class ManualCloseBufferedOutputStream extends BufferedOutputStream {
-
-        ManualCloseBufferedOutputStream(OutputStream out, int size) {
-            super(out, size);
-        }
-
-        @Override
-        public void close() throws IOException {
-            flush();
-        }
-    }
-
-    public DiskBlockObjectWriter(File file,
-                                 SerializerManager serializerManager,
-                                 SerializerInstance serializerInstance,
-                                 int bufferSize,
-                                 boolean syncWrites) {
+    public DiskBlockObjectWriter(File file, SerializerManager serializerManager, SerializerInstance serializerInstance,
+                                 int bufferSize, boolean syncWrites) {
         this(file, serializerManager, serializerInstance, bufferSize, syncWrites, null);
     }
 
-    public DiskBlockObjectWriter(File file,
-                                 SerializerManager serializerManager,
-                                 SerializerInstance serializerInstance,
-                                 int bufferSize,
-                                 boolean syncWrites,
-                                 BlockId blockId) {
+    public DiskBlockObjectWriter(File file, SerializerManager serializerManager, SerializerInstance serializerInstance,
+                                 int bufferSize, boolean syncWrites, BlockId blockId) {
         this.file = file;
         this.serializerManager = serializerManager;
         this.serializerInstance = serializerInstance;
@@ -123,7 +103,6 @@ public class DiskBlockObjectWriter extends OutputStream {
                 streamOpen = false;
 
                 if (syncWrites) {
-                    long start = System.nanoTime();
                     fos.getFD().sync();
                     // TODO: Shuffle Metric
                 }
@@ -188,11 +167,11 @@ public class DiskBlockObjectWriter extends OutputStream {
     }
 
     @Override
-    public void write(byte[] b, int off, int len) throws IOException {
+    public void write(byte[] kvBytes, int off, int len) throws IOException {
         if (!streamOpen) {
             open();
         }
-        bs.write(b, off, len);
+        bs.write(kvBytes, off, len);
     }
 
     @Override
@@ -209,8 +188,27 @@ public class DiskBlockObjectWriter extends OutputStream {
     @Override
     public void close() throws IOException {
         if (initialized) {
-            commitAndGet();
-            closeResources();
+            try {
+                commitAndGet();
+            } finally {
+                closeResources();
+            }
+        }
+    }
+
+    class ManualCloseBufferedOutputStream extends BufferedOutputStream {
+
+        ManualCloseBufferedOutputStream(TimeTrackingOutputStream out, int bufferSize) {
+            super(out, bufferSize);
+        }
+
+        @Override
+        public void close() throws IOException {
+            flush();
+        }
+
+        public void manualClose() throws IOException{
+            super.close();
         }
     }
 }

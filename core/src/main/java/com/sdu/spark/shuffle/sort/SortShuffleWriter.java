@@ -10,6 +10,7 @@ import com.sdu.spark.shuffle.IndexShuffleBlockResolver;
 import com.sdu.spark.shuffle.ShuffleWriter;
 import com.sdu.spark.storage.BlockId.ShuffleBlockId;
 import com.sdu.spark.storage.BlockManager;
+import com.sdu.spark.utils.TIterator;
 import com.sdu.spark.utils.Utils;
 import com.sdu.spark.utils.colleciton.ExternalSorter;
 import com.sdu.spark.utils.scala.Product2;
@@ -42,20 +43,17 @@ public class SortShuffleWriter<K, V, C> implements ShuffleWriter<K, V>{
 
     private ExternalSorter<K, V, C> sorter;
 
-    public SortShuffleWriter(IndexShuffleBlockResolver shuffleBlockResolver,
-                             BaseShuffleHandle<K, V, C> handle,
-                             int mapId,
-                             TaskContext context) {
+    public SortShuffleWriter(IndexShuffleBlockResolver shuffleBlockResolver, BaseShuffleHandle<K, V, C> handle,
+                             int mapId, TaskContext context) {
         this.shuffleBlockResolver = shuffleBlockResolver;
         this.mapId = mapId;
         this.context = context;
-
-        this.dep = handle.dependency;
+        this.dep = handle.shuffleDep();
         this.blockManager = SparkEnv.env.blockManager;
     }
 
     @Override
-    public void write(Iterator<Product2<K, V>> records) {
+    public void write(TIterator<Product2<K, V>> records) {
         if (dep.mapSideCombine) {
             sorter = new ExternalSorter<>(context, dep.aggregator, dep.partitioner, dep.keyOrdering, dep.serializer);
         } else {
@@ -63,7 +61,7 @@ public class SortShuffleWriter<K, V, C> implements ShuffleWriter<K, V>{
         }
         sorter.insertAll(records);
 
-        // Don't bother including the time to open the merged combiner file in the shuffle write time,
+        // Don't bother including the time to open the merged combinerMerge file in the shuffle write time,
         // because it just opens a single file, so is typically too fast to measure accurately
         // (see SPARK-3570).
         File output = shuffleBlockResolver.getDataFile(dep.shuffleId(), mapId);

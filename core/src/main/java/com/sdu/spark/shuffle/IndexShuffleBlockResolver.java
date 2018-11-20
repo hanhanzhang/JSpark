@@ -43,8 +43,7 @@ public class IndexShuffleBlockResolver implements ShuffleBlockResolver {
         this(conf, null);
     }
 
-    public IndexShuffleBlockResolver(SparkConf conf,
-                                     BlockManager blockManager) {
+    public IndexShuffleBlockResolver(SparkConf conf, BlockManager blockManager) {
         this.conf = conf;
         this.blockManager = blockManager;
         this.transportConf = SparkTransportConf.fromSparkConf(conf, "shuffle");
@@ -160,7 +159,7 @@ public class IndexShuffleBlockResolver implements ShuffleBlockResolver {
 
     /**
      * Write an index file with the offsets of each block, plus a final offset at the end for the
-     * end of the combiner file. This will be used by getBlockData to figure out where each block
+     * end of the combinerMerge file. This will be used by getBlockData to figure out where each block
      * begins and ends.
      *
      * It will commit the data and index file as an atomic operation, use the existing ones, or

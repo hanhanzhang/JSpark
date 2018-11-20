@@ -6,7 +6,6 @@ import com.sdu.spark.TaskContext;
 import com.sdu.spark.TaskContextImpl;
 import com.sdu.spark.memory.MemoryMode;
 import com.sdu.spark.memory.TaskMemoryManager;
-import org.apache.logging.log4j.util.Strings;
 
 import java.util.Properties;
 
@@ -14,34 +13,33 @@ import java.util.Properties;
  * @author hanhan.zhang
  * */
 public abstract class Task<T> {
+
+    // TODO: Metric, TaskMetrics
+//    private byte[] serializedTaskMetrics;
+//    private TaskMetrics metrics;
+
     protected int stageId;
-    public int stageAttemptId;
+    private int stageAttemptId;
     protected int partitionId;
-    public transient Properties localProperties = new Properties();
+    private transient Properties localProperties;
     private int jobId;
-    public String appId;
+    private String appId;
     private String appAttemptId;
 
     private TaskMemoryManager taskMemoryManager;
 
     // TaskSetManager设置
-    public long epoch;
-
-    public transient TaskContextImpl context;
+    protected long epoch;
+    private transient TaskContextImpl context;
     private transient volatile String reasonIfKilled = null;
     // 运行Task的线程
     private transient Thread taskThread;
 
-    public long executorDeserializeTime = 0L;
-    public long executorDeserializeCpuTime = 0L;
+    protected long executorDeserializeTime = 0L;
+    protected long executorDeserializeCpuTime = 0L;
 
-    public Task(int stageId,
-                int stageAttemptId,
-                int partitionId,
-                Properties localProperties,
-                int jobId,
-                String appId,
-                String appAttemptId) {
+    public Task(int stageId, int stageAttemptId, int partitionId, Properties localProperties,
+                int jobId, String appId, String appAttemptId) {
         this.stageId = stageId;
         this.stageAttemptId = stageAttemptId;
         this.partitionId = partitionId;
@@ -51,15 +49,45 @@ public abstract class Task<T> {
         this.appAttemptId = appAttemptId;
     }
 
+    public void setTaskMemoryManager(TaskMemoryManager taskMemoryManager) {
+        this.taskMemoryManager = taskMemoryManager;
+    }
+
+    public void setLocalProperties(Properties properties) {
+        this.localProperties = properties;
+    }
+
+    public long epoch() {
+        return epoch;
+    }
+
+    public int stageAttemptId() {
+        return stageAttemptId;
+    }
+
+    public TaskContext context() {
+        return context;
+    }
+
+    public String reasonIfKilled() {
+        return reasonIfKilled;
+    }
+
+    public long executorDeserializeTime() {
+        return executorDeserializeTime;
+    }
+
+    public long executorDeserializeCpuTime() {
+        return executorDeserializeCpuTime;
+    }
+
+    /**
+     * Called by {@link com.sdu.spark.executor.Executor} to run this task
+     * */
     public T run(long taskAttemptId, int attemptNumber) {
         // 注册Task
         SparkEnv.env.blockManager.registerTask(taskAttemptId);
-        context =  new TaskContextImpl(stageId,
-                                       partitionId,
-                                       taskAttemptId,
-                                       attemptNumber,
-                                       taskMemoryManager,
-                                       localProperties);
+        context =  new TaskContextImpl(stageId, partitionId, taskAttemptId, attemptNumber, taskMemoryManager, localProperties);
         TaskContext.setTaskContext(context);
         taskThread = Thread.currentThread();
 
@@ -96,6 +124,8 @@ public abstract class Task<T> {
         }
     }
 
+    public abstract T runTask(TaskContext context) throws Exception;
+
     public void kill(boolean interruptThread, String reason) {
         assert reason != null;
         reasonIfKilled = reason;
@@ -107,13 +137,12 @@ public abstract class Task<T> {
         }
     }
 
-    public void setTaskMemoryManager(TaskMemoryManager taskMemoryManager) {
-        this.taskMemoryManager = taskMemoryManager;
-    }
+    // TODO: TaskMetric
+//    public List<AccumulatorV2<?, ?>> collectAccumulatorUpdates(boolean taskFailed) {
+//
+//    }
 
     public TaskLocation[] preferredLocations() {
-        return null;
+        return new TaskLocation[]{};
     }
-
-    public abstract T runTask(TaskContext context) throws Exception;
 }

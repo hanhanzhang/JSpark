@@ -64,7 +64,7 @@ public class BlockStoreShuffleReader<K, C> implements ShuffleReader<K, C> {
         this.blockManager = SparkEnv.env.blockManager;
         this.mapOutputTracker = SparkEnv.env.mapOutputTracker;
 
-        this.dep = handle.dependency;
+        this.dep = handle.shuffleDep();
     }
 
 

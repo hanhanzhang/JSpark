@@ -288,7 +288,7 @@ public class SparkSubmitArguments extends SparkSubmitArgumentsParser {
                 "                              This argument does not work with --principal / --keytab.\n" +
                 "\n" +
                 "  --help, -h                  Show this help message and exit.\n" +
-                "  --verbose, -v               Print additional debug combiner.\n" +
+                "  --verbose, -v               Print additional debug combinerMerge.\n" +
                 "  --version,                  Print the version of current Spark.\n" +
                 "\n" +
                 " Cluster deploy mode only:\n" +
