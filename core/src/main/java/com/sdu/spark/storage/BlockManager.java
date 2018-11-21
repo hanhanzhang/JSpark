@@ -5,6 +5,7 @@ import com.sdu.spark.MapOutputTracker;
 import com.sdu.spark.SecurityManager;
 import com.sdu.spark.SparkContext;
 import com.sdu.spark.SparkException;
+import com.sdu.spark.executor.ShuffleWriteMetrics;
 import com.sdu.spark.memory.MemoryManager;
 import com.sdu.spark.memory.MemoryMode;
 import com.sdu.spark.network.BlockDataManager;
@@ -431,19 +432,11 @@ public class BlockManager implements BlockDataManager, BlockEvictionHandler {
         throw new UnsupportedOperationException("");
     }
 
-    public DiskBlockObjectWriter getDiskWriter(BlockId blockId,
-                                               File file,
-                                               SerializerInstance serializerInstance,
-                                               int bufferSize) {
+    public DiskBlockObjectWriter getDiskWriter(BlockId blockId, File file, SerializerInstance serializerInstance,
+                                               int bufferSize, ShuffleWriteMetrics writeMetrics) {
         boolean syncWrites = conf.getBoolean("spark.shuffle.sync", false);
-        return new DiskBlockObjectWriter(
-                file,
-                serializerManager,
-                serializerInstance,
-                bufferSize,
-                syncWrites,
-                blockId
-        );
+        return new DiskBlockObjectWriter(file, serializerManager, serializerInstance, bufferSize,
+                syncWrites, writeMetrics, blockId);
     }
 
     public boolean putBytes(BlockId blockId, ChunkedByteBuffer bytes, StorageLevel level) {

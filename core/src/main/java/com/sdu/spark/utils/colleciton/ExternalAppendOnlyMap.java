@@ -9,6 +9,7 @@ import com.sdu.spark.Aggregator.CombinerAdd;
 import com.sdu.spark.SparkEnv;
 import com.sdu.spark.SparkException;
 import com.sdu.spark.TaskContext;
+import com.sdu.spark.executor.ShuffleWriteMetrics;
 import com.sdu.spark.rpc.SparkConf;
 import com.sdu.spark.serializer.DeserializationStream;
 import com.sdu.spark.serializer.Serializer;
@@ -68,6 +69,8 @@ public class ExternalAppendOnlyMap<K, V, C> extends Spillable<AppendOnlyMap<K, C
     private long diskBytesSpilled = 0L;
     private long peakMemoryUsedBytes = 0L;
 
+    private ShuffleWriteMetrics writeMetrics;
+
     private Comparator<K> keyComparator;
     private SpillableIterator readingIterator;
 
@@ -94,6 +97,7 @@ public class ExternalAppendOnlyMap<K, V, C> extends Spillable<AppendOnlyMap<K, C
         this.serializerBatchSize = sparkConf.getLong("spark.shuffle.spill.batchSize", 10000);
         this.fileBufferSize = (int) sparkConf.getSizeAsKb("spark.shuffle.file.buffer", "32k") * 1024;
         this.keyComparator = new HashComparator();
+        this.writeMetrics = new ShuffleWriteMetrics();
     }
 
     public long diskBytesSpilled() {
@@ -144,10 +148,7 @@ public class ExternalAppendOnlyMap<K, V, C> extends Spillable<AppendOnlyMap<K, C
     private DiskMapIterator spillMemoryIteratorToDisk(Iterator<Tuple2<K, C>> inMemoryIterator) {
         try {
             Tuple2<BlockId, File> tuple2 = diskBlockManager.createTempLocalBlock();
-            DiskBlockObjectWriter writer = blockManager.getDiskWriter(tuple2._1(),
-                                                                      tuple2._2(),
-                                                                      ser,
-                                                                      fileBufferSize);
+            DiskBlockObjectWriter writer = blockManager.getDiskWriter(tuple2._1(), tuple2._2(), ser, fileBufferSize, writeMetrics);
             long objectsWritten = 0L;
             // List of batch sizes (bytes) in the order they are written to disk
             List<Long> batchSizes = new ArrayList<>();

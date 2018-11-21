@@ -15,7 +15,7 @@ public interface WritablePartitionedPairCollection<K, V> {
 
     void insert(int partition, K key, V value);
 
-    Iterator<Tuple2<Tuple2<Integer, K>, V>> partitionedDestructiveSortedIterator(Comparator<K> keyComparator);
+    Iterator<Tuple2<Tuple2<Integer, K>, V>>   partitionedDestructiveSortedIterator(Comparator<K> keyComparator);
 
     default WritablePartitionedIterator destructiveSortedWritablePartitionedIterator(Comparator<K> keyComparator) {
         Iterator<Tuple2<Tuple2<Integer, K>, V>> it = partitionedDestructiveSortedIterator(keyComparator);

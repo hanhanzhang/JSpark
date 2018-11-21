@@ -1,5 +1,6 @@
 package com.sdu.spark;
 
+import com.sdu.spark.executor.TaskMetrics;
 import com.sdu.spark.memory.TaskMemoryManager;
 import com.sdu.spark.shuffle.FetchFailedException;
 import com.sdu.spark.utils.TaskCompletionListener;
@@ -101,6 +102,8 @@ public abstract class TaskContext implements Serializable {
      * `org.apache.spark.SparkContext.setLocalProperty`.
      */
     public abstract String getLocalProperty(String key);
+
+    public abstract TaskMetrics taskMetrics();
 
     /**
      * If the task is interrupted, throws TaskKilledException with the reason for the interrupt.

@@ -4,6 +4,7 @@ import com.google.common.collect.Lists;
 import com.sdu.spark.SparkException;
 import com.sdu.spark.executor.ExecutorExitCode;
 import com.sdu.spark.rpc.SparkConf;
+import com.sdu.spark.storage.BlockId.*;
 import com.sdu.spark.utils.ShutdownHookManager;
 import com.sdu.spark.utils.ShutdownHookManager.*;
 import com.sdu.spark.utils.Utils;
@@ -154,10 +155,10 @@ public class DiskBlockManager {
     }
 
     /** Produces a unique block id and File suitable for storing shuffled intermediate results. */
-    public Tuple2<BlockId, File> createTempShuffleBlock() {
-        BlockId.TempShuffleBlockId blockId = new BlockId.TempShuffleBlockId(UUID.randomUUID());
+    public Tuple2<TempShuffleBlockId, File> createTempShuffleBlock() {
+        TempShuffleBlockId blockId = new TempShuffleBlockId(UUID.randomUUID());
         while (getFile(blockId).exists()) {
-            blockId = new BlockId.TempShuffleBlockId(UUID.randomUUID());
+            blockId = new TempShuffleBlockId(UUID.randomUUID());
         }
         return new Tuple2<>(blockId, getFile(blockId));
     }

@@ -2,6 +2,7 @@ package com.sdu.spark;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.sdu.spark.executor.TaskMetrics;
 import com.sdu.spark.memory.TaskMemoryManager;
 import com.sdu.spark.shuffle.FetchFailedException;
 import com.sdu.spark.utils.TaskCompletionListener;
@@ -119,6 +120,12 @@ public class TaskContextImpl extends TaskContext {
     @Override
     public String getLocalProperty(String key) {
         return localProperties.getProperty(key);
+    }
+
+    @Override
+    public TaskMetrics taskMetrics() {
+        // TODO: 待实现
+        return new TaskMetrics();
     }
 
     @Override

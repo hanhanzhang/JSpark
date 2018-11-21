@@ -1,17 +1,19 @@
 package com.sdu.spark.utils.colleciton;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 import com.google.common.io.ByteStreams;
 import com.sdu.spark.*;
 import com.sdu.spark.Aggregator.CombinerMerge;
+import com.sdu.spark.executor.ShuffleWriteMetrics;
+import com.sdu.spark.memory.MemoryManager;
+import com.sdu.spark.memory.StaticMemoryManager;
+import com.sdu.spark.memory.TaskMemoryManager;
 import com.sdu.spark.rpc.SparkConf;
-import com.sdu.spark.serializer.DeserializationStream;
-import com.sdu.spark.serializer.Serializer;
-import com.sdu.spark.serializer.SerializerInstance;
-import com.sdu.spark.serializer.SerializerManager;
+import com.sdu.spark.scheduler.LiveListenerBus;
+import com.sdu.spark.serializer.*;
 import com.sdu.spark.storage.*;
+import com.sdu.spark.storage.BlockId.TempShuffleBlockId;
 import com.sdu.spark.utils.scala.Product2;
 import com.sdu.spark.utils.scala.Tuple2;
 import org.slf4j.Logger;
@@ -25,38 +27,18 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 import static com.sdu.spark.utils.Utils.bytesToString;
+import static com.sdu.spark.utils.Utils.require;
+import static java.lang.String.format;
+import static org.apache.commons.lang3.StringUtils.join;
 
 /**
- * {@link ExternalSorter}职责:
+ * Users interact with this class in the following way:
  *
- * 1: {@link #insertAll(Iterator)}聚合数据
+ * 1. Call insertAll() with a set of records.
  *
- *  1': 若是{@link Aggregator}不空, 使用{@link PartitionedAppendOnlyMap}聚合同一分区相同Key的Value值
- *
- *      若是{@link Aggregator}空, 使用{@link PartitionedPairBuffer}只负责数据追加
- *
- *  2': 数据聚合调用链(以PartitionedAppendOnlyMap为例):
- *
- *     ExternalSorter.insertAll()
- *          |
- *          +------> {@link Spillable#addElementsRead()} 记录Spill前已读取数据数
- *          |
- *          +------> {@link Partitioner#getPartition(Object)} 对Key分区
- *          |
- *          +------> {@link Aggregator}对同一分区相同Key的数据聚合
- *          |
- *          +------> {@link #maybeSpillCollection(boolean)}是否将内存中数据落地磁盘
- *
- *                   具体实现：{@link #spill(WritablePartitionedPairCollection)}
- *
- * 2: {@link #iterator()}读取聚合的数据
- *
- *  1':
- *
- * 3: {@link #spill(WritablePartitionedPairCollection)}内存数据Spill到磁盘
- *
- *
- * TODO: 读取Spill数据并遍历分区数据
+ * 2. Request an iterator() back to traverse sorted/aggregated records.
+ *    - or -
+ *    Invoke writePartitionedFile() to create a file containing sorted/aggregated outputs that can be used in Spark's sort shuffle.
  *
  * @author hanhan.zhang
  * */
@@ -81,6 +63,8 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
     private SerializerInstance serInstance;
 
     private int fileBufferSize;
+    // Spill数据到磁盘过程中, 分Batch写磁盘
+    // Merge SpillFile过程中, 分Batch将磁盘数据读入内存
     private long serializerBatchSize;
 
     private volatile PartitionedAppendOnlyMap<K, C> map;
@@ -109,6 +93,9 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
         this.partitioner = partitioner;
         this.ordering = ordering;
 
+        // For test
+        this.conf = new SparkConf();
+
         this.conf = SparkEnv.env.conf;
         this.numPartitions = this.partitioner.numPartitions();
         this.shouldPartitions = this.numPartitions > 1;
@@ -132,10 +119,7 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
     }
 
     private Comparator<K> comparator() {
-        if (ordering == null || aggregator != null) {
-            return keyComparator;
-        }
-        return null;
+        return ordering == null || aggregator != null ? keyComparator : null;
     }
 
     @SuppressWarnings("unchecked")
@@ -191,14 +175,22 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
         }
     }
 
+    /**
+     * Write all the data added into this ExternalSorter into a file in the disk store. This is
+     * called by the SortShuffleWriter.
+     *
+     * @param blockId block ID to write to. The index file will be blockId.name + ".index".
+     * @return array of lengths, in bytes, of each partition of the file (used by map output tracker)
+     * */
     public long[] writePartitionedFile(BlockId blockId, File outputFile) {
         // 每个分区
         long[] lengths = new long[numPartitions];
-        DiskBlockObjectWriter writer = blockManager.getDiskWriter(blockId, outputFile, serInstance, fileBufferSize);
+        DiskBlockObjectWriter writer = blockManager.getDiskWriter(blockId, outputFile, serInstance, fileBufferSize, context.taskMetrics().shuffleWriteMetrics());
 
         if (spills.isEmpty()) {
             // Case where we only have in-memory data
             WritablePartitionedPairCollection<K, C> collection = aggregator != null ?  map : buffer;
+            // PartitionedAppendOnlyMap及PartitionedPairBuffer默认按照Partition排序
             WritablePartitionedIterator it = collection.destructiveSortedWritablePartitionedIterator(keyComparator);
             while (it.hasNext()) {
                 int partitionId = it.nextPartition();
@@ -212,19 +204,20 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
             // We must perform merge-sort; get an iterator by partition and write everything directly.
             Iterator<Tuple2<Integer, Iterator<Tuple2<K, C>>>> iterator = partitionedIterator();
             while (iterator.hasNext()) {
-                Tuple2<Integer, Iterator<Tuple2<K, C>>> tuple = iterator.next();
-                if (tuple._2().hasNext()) {
-                    while (tuple._2().hasNext()) {
-                        Tuple2<K, C> kv = tuple._2().next();
-                        try {
-                            writer.write(kv._1(), kv._2());
-                        } catch (IOException e) {
-                            throw new SparkException(String.format("Exception occurred when write (%s, %s) to disk", kv._1(), kv._2()), e);
-                        }
+                Tuple2<Integer, Iterator<Tuple2<K, C>>> partitionData = iterator.next();
+                // 按分区写数据
+                int partition = partitionData._1();
+                Iterator<Tuple2<K, C>> partitionDataIterator = partitionData._2();
+                while (partitionDataIterator.hasNext()) {
+                    Tuple2<K, C> element = partitionDataIterator.next();
+                    try {
+                        writer.write(element._1(), element._2());
+                    } catch (IOException e) {
+                        throw new SparkException(format("Exception occurred when write (%s, %s) to disk", element._1(), element._2()), e);
                     }
-                    FileSegment segment = writer.commitAndGet();
-                    lengths[tuple._1()] = segment.length;
                 }
+                FileSegment segment = writer.commitAndGet();
+                lengths[partition] = segment.length;
             }
         }
 
@@ -269,6 +262,10 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
         return isSpilled;
     }
 
+    /**
+     * Spill our in-memory collection to a sorted file that we can merge later.
+     * We add this file into `spilledFiles` to find it later.
+     * */
     @Override
     public void spill(WritablePartitionedPairCollection<K, C> collection) {
         WritablePartitionedIterator iterator = collection.destructiveSortedWritablePartitionedIterator(comparator());
@@ -277,22 +274,28 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
     }
 
     private SpilledFile spillMemoryIteratorToDisk(WritablePartitionedIterator inMemoryIterator) {
-        // 创建Shuffle Block数据陆地文件
-        Tuple2<BlockId, File> tuple = diskBlockManager.createTempShuffleBlock();
-        // 记录分区长度
+        // Because these files may be read during shuffle, their compression must be controlled by
+        // spark.shuffle.compress instead of spark.shuffle.spill.compress, so we need to use
+        // createTempShuffleBlock here; see SPARK-3426 for more context.
+        Tuple2<TempShuffleBlockId, File> tuple = diskBlockManager.createTempShuffleBlock();
+
+        // These variables are reset after each flush
+        // List of batch sizes (bytes) in the order they are written to disk(数组索引即为分区)
         List<Long> batchSizes = Lists.newArrayList();
-        // 记录分区Key数目
+        // How many elements we have in each partition(分区元素数)
         long[] elementsPerPartition = new long[numPartitions];
         long objectsWritten = 0L;
-        // 写文件
-        DiskBlockObjectWriter writer = blockManager.getDiskWriter(tuple._1(), tuple._2(), serInstance, fileBufferSize);
+        ShuffleWriteMetrics spillMetric = new ShuffleWriteMetrics();
+        DiskBlockObjectWriter writer = blockManager.getDiskWriter(tuple._1(), tuple._2(), serInstance, fileBufferSize, spillMetric);
 
         boolean success = false;
         try {
             while (inMemoryIterator.hasNext()) {
+                // 当前分区
                 int partitionId = inMemoryIterator.nextPartition();
-                assert partitionId >= 0 && partitionId < numPartitions :
-                        String.format("partition Id: %d should be in the range [0, %d)", partitionId, numPartitions);
+                require(partitionId >= 0 && partitionId < numPartitions,
+                        format("partition Id: %d should be in the range [0, %d)", partitionId, numPartitions));
+
                 inMemoryIterator.writeNext(writer);
                 long elements = elementsPerPartition[partitionId];
                 elements += 1;
@@ -340,16 +343,19 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
     }
 
     /**
-     * @param data ((partitionId, key), collection), 已按照partitionId排序
+     * Given a stream of ((partition, key), combiner) pairs *assumed to be sorted by partition ID*,
+     * group together the pairs for each partition into a sub-iterator.
+     *
+     * @param data an iterator of elements, assumed to already be sorted by partition ID
+     * @return (partition, iterator[key, combiner])
      * */
     private Iterator<Tuple2<Integer, Iterator<Tuple2<K, C>>>> groupByPartition(Iterator<Tuple2<Tuple2<Integer, K>, C>> data) {
-        BufferedIterator<Tuple2<Tuple2<Integer, K>, C>> buffered = new BufferedIterator<>(data);
-        List<Tuple2<Integer, Iterator<Tuple2<K, C>>>> partitionIterators = Lists.newLinkedList();
-        for (int i = 0; i < numPartitions; ++i) {
-            IteratorForPartition iteratorForPartition = new IteratorForPartition(i, buffered);
-            partitionIterators.add(new Tuple2<>(i, iteratorForPartition));
+        List<Tuple2<Integer, Iterator<Tuple2<K, C>>>> partitionData = Lists.newLinkedList();
+        BufferedIterator<Tuple2<Tuple2<Integer, K>, C>> bufferedIterator = new BufferedIterator<>(data);
+        for (int p = 0 ; p < numPartitions; ++p) {
+            partitionData.add(new Tuple2<>(p, new IteratorForPartition(p, bufferedIterator)));
         }
-        return partitionIterators.iterator();
+        return partitionData.iterator();
     }
 
     private Iterator<Tuple2<Tuple2<Integer, K>, C>> destructiveIterator(Iterator<Tuple2<Tuple2<Integer, K>, C>> memoryIterator) {
@@ -361,18 +367,26 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
         }
     }
 
+    /**
+     * Merge a sequence of sorted files, giving an iterator over partitions and then over elements
+     * inside each partition. This can be used to either write out a new file or return data to
+     * the user.
+     *
+     * Returns an iterator over all the data written to this object, grouped by partition. For each
+     * partition we then have an iterator over its contents, and these are expected to be accessed
+     * in order (you can't "skip ahead" to one partition without reading the previous one).
+     * Guaranteed to return a key-value pair for each partition, in order of partition ID.
+     *
+     * */
     private Iterator<Tuple2<Integer, Iterator<Tuple2<K, C>>>> merge(List<SpilledFile> spills, Iterator<Tuple2<Tuple2<Integer, K>, C>> inMemory) {
-        List<SpillReader> readers = spills.stream().map(SpillReader::new)
-                                                   .collect(Collectors.toList());
-        BufferedIterator<Tuple2<Tuple2<Integer, K>, C>> inMemoryBuffered = new BufferedIterator<>(inMemory);
+        List<SpillReader> readers = spills.stream().map(SpillReader::new).collect(Collectors.toList());
+        BufferedIterator<Tuple2<Tuple2<Integer, K>, C>> inMemBuffered = new BufferedIterator<>(inMemory);
         List<Tuple2<Integer, Iterator<Tuple2<K, C>>>> partitionKeyValues = Lists.newLinkedList();
-
         // 将内存数据与磁盘数据按照分区聚合
         for (int p = 0; p < numPartitions; ++p) {
-            IteratorForPartition inMemIterator = new IteratorForPartition(p, inMemoryBuffered);
-            List<Iterator<Tuple2<K, C>>> iterators = readers.stream()
-                                                            .map(SpillReader::readNextPartition)
-                                                            .collect(Collectors.toList());
+            // InMemory按照分区排序
+            IteratorForPartition inMemIterator = new IteratorForPartition(p, inMemBuffered);
+            List<Iterator<Tuple2<K, C>>> iterators = readers.stream().map(SpillReader::readNextPartition).collect(Collectors.toList());
             iterators.add(inMemIterator);
 
             if (aggregator != null) {
@@ -517,11 +531,19 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
         return tupleList.iterator();
     }
 
-    @VisibleForTesting
+    /**
+     * Return an iterator over all the data written to this object, grouped by partition and
+     * aggregated by the requested aggregator. For each partition we then have an iterator over its
+     * contents, and these are expected to be accessed in order (you can't "skip ahead" to one
+     * partition without reading the previous one). Guaranteed to return a key-value pair for each
+     * partition, in order of partition ID.
+     * */
     private Iterator<Tuple2<Integer, Iterator<Tuple2<K, C>>>> partitionedIterator() {
         boolean usingMap = aggregator != null;
         WritablePartitionedPairCollection<K, C> collection = usingMap ? map : buffer;
-        if (spills.isEmpty()) {         // Shuffle Block数据没有落地磁盘
+        if (spills.isEmpty()) {
+            // Special case: if we have only in-memory data, we don't need to merge streams, and perhaps
+            // we don't even need to sort by anything other than partition ID
             if (ordering == null) {
                 // The user hasn't requested sorted keys, so only sort by partition ID, not key
                 return groupByPartition(destructiveIterator(collection.partitionedDestructiveSortedIterator(null)));
@@ -529,7 +551,8 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
                 // We do need to sort by both partition ID and key
                 return groupByPartition(destructiveIterator(collection.partitionedDestructiveSortedIterator(keyComparator)));
             }
-        } else {                        // 落地磁盘文件聚合
+        } else {
+            // Merge spilled and in-memory data
             Iterator<Tuple2<Tuple2<Integer, K>, C>> inMemoryIterator = collection.partitionedDestructiveSortedIterator(keyComparator);
             return merge(spills, inMemoryIterator);
         }
@@ -538,11 +561,12 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
     /**Return an iterator over all the data written to this object, aggregated by our aggregator.*/
     public Iterator<Tuple2<K, C>> iterator() {
         isShuffleSort = false;
-        Iterator<Tuple2<Integer, Iterator<Tuple2<K, C>>>> partitionedIter = partitionedIterator();
+        Iterator<Tuple2<Integer, Iterator<Tuple2<K, C>>>> partitionedIterator = partitionedIterator();
         // 相同Key分在同一个分区
         List<Tuple2<K, C>> kvList = Lists.newLinkedList();
-        while (partitionedIter.hasNext()) {
-            Iterators.addAll(kvList, partitionedIter.next()._2());
+        while (partitionedIterator.hasNext()) {
+            Iterator<Tuple2<K, C>> partitionData = partitionedIterator.next()._2();
+            Iterators.addAll(kvList, partitionData);
         }
         return kvList.iterator();
     }
@@ -552,8 +576,7 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
         int partitionId;
         BufferedIterator<Tuple2<Tuple2<Integer, K>, C>> data;
 
-        IteratorForPartition(int partitionId,
-                             BufferedIterator<Tuple2<Tuple2<Integer, K>, C>> data) {
+        IteratorForPartition(int partitionId, BufferedIterator<Tuple2<Tuple2<Integer, K>, C>> data) {
             this.partitionId = partitionId;
             this.data = data;
         }
@@ -575,8 +598,7 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
 
     private class SpillReader {
         SpilledFile spill;
-
-        // 计算每个Batch在Shuffle File中偏移量
+        // 每个Batch在SpilledFile中偏移量, batchOffsets[batchOffsets.length -1]即SpilledFile长度
         long[] batchOffsets;
         // Batch序号
         int batchId = 0;
@@ -599,8 +621,7 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
 
         SpillReader(SpilledFile spill) {
             this.spill = spill;
-
-            // 计算每个Batch在Shuffle File中偏移量(记录serializerBatchSizes.size()的下个位置偏移量)
+            // 每个Batch在SpilledFile(每次Spill产生一个临时文件)中偏移量(记录serializerBatchSizes.size()的下个位置偏移量)
             batchOffsets = new long[spill.serializerBatchSizes.size() + 1];
             long offset = 0L;
             int i = 0;
@@ -648,7 +669,7 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
         }
 
         // 跳到下个分区读取数据
-        // 若是分区Spill Element数 == 分区已读取数, 则需要开始读取下个分区
+        // 若是分区Spilled Element Number == 分区已读取数, 则需要开始读取下个分区
         private void skipToNextPartition() {
             while (partitionId < numPartitions &&
                     indexInPartition == spill.elementsPerPartition[partitionId]) {
@@ -762,7 +783,7 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
                         try {
                             writer.write(cur._1(), cur._2());
                         } catch (IOException e) {
-                            throw new SparkException(String.format("Exception occurred when write (%s, %s) to disk", cur._1(), cur._2()), e);
+                            throw new SparkException(format("Exception occurred when write (%s, %s) to disk", cur._1(), cur._2()), e);
                         }
                         cur = upStream.hasNext() ? upStream.next() : null;
                     }
@@ -838,4 +859,85 @@ public class ExternalSorter<K, V, C> extends Spillable<WritablePartitionedPairCo
             this.elementsPerPartition = elementsPerPartition;
         }
     }
+
+
+    public static void main(String[] args) {
+        SparkConf sparkConf = new SparkConf();
+        // 设置Spill阈值(即读取元素X个元素发生Spill操作)
+        sparkConf.set("spark.shuffle.spill.numElementsForceSpillThreshold", "3");
+        // 设置Spill Batch(Spill过程中, 当前待Spill的元素超过X时落地磁盘)
+        sparkConf.set("spark.shuffle.spill.batchSize", "2");
+        // 配置Shuffle文件目录
+        sparkConf.set("spark.local.dir", "/Users/hanhan.zhang/data/spark");
+
+        // SparkEnv
+        sparkConf.set("spark.driver.host", "localhost");
+        sparkConf.set("spark.driver.port", "7821");
+        SparkEnv.env = SparkEnv.createDriverEnv(sparkConf, true, new LiveListenerBus(sparkConf), Runtime.getRuntime().availableProcessors(), null);
+
+        // 内存管理
+        MemoryManager memoryManager = new StaticMemoryManager(sparkConf, Runtime.getRuntime().availableProcessors());
+        TaskMemoryManager taskMemoryManager = new TaskMemoryManager(memoryManager, 20);
+
+        TaskContext context = new TaskContextImpl(10, 1, 21, 22, taskMemoryManager, new Properties());
+        Aggregator.CombinerCreator<Integer, List<Integer>> combinerCreator = Lists::newArrayList;
+        Aggregator.CombinerAdd<Integer, List<Integer>> combinerAdd = (v, c) -> {
+            c.add(v);
+            return c;
+        };
+        Aggregator.CombinerMerge<List<Integer>> combinerMerge = (c1, c2) -> {
+            if (c1 != null) {
+                if (c2 != null && !c2.isEmpty()) {
+                    c1.addAll(c2);
+                    return c1;
+                }
+                return c1;
+            }
+            return c2;
+        };
+        Aggregator<String, Integer, List<Integer>> aggregator = new Aggregator<>(combinerCreator, combinerAdd, combinerMerge);
+        Partitioner partitioner = new Partitioner.HashPartitioner(3);
+        Serializer serializer = new JavaSerializer(sparkConf);
+        ExternalSorter<String, Integer, List<Integer>> sorter = new ExternalSorter<>(context, aggregator, partitioner, null, serializer);
+
+        List<Tuple2<String, Integer>> records = Lists.newLinkedList();
+        records.add(new Tuple2<>("A", 1));
+        records.add(new Tuple2<>("B", 11));
+        records.add(new Tuple2<>("C", 21));
+        records.add(new Tuple2<>("D", 31));
+        records.add(new Tuple2<>("E", 51));
+
+        records.add(new Tuple2<>("A", 2));
+        records.add(new Tuple2<>("B", 12));
+        records.add(new Tuple2<>("C", 22));
+        records.add(new Tuple2<>("D", 32));
+        records.add(new Tuple2<>("E", 52));
+
+        records.add(new Tuple2<>("A", 3));
+        records.add(new Tuple2<>("B", 13));
+        records.add(new Tuple2<>("C", 23));
+        records.add(new Tuple2<>("D", 33));
+        records.add(new Tuple2<>("E", 53));
+        records.add(new Tuple2<>("E", 55));
+
+        // Spill File
+        sorter.insertAll(records.iterator());
+
+
+        // Merge Spill File ===> Shuffle File
+//        int shuffleId = 1, mapId = 2;
+//        IndexShuffleBlockResolver shuffleBlockResolver = new IndexShuffleBlockResolver(sparkConf, SparkEnv.env.blockManager);
+//        File output = shuffleBlockResolver.getDataFile(shuffleId, mapId);
+//        File tmp = Utils.tempFileWith(output);
+//        BlockId.ShuffleBlockId blockId = new BlockId.ShuffleBlockId(shuffleId, mapId, 0);
+//        long[] partitionLengths = sorter.writePartitionedFile(blockId, tmp);
+//        shuffleBlockResolver.writeIndexFileAndCommit(shuffleId, mapId, partitionLengths, tmp);
+        Iterator<Tuple2<String, List<Integer>>> iterator = sorter.iterator();
+        while (iterator.hasNext()) {
+            Tuple2<String, List<Integer>> tuple = iterator.next();
+            System.out.println("Key: " + tuple._1() + ", Value: " + join(tuple._2(), ","));
+        }
+
+    }
 }
+

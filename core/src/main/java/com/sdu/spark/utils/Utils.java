@@ -688,6 +688,12 @@ public class Utils {
         return new Tuple2<>(trueList, falseList);
     }
 
+    public static void require(boolean requirement, Object message) {
+        if (!requirement) {
+            throw new IllegalArgumentException("requirement failed: " + message);
+        }
+    }
+
     public interface Function<T> {
         boolean apply(T obj);
     }

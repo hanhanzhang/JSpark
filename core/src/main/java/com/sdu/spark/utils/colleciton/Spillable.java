@@ -11,7 +11,8 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 
 /**
- * {@link Spillable}负责将内存数据超过一定阈值或一定数目后落地磁盘
+ * Spills contents of an in-memory collection to disk when the memory threshold
+ * has been exceeded.
  *
  * @author hanhan.zhang
  * */
@@ -26,6 +27,8 @@ public abstract class Spillable<C> extends MemoryConsumer {
     // For testing only
     private long numElementsForceSpillThreshold;
 
+    // Threshold for this collection's size in bytes before we start tracking its memory usage
+    // To avoid a large number of small spills, initialize this to a value orders of magnitude > 0
     private volatile long myMemoryThreshold;
 
     // Number of elements read from input since last spill
@@ -38,14 +41,12 @@ public abstract class Spillable<C> extends MemoryConsumer {
     public Spillable(TaskMemoryManager taskMemoryManager) {
         super(taskMemoryManager);
 
-        this.initialMemoryThreshold = SparkEnv.env.conf.getLong("spark.shuffle.spill.initialMemoryThreshold",
-                                                                5 * 1024 * 1024);
-        this.numElementsForceSpillThreshold = SparkEnv.env.conf.getLong("spark.shuffle.spill.numElementsForceSpillThreshold",
-                                                                        Long.MAX_VALUE);
+        this.initialMemoryThreshold = SparkEnv.env.conf.getLong("spark.shuffle.spill.initialMemoryThreshold", 5 * 1024 * 1024);
+        this.numElementsForceSpillThreshold = SparkEnv.env.conf.getLong("spark.shuffle.spill.numElementsForceSpillThreshold", Long.MAX_VALUE);
         this.myMemoryThreshold = initialMemoryThreshold;
     }
 
-    public void addElementsRead() {
+    protected void addElementsRead() {
         elementsRead += 1;
     }
 
@@ -54,16 +55,18 @@ public abstract class Spillable<C> extends MemoryConsumer {
      * memory before spilling.
      *
      * @param collection collection to spill to disk
-     * @param currentMemory collection占用内存估量
+     * @param currentMemory  estimated size of the collection in bytes
      * @return true if `collection` was spilled to disk; false otherwise
      */
     protected boolean maybeSpill(C collection, long currentMemory) {
         boolean shouldSpill = false;
-        /**{@link TimeSort#MIN_MERGE}*/
         if (elementsRead % 32 == 0 && currentMemory >= myMemoryThreshold) {
+            // Claim up to double our current memory from the shuffle memory pool
             long amountToRequest = 2 * currentMemory - myMemoryThreshold;
             long granted = acquireMemory(amountToRequest);
             myMemoryThreshold += granted;
+            // If we were granted too little memory to grow further (either tryToAcquire returned 0,
+            // or we already had more memory than myMemoryThreshold), spill the current collection
             shouldSpill = currentMemory >= myMemoryThreshold;
         }
 
@@ -76,6 +79,7 @@ public abstract class Spillable<C> extends MemoryConsumer {
             memoryBytesSpilled += currentMemory;
             releaseMemory();
         }
+
         return shouldSpill;
     }
 
@@ -108,8 +112,15 @@ public abstract class Spillable<C> extends MemoryConsumer {
                 threadId, Utils.bytesToString(size), spillCount, spillCount > 1 ? "s" : "");
     }
 
+    /**
+     * Force to spilling the current in-memory collection to disk to release memory,
+     * It will be called by TaskMemoryManager when there is not enough memory for the task.
+     * */
     public abstract boolean forceSpill();
 
+    /**
+     * Spills the current in-memory collection to disk, and releases the memory.
+     * */
     public abstract void spill(C collection);
 }
 

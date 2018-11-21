@@ -41,13 +41,7 @@ public class TestDiskBlockObjectWriter extends SparkTestUnit {
 
     private DiskBlockObjectWriter createWriter() {
         File file = new File(tempDir, "testfile");
-        return new DiskBlockObjectWriter(
-                file,
-                serializerManager,
-                new JavaSerializer(conf).newInstance(),
-                1024,
-                true
-        );
+        return null;
     }
 
     @Test

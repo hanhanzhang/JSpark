@@ -39,7 +39,7 @@ public class KVArraySortDataFormat<K, T> extends SortDataFormat<K, T[]>{
 
     @Override
     public void copyRange(T[] src, int srcPos, T[] dst, int dstPos, int length) {
-        System.arraycopy(src, srcPos, dst, dstPos, length);
+        System.arraycopy(src, 2 * srcPos, dst, 2 * dstPos, 2 * length);
     }
 
     @Override

@@ -1,6 +1,7 @@
 package com.sdu.spark.storage;
 
 import com.sdu.spark.SparkException;
+import com.sdu.spark.executor.ShuffleWriteMetrics;
 import com.sdu.spark.serializer.SerializationStream;
 import com.sdu.spark.serializer.SerializerInstance;
 import com.sdu.spark.serializer.SerializerManager;
@@ -23,7 +24,7 @@ public class DiskBlockObjectWriter extends OutputStream {
     private int bufferSize;
     private boolean syncWrites;
     private BlockId blockId;
-    // TODO: Shuffle Metric
+    private ShuffleWriteMetrics writeMetrics;
 
     private FileChannel channel;
     private ManualCloseBufferedOutputStream mcs;
@@ -41,17 +42,18 @@ public class DiskBlockObjectWriter extends OutputStream {
     private long numRecordsWritten = 0L;
 
     public DiskBlockObjectWriter(File file, SerializerManager serializerManager, SerializerInstance serializerInstance,
-                                 int bufferSize, boolean syncWrites) {
-        this(file, serializerManager, serializerInstance, bufferSize, syncWrites, null);
+                                 int bufferSize, boolean syncWrites, ShuffleWriteMetrics writeMetrics) {
+        this(file, serializerManager, serializerInstance, bufferSize, syncWrites, writeMetrics, null);
     }
 
     public DiskBlockObjectWriter(File file, SerializerManager serializerManager, SerializerInstance serializerInstance,
-                                 int bufferSize, boolean syncWrites, BlockId blockId) {
+                                 int bufferSize, boolean syncWrites, ShuffleWriteMetrics writeMetrics, BlockId blockId) {
         this.file = file;
         this.serializerManager = serializerManager;
         this.serializerInstance = serializerInstance;
         this.bufferSize = bufferSize;
         this.syncWrites = syncWrites;
+        this.writeMetrics = writeMetrics;
         this.blockId = blockId;
 
         this.committedPosition = file.length();
