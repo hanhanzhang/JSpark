@@ -37,6 +37,8 @@ import static java.nio.ByteBuffer.wrap;
  *
  *  ShuffleMapTask 运行结果 MapStatus, 记录 partition 的 offset
  *
+ *  ShuffleMapTask Spill 过程中由 TaskMemoryManager 申请计算内存(Execution Memory)
+ *
  * @author hanhan.zhang
  * */
 public class ShuffleMapTask extends Task<MapStatus> {

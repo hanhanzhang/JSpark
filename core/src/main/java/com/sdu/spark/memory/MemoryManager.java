@@ -10,6 +10,28 @@ import com.sdu.spark.unfase.memory.MemoryAllocator;
 import static com.google.common.base.Preconditions.checkArgument;
 
 /**
+ * 1: Spark Memory
+ *
+ *  +----------------------------------------+           +----------------------------------------+
+ *  |             MaxHeapMemory              |           |            MaxOffHeapMemory            |
+ *  +----------------------------------------+           +----------------------------------------+
+ *  |  storage memory   |   execute memory   |           |  storage memory   |   execute memory   |
+ *  +----------------------------------------+           +----------------------------------------+
+ *
+ *  MaxHeapMemory = (systemMemory - reservedMemory) * spark.memory.fraction
+ *  Note:
+ *   systemMemory: Executor Jvm 堆内存
+ *   reservedMemory: 预留内存, 默认 300M
+ *   spark.memory.fraction: 默认 0.6
+ *   StorageMemory、ExecutionMemory: 默认各占 50%, 参数 spark.memory.storageFraction 决定
+ *
+ *  MaxOffHeapMemory = spark.memory.offHeap.size
+
+ *  无论是对堆内存还是对非堆内存, 都分为 StorageMemory 和 ExecutionMemory. 分配大小由 spark.memory.storageFraction 决定
+ *
+ * 2: Executor Jvm 只存在一个 MemoryManager, 需保证线程安全
+ *
+ *
  * {@link MemoryManager}职责:
  *
  * 1: 初始化ExecutionMemoryPool/StorageMemoryPool内存池
@@ -101,10 +123,7 @@ public abstract class MemoryManager {
     // 分配分配
     protected final MemoryAllocator tungstenMemoryAllocator;
 
-    public MemoryManager(SparkConf conf,
-                         int numCores,
-                         long onHeapStorageMemory,
-                         long onHeapExecutionMemory) {
+    public MemoryManager(SparkConf conf, int numCores, long onHeapStorageMemory, long onHeapExecutionMemory) {
         this.conf = conf;
         this.numCores = numCores;
         this.onHeapStorageMemory = onHeapStorageMemory;
