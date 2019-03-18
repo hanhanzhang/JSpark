@@ -18,14 +18,23 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
-import java.util.Iterator;
 
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.sdu.spark.shuffle.IndexShuffleBlockResolver.NOOP_REDUCE_ID;
 
 /**
- * {@link SortShuffleWriter}负责写Shuffle Block数据(每个分区对应一个Shuffle Block)
  *
+ *                          +-------------------------------------------------------+
+ * +-----------+  content   | +------------+   +------------+        +------------+ |
+ * | Data File | ---------> | | partition1 |   | partition2 |  ....  | partitionN | |
+ * +-----------+            | +------------+   +------------+        +------------+ |
+ *                          +------/|\---------------/|\-------------------/|\------+
+ *                                  |                 |                     |
+ *                          +-------|-----------------|---------------------|-------+
+ * +------------+           | +------------+   +------------+        +------------+ |
+ * | Index File | --------> | |   offset1  |   |   offset2  |  ....  |  offsetN   | |
+ * +------------+           | +------------+   +------------+        +------------+ |
+ *                          +-------------------------------------------------------+
  * @author hanhan.zhang
  * */
 public class SortShuffleWriter<K, V, C> implements ShuffleWriter<K, V>{

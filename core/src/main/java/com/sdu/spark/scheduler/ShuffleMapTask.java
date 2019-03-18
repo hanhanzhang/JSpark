@@ -21,6 +21,22 @@ import static java.lang.Thread.currentThread;
 import static java.nio.ByteBuffer.wrap;
 
 /**
+ *                                 +------------------+
+ *                                 | MapOutputTracker |
+ *                                 +------------------+
+ *                                    /|\       /|\
+ *                                     |         |
+ *  +--------------------------+       |         |        +--------------------------+
+ *  |         Stage            |-------+         +--------|         Stage            |
+ *  | +----------+  +--------+ |                          |  +------+   +----------+ |
+ *  | | pipeline |  |  write | |<------------------------>|  | read |   | pipeline | |
+ *  | +----------+  +--------+ |                          |  +------+   +----------+ |
+ *  +--------------------------+                          +--------------------------+
+ *
+ *  ShuffleMapTask 进行 shuffle write, 数据存储 BlockManager并将数据位置信息上报 Driver 的 MapOutputTracker
+ *
+ *  ShuffleMapTask 运行结果 MapStatus, 记录 partition 的 offset
+ *
  * @author hanhan.zhang
  * */
 public class ShuffleMapTask extends Task<MapStatus> {
@@ -44,19 +60,21 @@ public class ShuffleMapTask extends Task<MapStatus> {
     public MapStatus runTask(TaskContext context) throws Exception {
         ThreadMXBean bean = ManagementFactory.getThreadMXBean();
         long deserializeStartTime = System.currentTimeMillis();
-        long deserializeStartCpuTime = bean.isCurrentThreadCpuTimeSupported() ? bean.getCurrentThreadCpuTime()
-                                                                              : 0L;
+        long deserializeStartCpuTime = 0L;
+        if (bean.isCurrentThreadCpuTimeSupported()) {
+            deserializeStartCpuTime = bean.getCurrentThreadCpuTime();
+        }
         SerializerInstance ser = SparkEnv.env.closureSerializer.newInstance();
 
         // DAGScheduler.submitMissingTasks
         // ShuffleMapStage ==> Tuple2<RDD, ShuffleDependency>
-        Tuple2<RDD<?>, ShuffleDependency<?, ?, ?>> res = ser.deserialize(wrap(taskBinary.value()),
-                                                                         currentThread().getContextClassLoader());
+        Tuple2<RDD<?>, ShuffleDependency<?, ?, ?>> res = ser.deserialize(wrap(taskBinary.value()), currentThread().getContextClassLoader());
 
         executorDeserializeTime = System.currentTimeMillis() - deserializeStartTime;
-        executorDeserializeCpuTime = bean.isCurrentThreadCpuTimeSupported() ? bean.getCurrentThreadCpuTime() - deserializeStartCpuTime
-                                                                            : 0L;
-
+        executorDeserializeCpuTime = 0L;
+        if (bean.isCurrentThreadCpuTimeSupported()) {
+            executorDeserializeCpuTime = bean.getCurrentThreadCpuTime() - deserializeStartCpuTime;
+        }
         assert res != null;
         RDD<?> rdd = res._1();
         ShuffleDependency<?, ?, ?> dep = res._2();
