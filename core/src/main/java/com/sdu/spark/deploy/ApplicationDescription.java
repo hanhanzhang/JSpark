@@ -1,7 +1,5 @@
 package com.sdu.spark.deploy;
 
-import lombok.AllArgsConstructor;
-
 import java.io.Serializable;
 
 /**
@@ -9,7 +7,6 @@ import java.io.Serializable;
  *
  * @author hanhan.zhang
  * */
-@AllArgsConstructor
 public class ApplicationDescription implements Serializable {
     /**
      * 应用名称
@@ -22,7 +19,7 @@ public class ApplicationDescription implements Serializable {
     /**
      * 每个Executor分配CPU数
      * */
-    public int coresPerExecutor;
+    public int coresPerExecutor = -1;
     /**
      * 每个JVM进程分配的内存
      * */
@@ -32,4 +29,11 @@ public class ApplicationDescription implements Serializable {
      * */
     public Command command;
 
+    public ApplicationDescription(String name, int maxCores, int coresPerExecutor, int memoryPerExecutorMB, Command command) {
+        this.name = name;
+        this.maxCores = maxCores;
+        this.coresPerExecutor = coresPerExecutor;
+        this.memoryPerExecutorMB = memoryPerExecutorMB;
+        this.command = command;
+    }
 }

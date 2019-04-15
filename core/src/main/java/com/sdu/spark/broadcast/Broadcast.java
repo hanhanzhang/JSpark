@@ -12,7 +12,7 @@ import static java.lang.String.format;
  * */
 public abstract class Broadcast<T> implements Serializable {
 
-    private long id;
+    protected long id;
 
     private volatile boolean isValid = false;
     private volatile String destroySite = "";
@@ -52,7 +52,7 @@ public abstract class Broadcast<T> implements Serializable {
 
     protected abstract void doUnpersist(boolean blocking);
 
-    private void assertValid() {
+    protected void assertValid() {
         if (!isValid) {
             throw new SparkException(format("Attempted to use %s after it was destroyed (%s)", toString(), destroySite));
         }

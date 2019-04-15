@@ -10,7 +10,7 @@ import java.io.Serializable;
 public class ExecutorDesc implements Serializable {
     // 唯一标识
     public int id;
-    // 所属Spark应用
+    /** Executor启动指令, StandaloneSchedulerBackend构建 */
     public ApplicationInfo application;
     // 所属Worker
     public WorkerInfo worker;

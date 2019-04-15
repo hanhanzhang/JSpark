@@ -60,7 +60,7 @@ public class SparkEnv {
     public RpcEnv rpcEnv;
     public SparkConf conf;
     public ShuffleManager shuffleManager;
-    private BroadcastManager broadcastManager;
+    public BroadcastManager broadcastManager;
     public SerializerManager serializerManager;
     public OutputCommitCoordinator outputCommitCoordinator;
     public BlockManager blockManager;

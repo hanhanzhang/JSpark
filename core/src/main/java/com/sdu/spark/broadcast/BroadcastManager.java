@@ -2,6 +2,8 @@ package com.sdu.spark.broadcast;
 
 import com.sdu.spark.SecurityManager;
 import com.sdu.spark.rpc.SparkConf;
+import org.apache.commons.collections.map.AbstractReferenceMap;
+import org.apache.commons.collections.map.ReferenceMap;
 
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -18,6 +20,8 @@ public class BroadcastManager {
 
     private boolean initialized = false;
     private AtomicLong nextBroadcastId = new AtomicLong(0);
+
+    public ReferenceMap cacheValues = new ReferenceMap(AbstractReferenceMap.HARD, AbstractReferenceMap.WEAK);
 
     public BroadcastManager(boolean isDriver, SparkConf conf, SecurityManager securityManager) {
         this.isDriver = isDriver;

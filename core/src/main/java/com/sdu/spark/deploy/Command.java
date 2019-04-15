@@ -1,7 +1,5 @@
 package com.sdu.spark.deploy;
 
-import lombok.AllArgsConstructor;
-
 import java.io.Serializable;
 import java.util.Map;
 
@@ -10,7 +8,6 @@ import java.util.Map;
  *
  * @author hanhan.zhang
  * */
-@AllArgsConstructor
 public class Command implements Serializable {
     public String mainClass;
     public String[] arguments;
@@ -18,4 +15,13 @@ public class Command implements Serializable {
     public String[] classPathEntries;
     public String[] libraryPathEntries;
     public String[] javaOpts;
+
+    public Command(String mainClass, String[] arguments, Map<String, String> environment, String[] classPathEntries, String[] libraryPathEntries, String[] javaOpts) {
+        this.mainClass = mainClass;
+        this.arguments = arguments;
+        this.environment = environment;
+        this.classPathEntries = classPathEntries;
+        this.libraryPathEntries = libraryPathEntries;
+        this.javaOpts = javaOpts;
+    }
 }

@@ -8,6 +8,7 @@ import com.sdu.spark.deploy.DeployMessage.*;
 import com.sdu.spark.deploy.MasterMessage.*;
 import com.sdu.spark.rpc.*;
 import com.sdu.spark.utils.ThreadUtils;
+import com.sun.corba.se.spi.orbutil.threadpool.Work;
 import org.apache.commons.collections.MapUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,6 +17,7 @@ import java.util.*;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 import static com.sdu.spark.network.utils.NettyUtils.getIpV4;
@@ -484,9 +486,8 @@ public class Master extends ThreadSafeRpcEndpoint {
              *
              * */
             List<WorkerInfo> usableWorkers = workers.stream().filter(worker -> worker.state == WorkerState.ALIVE)
-                    .filter(worker -> worker.freeMemory() >= app.desc.memoryPerExecutorMB &&
-                                      worker.freeCores() >= coresPerExecutor)
-                    .sorted((worker1, worker2) -> worker1.freeCores() - worker2.freeCores())
+                    .filter(worker -> worker.freeMemory() >= app.desc.memoryPerExecutorMB && worker.freeCores() >= coresPerExecutor)
+                    .sorted(Comparator.comparingInt(WorkerInfo::freeCores))
                     .collect(Collectors.toList());
 
             // 计算每个Worker节点分配CPU数(assignedCores[n]表示usableWorkers.get(n)节点可分配CPU数)
@@ -502,72 +503,115 @@ public class Master extends ThreadSafeRpcEndpoint {
         });
     }
 
-    private List<WorkerInfo> canLaunchWorker(int coresToAssign, int []assignedCores, int []assignedExecutors,
-                                             int coresPerExecutor, int memoryPerExecutor, List<WorkerInfo> workers) {
-        int pos = 0;
-        List<WorkerInfo> freeWorkers = Lists.newLinkedList();
-        for (WorkerInfo worker : workers) {
-            if (canLaunchExecutor(coresToAssign, assignedCores, assignedExecutors, worker, coresPerExecutor, memoryPerExecutor, pos)) {
-                freeWorkers.add(worker);
-            }
-            ++pos;
-        }
-        return freeWorkers;
-    }
-
-    private boolean canLaunchExecutor(int coresToAssign, int []assignedCores, int []assignedExecutors,
-                                      WorkerInfo worker, int minCoresPerExecutor, int memoryPerExecutor,
-                                      int pos) {
+    /**
+     * @param coresToAssign 待分配CPU总核数
+     * @param minCoresPerExecutor 每个Executor分配的最小CPU核数
+     * @param memoryPerExecutor 每个Executor分配内存数
+     * @param oneExecutorPerWorker 是否每个Worker分配一个Executor
+     * @param assignedCores 每个Worker已分配CPU核数
+     * @param assignedExecutors 每个Worker已分配Executor数
+     * @param pos 第pos个Worker
+     * @param worker Worker节点信息
+     * */
+    private boolean canLaunchExecutor(int coresToAssign,
+                                      int minCoresPerExecutor,
+                                      int memoryPerExecutor,
+                                      boolean oneExecutorPerWorker,
+                                      int []assignedCores,
+                                      int []assignedExecutors,
+                                      int pos,
+                                      WorkerInfo worker) {
+        // 判断当前Worker节点能否分配Executor, 需满足:
+        // 1: 有充足的CPU核数
+        // 2: 有充足的内存数
         boolean keepScheduling = coresToAssign >= minCoresPerExecutor;
         boolean enoughCores = worker.freeCores() - assignedCores[pos] >= minCoresPerExecutor;
 
-        if (assignedExecutors[pos] == 0) {
+        // 判断当前节点是否分配Executor的前提
+        // 是否允许在Worker节点分配多个Executor, 若不允许, 则判断当前Worker是否分配过, 若分配过, 则不再分配
+        if (!oneExecutorPerWorker || assignedExecutors[pos] == 0) {
             boolean enoughMemory = worker.freeMemory() - assignedExecutors[pos] * memoryPerExecutor >= memoryPerExecutor;
+            // TODO: Executor Limit
             return keepScheduling && enoughCores && enoughMemory;
-        } else {
-            return keepScheduling && enoughCores;
         }
+
+        return keepScheduling && enoughCores;
     }
 
+    /**
+     * @return 返回每个Worker分配的CPU核数
+     * */
     private int[] scheduleExecutorsOnWorkers(ApplicationInfo app, List<WorkerInfo> workers, boolean spreadOutApps) {
-        // 每个Worker分配CPU数
+        /** 每个Worker分配CPU核数 */
         int []assignedCores = new int[workers.size()];
-        // 每个Worker
+        /** 每个Worker分配的Executor数 */
         int []assignedExecutors = new int[workers.size()];
-
+        /** 每个Executor分配CPU核数 */
         int coresPerExecutor = app.desc.coresPerExecutor;
+        int minCoresPerExecutor = coresPerExecutor == -1 ? 1 : coresPerExecutor;
+        boolean oneExecutorPerWorker = coresPerExecutor == -1;
+        /** 每个Executor分配的内存数 */
         int memoryPerExecutor = app.desc.memoryPerExecutorMB;
-        // 保证空闲资源分配[若集群剩余资源 < app.coreLeft(), 则将资源全分配给App]
-        int coresToAssign = Math.min(app.coreLeft(), (int) workers.stream().map(WorkerInfo::freeCores).count());
+        /** 保证空闲资源分配[若集群剩余资源 < app.coreLeft(), 则将资源全分配给App] */
+        int coresToAssign = Math.min(app.coreLeft(), workers.stream().mapToInt(WorkerInfo::freeCores).sum());
 
-        // 过滤可分配Executor的Worker节点
-        List<WorkerInfo> freeWorkers = canLaunchWorker(coresToAssign, assignedCores, assignedExecutors, coresPerExecutor, memoryPerExecutor, workers);
+        // 筛选资源充足的分配的Worker节点
+        List<WorkerInfo> freeWorkers = Lists.newLinkedList();
+        int pos = 0;
+        for (WorkerInfo workerInfo : workers) {
+            if (canLaunchExecutor(coresToAssign, minCoresPerExecutor, memoryPerExecutor, oneExecutorPerWorker, assignedCores, assignedExecutors, pos, workerInfo)) {
+                freeWorkers.add(workerInfo);
+            }
+            pos += 1;
+        }
 
+        //
         while (!freeWorkers.isEmpty()) {
-            int i = 0;
+            pos = 0;
             for (WorkerInfo worker : freeWorkers) {
                 boolean keepScheduling = true;
 
                 // 默认Worker节点可分配多个Executor[若有Worker节点分配一个Executor, 则通过spreadOutApps控制]
-                while (keepScheduling && canLaunchExecutor(coresToAssign, assignedCores, assignedExecutors, worker, coresPerExecutor, memoryPerExecutor, i)) {
+                while (keepScheduling && canLaunchExecutor(coresToAssign, minCoresPerExecutor, memoryPerExecutor, oneExecutorPerWorker, assignedCores, assignedExecutors, pos, worker)) {
                     coresToAssign -= coresPerExecutor;
-                    assignedCores[i] += coresPerExecutor;
-                    assignedExecutors[i] += 1;
+                    assignedCores[pos] += coresPerExecutor;
+
+                    if (oneExecutorPerWorker) {
+                        assignedExecutors[pos] = 1;
+                    } else {
+                        assignedExecutors[pos] += 1;
+                    }
+
                     if (spreadOutApps) {
                         keepScheduling = false;
                     }
                 }
+                ++pos;
+            }
 
-                freeWorkers = canLaunchWorker(coresToAssign, assignedCores, assignedExecutors, coresPerExecutor, memoryPerExecutor, workers);
-                ++i;
+            // 计算可用的资源
+            pos = 0;
+            freeWorkers = Lists.newLinkedList();
+            for (WorkerInfo workerInfo : workers) {
+                pos += 1;
+                if (canLaunchExecutor(coresToAssign, minCoresPerExecutor, memoryPerExecutor, oneExecutorPerWorker, assignedCores, assignedExecutors, pos, workerInfo)) {
+                    freeWorkers.add(workerInfo);
+                }
             }
         }
 
         return assignedCores;
     }
 
-    private void allocateWorkerResourceToExecutors(ApplicationInfo app, int assignedCores,
-                                                   int coresPerExecutor, WorkerInfo worker) {
+    /**
+     * @param assignedCores 当前Worker节点分配CPU核数
+     * @param coresPerExecutor 每个Executor节点分配CPU核数
+     * @param worker 部署的Worker节点
+     * */
+    private void allocateWorkerResourceToExecutors(ApplicationInfo app, int assignedCores, int coresPerExecutor, WorkerInfo worker) {
+        if (coresPerExecutor == -1) {
+            coresPerExecutor = 1;
+        }
         int numExecutors = assignedCores / coresPerExecutor;
         for (int i = 1; i <= numExecutors; ++i) {
             ExecutorDesc desc = app.addExecutor(worker, coresPerExecutor);
@@ -578,7 +622,7 @@ public class Master extends ThreadSafeRpcEndpoint {
     }
 
     private void launchExecutor(WorkerInfo worker, ExecutorDesc exec) {
-        LOGGER.info("在工作节点(workerId = {}, host = {})启动执行器(executorId = {})", worker.workerId, worker.host, exec.id);
+        LOGGER.info("Launch executor {} on worker {}:{}", worker.workerId, worker.host, exec.id);
         worker.addExecutor(exec);
         worker.endPointRef.send(new LaunchExecutor(exec.application.id, exec.id, exec.application.desc, exec.cores, exec.memory));
         exec.application.driver.send(new ExecutorAdded(exec.id, worker.workerId, worker.host, exec.cores, exec.memory));

@@ -5,7 +5,9 @@ import com.sdu.spark.deploy.ApplicationDescription;
 import com.sdu.spark.deploy.Command;
 import com.sdu.spark.deploy.client.StandaloneAppClient;
 import com.sdu.spark.deploy.client.StandaloneAppClientListener;
-import com.sdu.spark.executor.ExecutorExitCode.*;
+import com.sdu.spark.executor.ExecutorExitCode.ExecutorExited;
+import com.sdu.spark.executor.ExecutorExitCode.ExecutorLossReason;
+import com.sdu.spark.executor.ExecutorExitCode.SlaveLost;
 import com.sdu.spark.laucher.LauncherBackend;
 import com.sdu.spark.launcher.SparkAppHandle.State;
 import com.sdu.spark.rpc.RpcEndpointAddress;
@@ -79,7 +81,7 @@ public class StandaloneSchedulerBackend extends CoarseGrainedSchedulerBackend im
         String[] libraryPathEntries = split(sc.conf.get("spark.executor.extraLibraryPath"), File.pathSeparator);
 
         Command command = new Command(
-                "com.sdu.spark.executor.CoarseGrainedExecutorBackend",
+                "",
                 args,
                 sc.executorEnvs,
                 classPathEntries,

@@ -45,10 +45,14 @@ public interface MasterMessage extends Serializable {
     /**
      * RpcEndPoint端口绑定响应
      * */
-    @AllArgsConstructor
     class BoundPortsResponse implements MasterMessage {
         int rpcEndpointPort;
         int restPort;
+
+        public BoundPortsResponse(int rpcEndpointPort, int restPort) {
+            this.rpcEndpointPort = rpcEndpointPort;
+            this.restPort = restPort;
+        }
     }
 
     /**

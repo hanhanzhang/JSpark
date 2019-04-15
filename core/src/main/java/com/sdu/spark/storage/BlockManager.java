@@ -349,17 +349,6 @@ public class BlockManager implements BlockDataManager, BlockEvictionHandler {
         return new BlockStatus(storageLevel, memSize, diskSize);
     }
 
-    private BlockData getLocalBytes(BlockId blockId) {
-        LOGGER.debug("Getting local block {} as bytes", blockId);
-        if (blockId.isShuffle()) {
-            // TODO: Shuffle Manager负责Block数据获取
-            throw new UnsupportedOperationException("");
-        } else {
-            BlockInfo blockInfo = blockInfoManager.lockForReading(blockId);
-            return doGetLocalBytes(blockId, blockInfo);
-        }
-    }
-
     private BlockData doGetLocalBytes(BlockId blockId, BlockInfo blockInfo) {
         StorageLevel level = blockInfo.getStorageLevel();
         if (level.isDeserialized()) {
@@ -428,6 +417,21 @@ public class BlockManager implements BlockDataManager, BlockEvictionHandler {
         throw new SparkException("Block " + blockId + " was not found even though it's read-locked");
     }
 
+    public BlockResult getLocalValues(BlockId blockId) {
+        throw new RuntimeException("");
+    }
+
+    public BlockData getLocalBytes(BlockId blockId) {
+        LOGGER.debug("Getting local block {} as bytes", blockId);
+        if (blockId.isShuffle()) {
+            // TODO: Shuffle Manager负责Block数据获取
+            throw new UnsupportedOperationException("");
+        } else {
+            BlockInfo blockInfo = blockInfoManager.lockForReading(blockId);
+            return doGetLocalBytes(blockId, blockInfo);
+        }
+    }
+
     public ChunkedByteBuffer getRemoteBytes(BlockId blockId) {
         throw new UnsupportedOperationException("");
     }
@@ -447,6 +451,10 @@ public class BlockManager implements BlockDataManager, BlockEvictionHandler {
                             StorageLevel level, boolean tellMaster) {
         assert bytes != null : "Bytes is null";
         return doPutBytes(blockId, bytes, level, tellMaster, true);
+    }
+
+    public <T> boolean putSingle(BlockId blockId, T value, StorageLevel level, boolean tellMaster) {
+        throw new RuntimeException("");
     }
 
     public void stop() {

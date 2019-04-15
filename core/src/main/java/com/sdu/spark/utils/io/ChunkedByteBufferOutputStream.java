@@ -29,8 +29,7 @@ public class ChunkedByteBufferOutputStream extends OutputStream {
     private int size = 0;
     private boolean closed = false;
 
-    public ChunkedByteBufferOutputStream(int chunkSize,
-                                         ByteBufferAllocator byteBufferAllocator) {
+    public ChunkedByteBufferOutputStream(int chunkSize, ByteBufferAllocator byteBufferAllocator) {
         this.chunkSize = chunkSize;
         this.position = chunkSize;
         this.byteBufferAllocator = byteBufferAllocator;
